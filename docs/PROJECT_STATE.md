@@ -18,14 +18,22 @@ Aus v0.4 weiterhin gültig:
 - **PC-Grundsteuerung** (Kap. 17/27): oeffnen (`open_program`), ueberwachen (`system_status`, ADR-011), installieren (`install_program`, ADR-012).
 
 ## Current Development Phase
-`v0.5 "Arbeitsmodule"` laut Handbook Kap. 13 - zwei Teilschritte umgesetzt (Excel-Lesen, Tabellen-Auswertung), Reihenfolge laut Wolfgang: Excel-Integration -> Tabellen-Auswertung -> KPI -> Power BI.
+`v0.5 "Arbeitsmodule"` laut Handbook Kap. 13 - zwei Teilschritte umgesetzt (Excel-Lesen, Tabellen-Auswertung). Aktive Reihenfolge laut Wolfgang (Stand 01.07.2026, siehe Product-Owner-Entscheidung unten): Excel-Integration -> Tabellen-Auswertung -> KPI. **Power BI ist aus dem aktiven v0.5-Scope herausgenommen worden.**
 
 ## Next Planned Version
-Weiterhin `v0.5` - noch NICHT abgeschlossen. Naechster Teilschritt laut Wolfgangs Reihenfolge: **KPI**. Kein technischer Vorschlag dafuer bisher erstellt, kein Code geschrieben.
+Weiterhin `v0.5` - noch NICHT abgeschlossen. Naechster und laut aktueller Priorisierung letzter aktiver Teilschritt: **KPI aus Excel-/Reportdaten berechnen**. Kein technischer Vorschlag dafuer bisher erstellt, kein Code geschrieben.
 
 ## Next Goal According To Handbook
-`v0.5` (Kap. 13/27, praezisiert in v3.3/ADR-013) hat als Kerninhalt "Tabellen-Auswertung, KPI, Power BI, Excel". Excel Phase 1 (ADR-014) und Tabellen-Auswertung/Datenauswertung (ADR-015) sind erledigt. Naechster offener Baustein laut Wolfgangs expliziter Reihenfolge: KPI, danach Power BI.
+`v0.5` (Kap. 13/27, praezisiert in v3.3/ADR-013) hat als Kerninhalt "Tabellen-Auswertung, KPI, Power BI, Excel". Excel Phase 1 (ADR-014) und Tabellen-Auswertung/Datenauswertung (ADR-015) sind erledigt. Naechster offener Baustein laut Wolfgangs expliziter Reihenfolge: KPI.
+**Power BI** steht zwar weiterhin im Handbook-Text (Kap. 13/27) als Teil von "Arbeitsmodule", ist aber per Product-Owner-Entscheidung (01.07.2026, siehe unten) fuer die aktive v0.5-Umsetzung ausgeklammert - Grund: Power BI liegt auf dem Firmenrechner/im Firmenumfeld, keine praktische Implementierung in diesem Rahmen. Diese Entscheidung gilt bis zur naechsten Handbook-Version als verbindlich (Kap. 2: Handbook wird nur zwischen zwei Jarvis-Versionen geaendert) und hat in der Zwischenzeit Vorrang vor dem aktuellen Handbook-Wortlaut.
 Vor jedem weiteren Baustein gilt weiterhin: Handbook-Pruefung (Scope/DoD/Architektur/Sicherheitsmodell) + technischer Vorschlag zur Freigabe durch den Product Owner, bevor Code geschrieben wird (Muster aus ADR-013/ADR-014/ADR-015).
+
+## Product-Owner-Entscheidung: Power BI aus v0.5-Scope genommen (01.07.2026)
+**Entscheidung:** Power BI wird in v0.5 nicht praktisch implementiert. Fuer Jarvis v0.5 bleibt der Fokus auf drei Bausteinen: (1) Excel lesen, (2) Tabellen-Auswertung analysieren, (3) KPI aus Excel-/Reportdaten berechnen. Power BI wird als optionale Unternehmensintegration bzw. spaeterer Baustein behandelt, kein aktiver v0.5-Scope.
+**Begruendung:** Power BI liegt auf dem Firmenrechner/im Firmenumfeld - keine praktische Implementierbarkeit im aktuellen Jarvis-Rahmen.
+**Charakter der Entscheidung:** Priorisierungs-/Scope-Entscheidung des Product Owner, keine Architekturentscheidung - deshalb bewusst KEINE eigene ADR (siehe Kap. 20: ADRs sind fuer Architekturentscheidungen vorgesehen).
+**Handbook-Bezug:** Das Master-Handbook (Kap. 13/27) nennt Power BI weiterhin als Teil von "Arbeitsmodule/v0.5". Gemaess der in Handbook v3.3/Kap. 2 festgelegten Regel ("Handbook wird nur ZWISCHEN zwei Versionen geaendert") wird der Handbook-Text erst bei der naechsten geplanten Handbook-Version entsprechend nachgezogen. Bis dahin gilt diese Product-Owner-Entscheidung als verbindlich und hat Vorrang fuer die weitere Entwicklung von v0.5.
+**Status:** Aktiv, keine Code-Aenderung ausgeloest.
 
 ## Tests
 Letzter Check am 2026-07-01: `pytest tests -v` mit zusaetzlichem `PYTHONPATH`.
@@ -45,7 +53,8 @@ Keiner aktuell. `tests/test_integration.py::test_end_to_end_tool_execution` (vor
 - `.git_broken_5/` (Reste eines fruehen, abgebrochenen git-init-Versuchs) liegt noch im Arbeitsordner, ist per `.gitignore` von der Versionierung ausgeschlossen. Kann bei Gelegenheit manuell aufgeraeumt werden, wurde bewusst nicht geloescht (keine destruktive Aktion ohne Rueckfrage).
 
 ### Feature-TODOs (naechste Roadmap-Bausteine, NICHT jetzt umsetzen)
-- `v0.5`: KPI (naechster Schritt), danach Power BI.
+- `v0.5`: KPI aus Excel-/Reportdaten berechnen (naechster und aktuell letzter aktiver v0.5-Schritt).
+- Power BI - per Product-Owner-Entscheidung (01.07.2026) aus dem aktiven v0.5-Scope genommen (Firmenrechner/Firmenumfeld, keine praktische Implementierbarkeit hier). Behandelt als optionale Unternehmensintegration/spaeterer Baustein, keine Prioritaet aktuell.
 - Eigene `AIEngine.summarize_report()`-Methode - nur pruefen, falls die Wiederverwendung von `answer()` bei `analyze_report` sich als inhaltlich unzureichend erweist (ADR-015).
 - Excel Phase 2 (Schreiben, Formatieren, Power Query, Makros) - explizit nicht Teil von Phase 1 (ADR-013/ADR-014), keine Priorisierung dafuer.
 - `.xls` (Legacy-Format) - von `openpyxl` nicht unterstuetzt, keine eigene Priorisierung bisher.
@@ -74,7 +83,7 @@ Im Code wurden keine `TODO`-/`FIXME`-Marker gefunden.
 - `analyze_report` liefert eine KI-generierte Analyse, die falsch liegen kann (kein deterministisches Ergebnis wie bei `read_excel`) - deshalb Pflicht-Disclaimer in jeder Antwort (ADR-015).
 
 ## Git
-Erster echter Commit dieser Sitzung: ein einzelner, ehrlicher Initial-Commit aus dem aktuellen Arbeitsstand (kein rekonstruierter Verlauf aus alten ZIP-Staenden). Tag `v0.4` markiert diesen Stand. Danach ein Doku-Commit fuer Handbook v3.3/ADR-013, dann ein Commit fuer Excel-Lesen (ADR-014). Fruehere Versionen (v0.1-v0.3) existieren nur als Text in `docs/CHANGELOG.md`/`docs/logbook.md`, nicht als eigene Git-Commits/Tags - das im Handbook (Kap. 21) urspruenglich vorgesehene inkrementelle Nachziehen der Commit-Historie wurde bewusst nicht gemacht (keine kuenstliche Fake-Historie). Der Tabellen-Auswertung-Baustein (dieser Stand) ist noch nicht committed. Kein neuer Tag - `v0.5` wird erst bei Abschluss aller v0.5-Handbook-Bausteine getaggt (Wolfgangs Entscheidung).
+Ein einzelner, ehrlicher Initial-Commit aus dem aktuellen Arbeitsstand (kein rekonstruierter Verlauf aus alten ZIP-Staenden), getaggt als `v0.4`. Danach je ein Commit fuer Handbook v3.3/ADR-013, Excel-Lesen (ADR-014) und Tabellen-Auswertung (ADR-015). Fruehere Versionen (v0.1-v0.3) existieren nur als Text in `docs/CHANGELOG.md`/`docs/logbook.md`, nicht als eigene Git-Commits/Tags - das im Handbook (Kap. 21) urspruenglich vorgesehene inkrementelle Nachziehen der Commit-Historie wurde bewusst nicht gemacht (keine kuenstliche Fake-Historie). Kein neuer Tag seit `v0.4` - `v0.5` wird erst bei Abschluss aller aktiven v0.5-Bausteine getaggt (Wolfgangs Entscheidung). Die Power-BI-Scope-Entscheidung selbst ist reine Doku (dieser Stand), noch nicht committed.
 
 ## Product Owner Rules
 - Product Owner entscheidet Prioritaeten.

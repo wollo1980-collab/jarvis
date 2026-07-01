@@ -1,5 +1,43 @@
 # Logbook
 
+## 2026-07-01 - Product-Owner-Entscheidung: Power BI aus v0.5-Scope genommen
+
+**Kontext:** Nach Tabellen-Auswertung (ADR-015) stand als naechster
+Handbook-Baustein "KPI" und danach "Power BI" (Kap. 13: Kerninhalt
+"Tabellen-Auswertung, KPI, Power BI, Excel"). Wolfgang hat als Product Owner
+entschieden, Power BI aus dem aktiven v0.5-Scope herauszunehmen.
+
+**Entscheidung:** Fuer Jarvis v0.5 bleibt der Fokus auf drei
+Bausteinen: (1) Excel lesen (ADR-014, erledigt), (2) Tabellen-Auswertung
+analysieren (ADR-015, erledigt), (3) KPI aus Excel-/Reportdaten
+berechnen (naechster, aktuell letzter aktiver v0.5-Schritt). Power BI
+wird NICHT praktisch implementiert und stattdessen als optionale
+Unternehmensintegration bzw. spaeterer Baustein behandelt - keine
+Prioritaet aktuell, kein Code geschrieben.
+
+**Begruendung:** Power BI liegt auf dem Firmenrechner/im
+Firmenumfeld - keine praktische Implementierbarkeit im aktuellen
+Jarvis-Rahmen (privater Desktop-Assistent).
+
+**Bewusst KEINE ADR:** Dies ist eine Priorisierungs-/Scope-Entscheidung
+des Product Owner, keine Architekturentscheidung (Kap. 20: ADRs sind
+fuer Architekturentscheidungen vorgesehen) - deshalb Dokumentation nur
+in `docs/PROJECT_STATE.md` und hier, keine neue ADR-Datei.
+
+**Handbook-Bezug:** Das Master-Handbook (Kap. 13/27) nennt Power BI
+weiterhin als Teil von "Arbeitsmodule/v0.5" - der Handbook-Text wird
+erst bei der naechsten geplanten Handbook-Version nachgezogen (Kap. 2,
+v3.3: "Handbook wird nur ZWISCHEN zwei Versionen geaendert"). Bis
+dahin gilt diese Product-Owner-Entscheidung als verbindlich und hat
+Vorrang fuer die weitere Entwicklung von v0.5 gegenueber dem
+aktuellen Handbook-Wortlaut.
+
+**Status:** Aktiv, keine Code-Aenderung. `docs/PROJECT_STATE.md`
+entsprechend aktualisiert (Next Goal, Feature-TODOs, neuer Abschnitt
+"Product-Owner-Entscheidung: Power BI aus v0.5-Scope genommen").
+
+**Siehe auch:** docs/PROJECT_STATE.md.
+
 ## 2026-07-01 - Tabellen-Auswertung implementiert: Datenauswertung (ADR-015)
 
 **Kontext:** Nach Excel-Lesen (v0.5 Phase 1, ADR-014) war laut
