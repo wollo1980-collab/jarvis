@@ -54,7 +54,8 @@ jarvis/
 ├── config.example.json
 ├── requirements.txt
 ├── CHANGELOG.md                        # Verweis auf docs/CHANGELOG.md
-└── main.py                                 # verdrahtet die Pipeline
+├── main.py                                 # verdrahtet die Pipeline (Konsole)
+└── telegram_main.py                          # separater Einstiegspunkt (Telegram, ADR-018)
 ```
 
 ## Setup
@@ -268,6 +269,42 @@ unabhängig vom KI-Text.
 **Power BI ist bewusst NICHT enthalten** - per Product-Owner-
 Entscheidung aus dem aktiven v0.5-Scope genommen (liegt auf dem
 Firmenrechner/im Firmenumfeld), siehe `docs/PROJECT_STATE.md`.
+
+## Telegram-Fernzugriff (v0.6 Phase 1, ADR-018)
+
+Separater Einstiegspunkt `telegram_main.py` - `main.py`/die Konsole
+bleiben komplett unverändert. Long-Polling über `python-telegram-bot`
+(kein Webhook/FastAPI/ngrok).
+
+**Einrichtung:**
+
+```bash
+pip install python-telegram-bot
+export JARVIS_TELEGRAM_BOT_TOKEN="..."           # vom @BotFather
+export JARVIS_TELEGRAM_ALLOWED_CHAT_ID="..."     # deine eigene Telegram-Chat-ID
+python telegram_main.py
+```
+
+Beide Umgebungsvariablen sind Pflicht (nie in `config.json`/Git) - fehlen
+sie, bricht der Start mit einer klaren Fehlermeldung ab. Nachrichten von
+anderen Chat-IDs werden ignoriert.
+
+**Phase 1, bewusst eingeschränkt:**
+- Nur `chat`, `remember_fact`, `forget_fact`, `system_status` sind über
+  Telegram erreichbar (Sicherheitsstufe 0 und ausgewählte
+  Speicher-Interaktionen der Stufe 1).
+- Kein `read_excel`/`analyze_report`/`calculate_kpi`, kein
+  `install_program`, kein `shutdown_pc` über Telegram - diese Aktionen
+  bleiben der lokalen Konsole vorbehalten.
+- Enthält eine Mehrschritt-Anfrage auch nur einen nicht erlaubten
+  Befehl, wird die **gesamte** Anfrage abgelehnt (keine Teilausführung).
+- Kein gleichzeitiger Betrieb von Konsole und Telegram - beide teilen
+  sich dieselben `memory_data/`-Dateien, es läuft aber immer nur einer
+  der beiden Kanäle.
+
+Siehe ADR-018 für die vollständige Begründung (u. a. warum die
+Beschränkungen bewusst nur in `telegram_main.py` liegen, nicht in
+`core/ai.py`/`Planner`/`Executor`/`ToolManager`).
 
 ## Pipeline
 

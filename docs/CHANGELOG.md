@@ -1,5 +1,46 @@
 # Changelog
 
+## v0.6.0 - Telegram-Fernzugriff, Phase 1 (ADR-018, 01.07.2026)
+
+Erster v0.6-Baustein ("Handy", Handbook Kap. 13/16). Separater
+Einstiegspunkt, main.py/Konsole unverändert.
+
+### Neu
+- `telegram_main.py`: Long-Polling über `python-telegram-bot` (kein
+  Webhook/FastAPI/ngrok). Verdrahtet dieselbe Pipeline wie `main.py`
+  (`Config`/`AIEngine`/`Planner`/`Executor`/`JsonMemoryStore`/
+  `LongTermMemory`) mit Telegram statt Konsole als Kanal.
+- Sicherheitsbeschränkungen (Phase 1, ausschließlich in
+  `telegram_main.py`, keine Änderung an `core/ai.py`/`Planner`/
+  `Executor`/`ToolManager`/`commands/*.py`):
+  - Intent-Whitelist `chat`/`remember_fact`/`forget_fact`/
+    `system_status` - alles andere abgelehnt.
+  - Zusätzlicher, unabhängiger Check auf `requires_confirmation`
+    (Sicherheitsstufe 2/3 bleibt gesperrt, auch falls die Whitelist
+    später erweitert würde).
+  - Mehrschritt-Pläne mit mindestens einem nicht erlaubten Schritt
+    werden komplett abgelehnt (keine Teilausführung).
+  - Autorisierung über eine einzelne Chat-ID
+    (`JARVIS_TELEGRAM_ALLOWED_CHAT_ID`), Bot-Token
+    (`JARVIS_TELEGRAM_BOT_TOKEN`) - beide ausschließlich als
+    Umgebungsvariable, nie in `config.json`/Git.
+  - `TelegramSpeech`-Adapter (erfüllt `SpeechEngine`-Schnittstelle für
+    `Executor`) ist fail-closed: `listen()` liefert `""`, `say()`
+    loggt nur - beide sollten in Phase 1 nie aufgerufen werden.
+- `requirements.txt`: `python-telegram-bot` als optionale Abhängigkeit
+  (wie die TTS-Backends) - nur nötig für `telegram_main.py`.
+- 18 neue Tests (`tests/test_telegram_main.py`) - 152 Tests gesamt,
+  alle grün.
+
+### Bewusst nicht enthalten (Phase 1)
+- Kein gleichzeitiger Betrieb von Konsole und Telegram.
+- Keine Excel-/Report-/KPI-Dateizugriffe, kein `install_program`, kein
+  `shutdown_pc` über Telegram.
+- Kein Neustart-Mechanismus bei Absturz des Long-Polling-Prozesses.
+
+### Siehe auch
+- ADR-018 (docs/adr/ADR-018.md)
+
 ## Handbook v3.4 - v0.5-Abschluss, Power-BI-Backlog, Governance-Regel (ADR-017, 01.07.2026)
 
 Kein Code-Release - reine Dokumentations-/Governance-Aktualisierung nach

@@ -6,3 +6,4 @@ openpyxl>=3.1.0
 # elevenlabs>=1.0.0  # optional, TTS-Backend "elevenlabs" - siehe README "TTS-Backend wechseln"
 # kokoro-onnx>=0.4.0  # optional, TTS-Backend "kokoro" - siehe README "TTS-Backend wechseln"
 # numpy>=1.24.0  # optional, nur für TTS-Backend "kokoro" nötig
+# python-telegram-bot>=20.0  # optional, nur für telegram_main.py (v0.6, ADR-018) - main.py/Konsole brauchen es nicht

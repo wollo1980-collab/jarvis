@@ -1,5 +1,110 @@
 # Logbook
 
+## 2026-07-01 - Product-Owner-Hinweis: Generalisierung Post-Arbeitsmodule (kuenftige Handbook-Version)
+
+**Kontext:** Wolfgang hat nach Abschluss von v0.6 Phase 1 (Telegram)
+einen Hinweis fuer die naechste Handbook-Aktualisierung gegeben, keine
+sofortige Aenderung.
+
+**Hinweis:** Die bisherigen Post-spezifischen Arbeitsmodule
+(`analyze_report`/ADR-015, `calculate_kpi`/ADR-016) sollen
+kuenftig staerker verallgemeinert werden, statt dauerhaft
+"Tabellen-Auswertung"/Auswertung-spezifisch zu bleiben. Zielbild fuer eine
+kommende Version: allgemeine Excel-/Report-Analyse - Dateien lesen,
+Datenstrukturen erkennen (statt fester Spalten-Alias-Listen),
+Auffaelligkeiten zusammenfassen, KPI aus beliebigen tabellarischen
+Daten berechnen, domaenenspezifische Begriffe (Auswertung,
+Standort, Ort, ...) nur noch als optionaler Kontext statt als
+Voraussetzung.
+
+**Ausdruecklich festgelegt:**
+- Keine Codeaenderung jetzt - die bestehenden v0.5-Commands
+  (`read_excel`, `analyze_report`, `calculate_kpi`) bleiben
+  unveraendert.
+- Kein Refactoring waehrend v0.6.
+- Keine ADR jetzt - es handelt sich um eine Priorisierungs-/
+  Richtungsentscheidung fuer eine kuenftige Handbook-Version (v3.5),
+  keine bereits umgesetzte Architekturentscheidung. Eine ADR folgt
+  erst, wenn die Generalisierung tatsaechlich als Architekturaenderung
+  umgesetzt wird (analog zum Vorgehen bei allen bisherigen Bausteinen).
+
+**Dokumentiert in:** `docs/PROJECT_STATE.md` (neuer Abschnitt
+"Product-Owner-Hinweis fuer kuenftige Handbook-Version (v3.5, noch
+nicht umgesetzt)" sowie ein Verweis in den Feature-TODOs).
+
+**Naechster Aufgriffspunkt:** Bei der naechsten geplanten
+Handbook-Aktualisierung (nach Abschluss von v0.6, analog zum
+v3.3->v3.4-Nachzug, Kap. 2) - dann mit vollem
+Handbook-Pruefungs-/technischer-Vorschlag-Prozess, nicht vorher.
+
+**Status:** Reine Dokumentation einer Absicht, keine Code- oder
+Architekturaenderung. Tests unveraendert 152/152 gruen.
+
+## 2026-07-01 - Telegram-Fernzugriff implementiert, v0.6 Phase 1 (ADR-018)
+
+**Kontext:** Nach Handbook v3.4 war "Handy" (Telegram-Bot, Fernzugriff)
+laut Kap. 13 der naechste Baustein. Handbook-Pruefung (Scope/DoD/
+Architektur/Sicherheitsmodell/Bibliotheken/Registry-Integration/Tests/
+Risiken) zeigte: Kap. 16 empfiehlt Telegram-Bot klar als Einstieg, aber
+keine Aussage zu Befehlsumfang, Sicherheitsstufen bei Fernzugriff,
+Technik oder Architektur. Fernzugriff ist zudem eine grundsaetzlich
+neue Risikoklasse (Kap. 10 adressiert nur lokale Eingabe).
+
+**Product-Owner-Entscheidungen (vollstaendig uebernommen):**
+1. Befehlsumfang: nur `chat`/`remember_fact`/`forget_fact`/
+   `system_status`, keine Datei-/Report-/KPI-Zugriffe, kein
+   `install_program`/`shutdown_pc`.
+2. Sicherheitsstufen 0/ausgewaehlte Stufe-1 remote erlaubt, 2/3/4
+   gesperrt.
+3. Long-Polling statt Webhook/FastAPI/ngrok (einfacher, kein
+   oeffentlicher Server, privater Start).
+4. Separater Einstiegspunkt `telegram_main.py`, `main.py` unveraendert.
+5. Autorisierung ausschliesslich per Umgebungsvariablen
+   (`JARVIS_TELEGRAM_BOT_TOKEN`, `JARVIS_TELEGRAM_ALLOWED_CHAT_ID`).
+6. Kein gleichzeitiger Betrieb von Konsole und Telegram in Phase 1.
+7. Ganzer Plan wird abgelehnt, sobald ein Schritt eines Mehrschritt-Plans
+   nicht erlaubt ist (keine Teilausfuehrung) - explizit nachgefragt und
+   bestaetigt, nachdem ich das als offene Kleinigkeit im technischen
+   Vorschlag benannt hatte.
+
+**Umsetzung:** `telegram_main.py` (neuer, komplett additiver
+Einstiegspunkt). Zwei unabhaengige Sicherheitsmechanismen in
+`rejection_reason()`: Intent-Whitelist plus ein davon unabhaengiger
+Check auf `command.requires_confirmation` (Defense in Depth - greift
+auch, falls die Whitelist spaeter versehentlich erweitert wuerde).
+`filter_plan()` wertet alle Planschritte aus und verwirft den gesamten
+Plan bei einem einzigen nicht erlaubten Schritt. `TelegramSpeech`
+erfuellt dieselbe `say()`/`listen()`-Schnittstelle wie `SpeechEngine`,
+damit `Executor` unveraendert wiederverwendet werden kann - beide
+Methoden sind fail-closed (sollten in Phase 1 nie tatsaechlich
+gebraucht werden, da nur bestaetigungsfreie Intents durchkommen).
+`JarvisBridge` verdrahtet dieselben Bausteine wie `main.py`
+(`Config`/`AIEngine`/`Planner`/`Executor`/`JsonMemoryStore`/
+`LongTermMemory`), `ai` ist injizierbar fuer Tests (gleiches Muster wie
+`tests/test_integration.py::FakeAI`).
+
+**Keine Aenderung an** `core/ai.py`, `core/planner.py`,
+`core/tool_manager.py`, `executor/executor.py`, `main.py` oder
+`commands/*.py` - per `git diff --stat` explizit verifiziert (leer).
+
+**Tests:** 18 neue Tests (`tests/test_telegram_main.py`) - Autorisierung,
+Whitelist, Stufe-Check (inkl. hypothetischer Erweiterung der Whitelist
+um einen Stufe-2-Intent), Ganzer-Plan-Ablehnung, fail-closed
+`TelegramSpeech`, `JarvisBridge`-Verhalten (autorisiert/nicht
+autorisiert, chat, remember_fact, Ablehnung ohne Ausfuehrung,
+Mehrschritt-Ablehnung ohne Teil-Persistenz, History-Persistenz). 152
+Tests gesamt, alle gruen.
+
+**Bewusst nicht umgesetzt (Phase 1):** gleichzeitiger Betrieb, Datei-/
+Report-/KPI-Zugriffe, `install_program`/`shutdown_pc`, Neustart bei
+Absturz des Long-Polling-Prozesses.
+
+**Naechster Schritt:** v0.6 Phase 2 (Erweiterung des Befehlsumfangs)
+NICHT begonnen - naechste Entscheidung liegt beim Product Owner.
+
+**Siehe auch:** ADR-018 (docs/adr/ADR-018.md), README.md Abschnitt
+"Telegram-Fernzugriff (v0.6 Phase 1, ADR-018)", CHANGELOG (v0.6.0).
+
 ## 2026-07-01 - Handbook v3.4: v0.5-Abschluss, Power-BI-Backlog, Governance-Regel (ADR-017)
 
 **Kontext:** Nach dem `v0.5`-Tag hat Wolfgang angeordnet, strikt nach
