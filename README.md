@@ -34,7 +34,8 @@ jarvis/
 │   ├── system.py             # open_program, shutdown_pc
 │   ├── memory.py               # remember_fact, forget_fact
 │   ├── monitor.py               # system_status (CPU/RAM, ADR-011)
-│   └── installer.py               # install_program (winget, ADR-012)
+│   ├── installer.py               # install_program (winget, ADR-012)
+│   └── excel.py                     # read_excel (openpyxl, ADR-014)
 ├── executor/
 │   └── executor.py             # führt Schritte aus, Bestätigung, ✓/✗/?-Report
 ├── memory/
@@ -196,8 +197,25 @@ installiert sein (Windows 10/11 meist vorhanden über den "App
 Installer" aus dem Microsoft Store) - fehlt es, meldet Jarvis das
 klar statt stillschweigend zu scheitern.
 
-**Bewusst nicht enthalten:** "Deinstallieren" - Kap. 27 grenzt die
-v0.4-Priorisierung auf "installieren" ein (siehe ADR-012).
+## Excel-Lesen (v0.5 Phase 1, ADR-014)
+
+Erster Arbeitsmodule-Baustein (Handbook Kap. 13/27, v3.3): Jarvis liest
+`.xlsx`/`.xlsm`-Dateien über `openpyxl` (Sicherheitsstufe 0 - reine
+Leseaktion, keine Bestätigung nötig).
+
+```
+Du: Lies C:\Reports\beispiel.xlsx
+Jarvis: beispiel.xlsx: 2 Arbeitsblatt(e) - Tabelle1 (120 Zeile(n) x 5 Spalte(n)), Tabelle2 (40 Zeile(n) x 3 Spalte(n))
+```
+
+Optional ein bestimmtes Arbeitsblatt angeben (`parameters.sheet`), sonst
+werden alle Blätter gelesen. Gelesene Zelldaten stehen intern in
+`Result.data["sheets"]` bereit (pro Blatt auf 500 Zeilen begrenzt) -
+für spätere Bausteine wie Tabellen-Auswertung, die darauf aufbauen.
+
+**Bewusst nicht enthalten (Phase 1):** Schreiben, Formatieren, Power
+Query, Makros, `.xls` (Legacy-Format), eine KI-Zusammenfassung im
+Command selbst. Siehe ADR-013/ADR-014.
 
 ## Pipeline
 

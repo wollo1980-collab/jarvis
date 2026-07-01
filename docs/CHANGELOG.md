@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.5.0 - Excel-Lesen, Phase 1 (ADR-014, 01.07.2026)
+
+Erster Arbeitsmodule-Baustein (Handbook Kap. 13/27, v3.3) - Wolfgang hat
+Excel-Lesen vor Tabellen-Auswertung/KPI/Power BI priorisiert.
+
+### Neu
+- `commands/excel.py::ReadExcelCommand` (Intent `read_excel`,
+  Sicherheitsstufe 0, keine Bestätigung nötig): liest `.xlsx`/`.xlsm`-
+  Dateien über `openpyxl` (`read_only=True, data_only=True`).
+  Arbeitsblätter + Dimensionen im Ergebnistext, Zelldaten (pro Blatt
+  auf 500 Zeilen begrenzt) in `Result.data["sheets"]`. Optional
+  `parameters.sheet` für ein bestimmtes Arbeitsblatt.
+- `requirements.txt`: `openpyxl` als feste Abhängigkeit.
+- 9 neue Tests (`tests/test_commands_excel.py`, `openpyxl` gemockt) -
+  110 Tests gesamt, alle grün.
+
+### Bewusst nicht enthalten (Phase 1)
+- Schreiben, Formatieren, Power Query, Makros, `.xls` (Legacy-Format).
+- Keine KI-Zusammenfassung im Command selbst - bleibt einem späteren
+  Tabellen-Auswertung-Baustein überlassen.
+- Kein Sonderfall in `core/ai.py` - die ausführliche `description` von
+  `ReadExcelCommand` reicht über den bestehenden Registry-Mechanismus
+  (ADR-007), verifiziert per direktem `build_system_prompt()`-Aufruf.
+
+### Siehe auch
+- ADR-014 (docs/adr/ADR-014.md)
+- ADR-013 (docs/adr/ADR-013.md)
+
 ## Handbook v3.3 - Excel-Baustein (v0.5) Scope, Sicherheitsstufen, Governance (ADR-013, 01.07.2026)
 
 Kein Code-Release (keine neue Jarvis-Version) - Governance-/Prozess-Update

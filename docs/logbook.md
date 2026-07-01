@@ -1,5 +1,51 @@
 # Logbook
 
+## 2026-07-01 - Excel-Lesen implementiert, v0.5 Phase 1 (ADR-014)
+
+**Kontext:** Nach Handbook v3.3/ADR-013 hat Wolfgang den technischen
+Vorschlag fuer den Excel-Lesen-Baustein grundsaetzlich freigegeben,
+mit einer Praezisierung: kein neuer command-spezifischer Sonderfall in
+`core/ai.py` - die Command-`description` soll ueber den bestehenden
+Registry-Mechanismus (ADR-007) ausreichen. Ausserdem: Dateipfad direkt
+in der Spracheingabe reicht fuer Phase 1, kein Memory-Automatismus fuer
+bekannte Report-Pfade.
+
+**Umsetzung:** `commands/excel.py::ReadExcelCommand` (Intent
+`read_excel`, Sicherheitsstufe 0 laut Handbook Kap. 10 v3.3). Liest
+`.xlsx`/`.xlsm` ueber `openpyxl` (`read_only=True, data_only=True`).
+Arbeitsblatt-Namen + Dimensionen im Ergebnistext, Rohdaten (pro Blatt
+auf 500 Zeilen begrenzt - benannte Konstante gegen unbegrenzten
+Speicherverbrauch) in `Result.data["sheets"]`. `workbook.close()` in
+`finally`, da read-only-Workbooks sonst einen offenen Dateihandle
+halten (unter Windows relevant). Registrierung nach dem etablierten
+Rezept in `commands/__init__.py::_register_all()`, kein
+`configure()`-Mechanismus noetig (zustandslos).
+
+**`core/ai.py` bewusst NICHT angefasst:** verifiziert per direktem
+Aufruf von `build_system_prompt()` - `read_excel` samt vollstaendiger
+Beschreibung (Dateipfad als target, optionales `parameters.sheet`)
+erscheint automatisch im Prompt, ohne dass ein Sonderfall wie bei
+`remember_fact`/`forget_fact` noetig war. Unterschied: dort musste eine
+feste Kategorien-Werteliste erklaert werden, hier reicht eine
+ausfuehrliche `description`.
+
+**Bewusst nicht umgesetzt (Phase 1, siehe ADR-013/ADR-014):**
+Schreiben, Formatieren, Power Query, Makros, `.xls` (Legacy-Format,
+`openpyxl` unterstuetzt es nicht mehr), KI-Zusammenfassung im Command
+selbst (bleibt einem spaeteren Tabellen-Auswertung-Baustein ueberlassen),
+bekannte/gemerkte Report-Pfade (explizite Entscheidung von Wolfgang).
+
+**Tests:** 9 neue Tests (`tests/test_commands_excel.py`, `openpyxl`
+gemockt, es wird nie eine echte Datei geoeffnet) - 110 Tests gesamt,
+alle gruen.
+
+**Naechster Schritt laut Wolfgangs Reihenfolge:** Tabellen-Auswertung (baut
+auf `Result.data["sheets"]` auf), danach KPI, danach Power BI - noch
+nicht begonnen.
+
+**Siehe auch:** ADR-014 (docs/adr/ADR-014.md), README.md Abschnitt
+"Excel-Lesen (v0.5 Phase 1, ADR-014)", CHANGELOG (v0.5.0).
+
 ## 2026-07-01 - Handbook v3.3: Excel-Baustein (v0.5) Scope, Sicherheitsstufen, Governance (ADR-013)
 
 **Kontext:** Vor Beginn von `v0.5 "Arbeitsmodule"` hat Wolfgang eine
