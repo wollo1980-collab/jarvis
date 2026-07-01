@@ -5,9 +5,8 @@ Leseaktion, keine Bestätigung nötig.
 
 Bewusst NICHT enthalten (siehe ADR-013/ADR-014): Schreiben, Formatieren,
 Power Query, Makros, .xls (Legacy-Format) sowie eine KI-Zusammenfassung
-im Command selbst - Letzteres bleibt einem späteren Baustein
-(Tabellen-Auswertung) überlassen, der auf den hier bereitgestellten
-Rohdaten aufbaut.
+im Command selbst - Letzteres übernimmt commands/reports.py (ADR-015),
+das die Lesefunktion hier wiederverwendet statt sie zu duplizieren.
 """
 from __future__ import annotations
 
@@ -26,6 +25,59 @@ _SUPPORTED_SUFFIXES = {".xlsx", ".xlsm"}
 # Dateien (benannte Konstanten statt Magic Values, Handbook Kap. 5).
 _MAX_ROWS_PER_SHEET = 500
 _PREVIEW_ROWS_IN_MESSAGE = 5
+
+
+class ExcelReadError(Exception):
+    """Erwarteter Lesefehler (Datei fehlt/falsches Format/unbekanntes
+    Blatt) - wird von den aufrufenden Commands in ein Result übersetzt.
+    Technische openpyxl-Fehler (kaputte Datei etc.) werden NICHT hier,
+    sondern vom Aufrufer als generische Exception abgefangen."""
+
+
+def read_workbook_sheets(
+    path: Path, sheet: str | None = None
+) -> tuple[dict[str, list[tuple]], list[str]]:
+    """Liest eine .xlsx/.xlsm-Datei read-only über openpyxl und gibt
+    (sheets_data, summary_parts) zurück - sheets_data pro Blatt auf
+    _MAX_ROWS_PER_SHEET begrenzt. Wiederverwendet von ReadExcelCommand
+    und commands/reports.py (ADR-015), damit die Lese-Logik nur an
+    einer Stelle existiert (Kap. 4, DRY)."""
+    if not path.exists():
+        raise ExcelReadError(f"Datei nicht gefunden: {path}")
+
+    if path.suffix.lower() not in _SUPPORTED_SUFFIXES:
+        raise ExcelReadError(
+            f"Nur .xlsx/.xlsm werden unterstützt (Phase 1) - '{path.suffix}' ist nicht dabei."
+        )
+
+    workbook = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    try:
+        if sheet and sheet not in workbook.sheetnames:
+            raise ExcelReadError(
+                f"Arbeitsblatt '{sheet}' nicht gefunden. Verfügbar: {', '.join(workbook.sheetnames)}"
+            )
+
+        sheet_names = [sheet] if sheet else list(workbook.sheetnames)
+
+        sheets_data: dict[str, list[tuple]] = {}
+        summary_parts = []
+        for sheet_name in sheet_names:
+            worksheet = workbook[sheet_name]
+            rows = []
+            for i, row in enumerate(worksheet.iter_rows(values_only=True)):
+                if i >= _MAX_ROWS_PER_SHEET:
+                    break
+                rows.append(row)
+            sheets_data[sheet_name] = rows
+            summary_parts.append(
+                f"{sheet_name} ({worksheet.max_row} Zeile(n) x {worksheet.max_column} Spalte(n))"
+            )
+        return sheets_data, summary_parts
+    finally:
+        # read_only-Workbooks halten sonst einen offenen Dateihandle
+        # (unter Windows problematisch, wenn die Datei anschliessend
+        # in Excel geoeffnet werden soll).
+        workbook.close()
 
 
 class ReadExcelCommand:
@@ -52,56 +104,14 @@ class ReadExcelCommand:
             )
 
         path = Path(path_str)
-        if not path.exists():
-            return Result(status=Status.FAILED, message=f"Datei nicht gefunden: {path_str}")
-
-        if path.suffix.lower() not in _SUPPORTED_SUFFIXES:
-            return Result(
-                status=Status.FAILED,
-                message=(
-                    f"Nur .xlsx/.xlsm werden unterstützt (Phase 1) - "
-                    f"'{path.suffix}' ist nicht dabei."
-                ),
-            )
-
         try:
-            workbook = openpyxl.load_workbook(path, read_only=True, data_only=True)
+            sheets_data, summary_parts = read_workbook_sheets(path, plan.parameters.get("sheet"))
+        except ExcelReadError as e:
+            return Result(status=Status.FAILED, message=str(e))
         except Exception as e:
             return Result(status=Status.FAILED, message=f"Excel-Datei konnte nicht gelesen werden: {e}")
 
-        try:
-            requested_sheet = plan.parameters.get("sheet")
-            if requested_sheet and requested_sheet not in workbook.sheetnames:
-                return Result(
-                    status=Status.FAILED,
-                    message=(
-                        f"Arbeitsblatt '{requested_sheet}' nicht gefunden. "
-                        f"Verfügbar: {', '.join(workbook.sheetnames)}"
-                    ),
-                )
-
-            sheet_names = [requested_sheet] if requested_sheet else list(workbook.sheetnames)
-
-            sheets_data: dict[str, list[tuple]] = {}
-            summary_parts = []
-            for sheet_name in sheet_names:
-                worksheet = workbook[sheet_name]
-                rows = []
-                for i, row in enumerate(worksheet.iter_rows(values_only=True)):
-                    if i >= _MAX_ROWS_PER_SHEET:
-                        break
-                    rows.append(row)
-                sheets_data[sheet_name] = rows
-                summary_parts.append(
-                    f"{sheet_name} ({worksheet.max_row} Zeile(n) x {worksheet.max_column} Spalte(n))"
-                )
-        finally:
-            # read_only-Workbooks halten sonst einen offenen Dateihandle
-            # (unter Windows problematisch, wenn die Datei anschliessend
-            # in Excel geoeffnet werden soll).
-            workbook.close()
-
-        message = f"{path.name}: {len(sheet_names)} Arbeitsblatt(e) - " + ", ".join(summary_parts)
+        message = f"{path.name}: {len(sheets_data)} Arbeitsblatt(e) - " + ", ".join(summary_parts)
         return Result(status=Status.SUCCESS, message=message, data={"sheets": sheets_data})
 
 

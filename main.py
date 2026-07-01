@@ -15,6 +15,7 @@ import logging
 from datetime import date
 
 import commands.memory as memory_commands
+import commands.reports as reports_commands
 from core.ai import AIEngine
 from core.config import Config
 from core.models import Message
@@ -58,6 +59,11 @@ def main() -> None:
     # Konstruktor-Injection).
     long_term = LongTermMemory(config.memory_dir)
     memory_commands.configure(config.memory_dir)
+
+    # Tabellen-Auswertung (v0.5, ADR-015): analyze_report ruft als
+    # erster Command direkt die KI auf - dieselbe AIEngine-Instanz wird
+    # hier injiziert (Registry instanziiert Commands vor diesem Punkt).
+    reports_commands.configure(ai)
 
     logger.info("Jarvis v0.4 gestartet.")
     speech.say("Jarvis ist bereit.")

@@ -1,5 +1,45 @@
 # Changelog
 
+## v0.5.1 - Tabellen-Auswertung: Datenauswertung (ADR-015, 01.07.2026)
+
+Zweiter Arbeitsmodule-Baustein - baut auf Excel-Lesen (v0.5.0) auf.
+
+### Neu
+- `commands/reports.py::AnalyzeReportCommand` (Intent
+  `analyze_report`, Sicherheitsstufe 0, keine Bestätigung
+  nötig): liest einen Datentabelle (`.xlsx`/`.xlsm`) und lässt
+  `AIEngine.answer()` die Daten analysieren. Jede Antwort endet mit
+  einem Pflicht-Disclaimer ("Analyse auf Basis der gelieferten Daten.
+  Bitte vor Entscheidungen prüfen.").
+- Erster Command mit direktem KI-Zugriff: `AIEngine` wird per
+  `commands.reports.configure(ai)` injiziert (analog zum
+  Memory-Muster, ADR-009), von `main.py` einmal beim Start aufgerufen.
+  Der `Executor` bleibt dafür unverändert.
+- 7 neue Tests (`tests/test_commands_reports.py`, `AIEngine` und
+  Excel-Lesefunktion gemockt) - 117 Tests gesamt, alle grün.
+
+### Geändert
+- `commands/excel.py`: Lese-Logik aus `ReadExcelCommand.execute()` in
+  eine wiederverwendbare Funktion `read_workbook_sheets()` (plus
+  `ExcelReadError`) extrahiert - `ReadExcelCommand` verhält sich
+  unverändert (bestehende Tests weiterhin grün), `analyze_report`
+  nutzt dieselbe Funktion (DRY).
+- `main.py`: `reports_commands.configure(ai)` zusätzlich verdrahtet.
+
+### Bekannter Stolperstein (gefunden und behoben)
+- Ein `from core.ai import AIEngine` auf Modulebene in
+  `commands/reports.py` hätte je nach Importreihenfolge einen
+  `ImportError` durch einen Zirkelimport mit `core/ai.py` ausgelöst
+  (`core.ai` importiert `commands.REGISTRY`). Reproduziert und über
+  einen `TYPE_CHECKING`-Import gelöst (kein Laufzeit-Import nötig).
+
+### Bewusst nicht enthalten (Phase 1)
+- Keine neue `ai.py`-Methode - `answer()` wiederverwendet, bis sich
+  das als unzureichend erweist.
+
+### Siehe auch
+- ADR-015 (docs/adr/ADR-015.md)
+
 ## v0.5.0 - Excel-Lesen, Phase 1 (ADR-014, 01.07.2026)
 
 Erster Arbeitsmodule-Baustein (Handbook Kap. 13/27, v3.3) - Wolfgang hat

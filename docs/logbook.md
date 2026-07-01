@@ -1,5 +1,65 @@
 # Logbook
 
+## 2026-07-01 - Tabellen-Auswertung implementiert: Datenauswertung (ADR-015)
+
+**Kontext:** Nach Excel-Lesen (v0.5 Phase 1, ADR-014) war laut
+Wolfgangs Reihenfolge "Tabellen-Auswertung" der naechste v0.5-Baustein. Da
+das Handbook dafuer (anders als bei Excel) keine Formatangabe, keine
+Sicherheitsstufe und keine Definition of Done enthielt, wurde zuerst
+eine Handbook-Pruefung (Scope/DoD/Architektur/Sicherheitsmodell, wie
+bei Excel) gemacht und dann per Rueckfrage geklaert: Datenquelle =
+Excel-Datei (baut auf `read_excel` auf), erster Anwendungsfall =
+Auswertung-Quote (Handbook Kap. 1 Vision-Beispiel), KI-Zusammenfassung
+ist der Kern der Funktion (anders als bei `read_excel`, wo das bewusst
+ausgelassen wurde).
+
+**Architekturentscheidung (mit Wolfgang abgestimmt):** Erster Command
+mit direktem KI-Zugriff ueberhaupt - bisher rief nur der Executor
+`ai.answer()` auf (fuer den `chat`-Intent). Wolfgang hat Option A
+bestaetigt: `AIEngine` wird per `commands.reports.configure(ai)`
+injiziert, analog zum Memory-Muster (ADR-009), statt einer
+Executor-Sonderbehandlung fuer diesen einen Intent. Ausserdem
+bestaetigt: `AIEngine.answer()` wiederverwenden statt einer neuen
+`ai.py`-Methode - eine eigene `summarize_report()` wird erst geprueft,
+falls die Qualitaet nicht reicht.
+
+**Umsetzung:** `commands/reports.py::AnalyzeReportCommand`
+(Intent `analyze_report`, Sicherheitsstufe 0). Baut die
+gelesenen Zeilen zu Text zusammen, uebergibt sie mit einem
+Analyse-Prompt an `AIEngine.answer()`, haengt danach den von Wolfgang
+vorgegebenen Pflicht-Disclaimer an ("Analyse auf Basis der gelieferten
+Daten. Bitte vor Entscheidungen pruefen.") - Jarvis behauptet keine
+geschaeftskritische Wahrheit.
+
+**Refactor (DRY):** Die openpyxl-Leselogik aus
+`ReadExcelCommand.execute()` wurde in eine wiederverwendbare Funktion
+`commands/excel.py::read_workbook_sheets()` (plus `ExcelReadError`)
+extrahiert. `ReadExcelCommand` verhaelt sich danach nachweislich
+identisch - alle neun bestehenden Tests liefen nach dem Refactor
+unveraendert gruen, bevor der neue Command dazukam.
+
+**Gefundener und behobener Zirkelimport:** Ein normaler
+`from core.ai import AIEngine`-Import in `commands/reports.py` haette
+je nach Importreihenfolge gescheitert, weil `core/ai.py` selbst
+`commands.REGISTRY` importiert (`core.ai` -> `commands` ->
+`commands.reports` -> `core.ai`, noch bevor `AIEngine` dort definiert
+ist). Reproduziert mit einem gezielten Test
+(`from core.ai import AIEngine` als allererste Zeile eines frischen
+Prozesses) - schlug wie erwartet fehl. Geloest ueber einen
+`TYPE_CHECKING`-Import (Standardmuster fuer genau diesen Fall) - danach
+beide Importreihenfolgen sowie `main.py` selbst erfolgreich getestet.
+
+**Tests:** 7 neue Tests (`tests/test_commands_reports.py`, `AIEngine`
+und die Excel-Lesefunktion gemockt, kein echter API-Call, keine echte
+Datei) - 117 Tests gesamt, alle gruen.
+
+**Naechster Schritt laut Wolfgangs Reihenfolge:** KPI, danach Power BI
+- noch nicht begonnen, noch kein technischer Vorschlag erstellt.
+
+**Siehe auch:** ADR-015 (docs/adr/ADR-015.md), README.md Abschnitt
+"Tabellen-Auswertung: Datenauswertung (v0.5, ADR-015)", CHANGELOG
+(v0.5.1).
+
 ## 2026-07-01 - Excel-Lesen implementiert, v0.5 Phase 1 (ADR-014)
 
 **Kontext:** Nach Handbook v3.3/ADR-013 hat Wolfgang den technischen

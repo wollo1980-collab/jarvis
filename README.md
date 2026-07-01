@@ -35,7 +35,8 @@ jarvis/
 │   ├── memory.py               # remember_fact, forget_fact
 │   ├── monitor.py               # system_status (CPU/RAM, ADR-011)
 │   ├── installer.py               # install_program (winget, ADR-012)
-│   └── excel.py                     # read_excel (openpyxl, ADR-014)
+│   ├── excel.py                     # read_excel (openpyxl, ADR-014)
+│   └── reports.py                     # analyze_report (ADR-015)
 ├── executor/
 │   └── executor.py             # führt Schritte aus, Bestätigung, ✓/✗/?-Report
 ├── memory/
@@ -216,6 +217,28 @@ für spätere Bausteine wie Tabellen-Auswertung, die darauf aufbauen.
 **Bewusst nicht enthalten (Phase 1):** Schreiben, Formatieren, Power
 Query, Makros, `.xls` (Legacy-Format), eine KI-Zusammenfassung im
 Command selbst. Siehe ADR-013/ADR-014.
+
+## Tabellen-Auswertung: Datenauswertung (v0.5, ADR-015)
+
+Zweiter v0.5-Baustein: Jarvis liest einen Datentabelle
+(`.xlsx`/`.xlsm`, über dieselbe Lesefunktion wie `read_excel`) und
+lässt die KI die Daten analysieren (Sicherheitsstufe 0 - reines Lesen
++ Analyse, keine Bestätigung nötig).
+
+```
+Du: Analysiere den Datentabelle C:\Reports\beispiel.xlsx
+Jarvis: Standort Musterstadt liegt mit einer Fehlerquote von 15 % deutlich
+über dem Durchschnitt der übrigen Standorte ...
+
+Analyse auf Basis der gelieferten Daten. Bitte vor Entscheidungen prüfen.
+```
+
+`analyze_report` ist der erste Command, der direkt die KI
+aufruft (`AIEngine.answer()`, per `configure()` injiziert wie beim
+Langzeitgedächtnis, ADR-009) - der Executor bleibt dafür unverändert.
+Jede Analyse endet mit einem Pflicht-Hinweis: Jarvis behauptet keine
+geschäftskritische Wahrheit, sondern liefert einen Assistenzhinweis,
+der vor Entscheidungen geprüft werden sollte.
 
 ## Pipeline
 
