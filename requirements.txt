@@ -1,0 +1,7 @@
+openai>=1.0.0
+pytest>=8.0.0
+psutil>=5.9.0
+# piper-tts>=1.2.0  # optional, TTS-Backend "piper" (Standard) - siehe README "Piper TTS einrichten"
+# elevenlabs>=1.0.0  # optional, TTS-Backend "elevenlabs" - siehe README "TTS-Backend wechseln"
+# kokoro-onnx>=0.4.0  # optional, TTS-Backend "kokoro" - siehe README "TTS-Backend wechseln"
+# numpy>=1.24.0  # optional, nur für TTS-Backend "kokoro" nötig

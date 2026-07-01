@@ -1,0 +1,146 @@
+"""Tests für core/ai.py - alle OpenAI-Aufrufe gemockt, kein echter
+API-Key und keine Netzwerkverbindung nötig."""
+from __future__ import annotations
+
+import json
+from unittest.mock import MagicMock, patch
+
+from commands.memory import ForgetFactCommand, RememberFactCommand
+from commands.system import OpenProgramCommand, ShutdownPcCommand
+from core.ai import (
+    AIEngine,
+    CHAT_SYSTEM_PROMPT,
+    build_chat_system_prompt,
+    build_system_prompt,
+)
+from core.config import Config
+
+
+def _make_ai() -> AIEngine:
+    config = Config(openai_api_key="test-key", model="gpt-4o-mini")
+    return AIEngine(config)
+
+
+def _fake_response(content: str) -> MagicMock:
+    response = MagicMock()
+    response.choices = [MagicMock(message=MagicMock(content=content))]
+    return response
+
+
+def test_get_plan_parses_valid_json():
+    ai = _make_ai()
+    payload = json.dumps(
+        {"intent": "open_program", "target": "excel", "parameters": {}, "confidence": 0.95}
+    )
+    with patch.object(ai.client.chat.completions, "create", return_value=_fake_response(payload)):
+        plan = ai.get_plan("öffne excel", [])
+
+    assert plan.intent == "open_program"
+    assert plan.target == "excel"
+    assert plan.confidence == 0.95
+
+
+def test_get_plan_falls_back_to_chat_on_invalid_json():
+    ai = _make_ai()
+    with patch.object(
+        ai.client.chat.completions, "create", return_value=_fake_response("kein json")
+    ):
+        plan = ai.get_plan("hallo", [])
+
+    assert plan.intent == "chat"
+    assert plan.confidence == 0.0
+
+
+def test_get_plan_falls_back_to_chat_on_api_error():
+    ai = _make_ai()
+    with patch.object(ai.client.chat.completions, "create", side_effect=RuntimeError("timeout")):
+        plan = ai.get_plan("hallo", [])
+
+    assert plan.intent == "chat"
+    assert plan.confidence == 0.0
+
+
+def test_answer_returns_text():
+    ai = _make_ai()
+    with patch.object(
+        ai.client.chat.completions, "create", return_value=_fake_response("Hallo Wolfgang!")
+    ):
+        text = ai.answer("hallo", [])
+
+    assert text == "Hallo Wolfgang!"
+
+
+def test_answer_returns_fallback_on_error():
+    ai = _make_ai()
+    with patch.object(ai.client.chat.completions, "create", side_effect=RuntimeError("down")):
+        text = ai.answer("hallo", [])
+
+    assert "nicht" in text.lower()
+
+
+def test_system_prompt_is_built_from_registry_not_hardcoded():
+    """Lesson Learned (GPT-Review 2026-07-01): der Prompt darf keine
+    Intents mehr hart nennen, die es als Command gar nicht gibt -
+    stattdessen aus commands.REGISTRY generiert."""
+    prompt = build_system_prompt()
+
+    assert OpenProgramCommand.name in prompt
+    assert ShutdownPcCommand.name in prompt
+    assert "chat" in prompt
+    # Phantom-Intents aus der alten, hartcodierten Liste duerfen nicht
+    # mehr auftauchen - es gibt keine Commands dafuer.
+    assert "search_google" not in prompt
+    assert "weather" not in prompt
+
+
+def test_system_prompt_includes_command_descriptions():
+    prompt = build_system_prompt()
+    assert OpenProgramCommand.description in prompt
+    assert ShutdownPcCommand.description in prompt
+
+
+def test_chat_prompt_has_dezente_persoenlichkeit():
+    """Wolfgang-Wunsch (01.07.2026): dezenter trockener Humor im Stil
+    des Film-Jarvis, aber ausdruecklich nicht auf Kosten von Klarheit
+    oder Hilfsbereitschaft - siehe logbook.md."""
+    assert "trocken" in CHAT_SYSTEM_PROMPT.lower()
+    assert "Wolfgang" in CHAT_SYSTEM_PROMPT
+
+
+def test_system_prompt_mentions_memory_commands():
+    """v0.4 (ADR-009): remember_fact/forget_fact muessen wie jeder
+    andere Command automatisch ueber die Registry im Prompt landen -
+    keine manuelle Pflege noetig (siehe ADR-007)."""
+    prompt = build_system_prompt()
+
+    assert RememberFactCommand.name in prompt
+    assert ForgetFactCommand.name in prompt
+    assert "category" in prompt
+
+
+def test_build_chat_system_prompt_without_summary_unchanged():
+    assert build_chat_system_prompt("") == CHAT_SYSTEM_PROMPT
+    assert build_chat_system_prompt() == CHAT_SYSTEM_PROMPT
+
+
+def test_build_chat_system_prompt_includes_long_term_summary():
+    prompt = build_chat_system_prompt("- (projekt) arbeitet an Jarvis")
+
+    assert CHAT_SYSTEM_PROMPT in prompt
+    assert "arbeitet an Jarvis" in prompt
+    assert "Langzeitgedächtnis" in prompt
+
+
+def test_answer_passes_long_term_summary_into_system_prompt():
+    ai = _make_ai()
+    captured = {}
+
+    def fake_create(**kwargs):
+        captured["messages"] = kwargs["messages"]
+        return _fake_response("Klar, weiß ich noch.")
+
+    with patch.object(ai.client.chat.completions, "create", side_effect=fake_create):
+        ai.answer("magst du montags Reports?", [], "- (gewohnheit) macht montags Reports")
+
+    system_message = captured["messages"][0]["content"]
+    assert "macht montags Reports" in system_message

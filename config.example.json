@@ -1,0 +1,16 @@
+{
+  "openai_api_key": "",
+  "model": "gpt-4o-mini",
+  "voice": "default",
+  "volume": 0.8,
+  "hotword": "jarvis",
+  "tts_enabled": false,
+  "tts_model_path": "voices/de_DE-thorsten-medium.onnx",
+  "memory_dir": "memory_data",
+  "log_dir": "logs",
+  "max_history_entries": 200,
+  "temperature": 0.0,
+  "timeout": 15.0,
+  "max_tokens": 300,
+  "debug": false
+}
