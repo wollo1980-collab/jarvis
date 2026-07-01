@@ -1,7 +1,7 @@
 # PROJECT STATE
 
 Stand: 2026-07-01
-Quelle: `README.md`, `docs/handbook/JARVIS_MASTER_HANDBOOK_v3_2.docx`, `docs/logbook.md`, `docs/CHANGELOG.md`, `docs/adr/*.md`
+Quelle: `README.md`, `docs/handbook/JARVIS_MASTER_HANDBOOK_v3_3.docx`, `docs/logbook.md`, `docs/CHANGELOG.md`, `docs/adr/*.md`
 
 ## Current Version
 `v0.4.1` (letzter Patch) - `v0.4` insgesamt ist abgeschlossen und als Tag `v0.4` gesetzt.
@@ -17,7 +17,13 @@ Quelle: `README.md`, `docs/handbook/JARVIS_MASTER_HANDBOOK_v3_2.docx`, `docs/log
 `v0.4 "Memory + PC"` ist abgeschlossen. Naechste Roadmap-Phase laut Handbook Kap. 13: `v0.5 "Arbeitsmodule"`.
 
 ## Next Planned Version
-`v0.5` laut Handbook-Roadmap (Kap. 13): Schwerpunkt `Arbeitsmodule` - Tabellen-Auswertung, KPI, Power BI, Excel-Integration (Lerninhalte: Power Query, APIs, RAG). Diese Version ist noch NICHT begonnen - keine neuen Features in dieser Sitzung.
+`v0.5` laut Handbook-Roadmap (Kap. 13, praezisiert in v3.3/ADR-013): Schwerpunkt `Arbeitsmodule`.
+Excel-Baustein startet als **Phase 1, nur Lesen** (Datei oeffnen, Arbeitsblaetter/Tabellen/Zellen lesen, Inhalte zusammenfassen) -
+Schreiben, Formatieren, Power Query und Makros sind explizit NICHT Teil von Phase 1.
+Outlook ist NICHT Teil von v0.5 (eigene, spaetere Priorisierung).
+Vor Excel-Implementierung ist ein technischer Vorschlag (Bibliothek, Commands, Registry-Integration)
+noetig, der vom Product Owner ausdruecklich freigegeben werden muss - noch kein Code geschrieben.
+Diese Version ist noch NICHT begonnen - keine neuen Features in dieser Sitzung.
 
 ## Next Goal According To Handbook
 `v0.4` (Kurz-/Langzeitgedaechtnis + PC-Grundsteuerung) ist inhaltlich vollstaendig - siehe Status oben.
@@ -51,7 +57,7 @@ Keiner aktuell. `tests/test_integration.py::test_end_to_end_tool_execution` (vor
 Im Code wurden keine `TODO`-/`FIXME`-Marker gefunden.
 
 ## Latest ADR
-`ADR-012 - PC-Grundsteuerung Teil 2: Programme installieren (winget)`
+`ADR-013 - Handbook v3.3: Excel-Baustein (v0.5) Scope, Sicherheitsstufen, Governance`
 
 ## Latest Architecture Change
 `commands/installer.py::InstallProgramCommand` (Intent `install_program`, Sicherheitsstufe 2) installiert Programme ueber `winget` (Argumentliste, kein Shell-String). Bekannte Namen werden auf exakte Package-IDs abgebildet, sonst Freitext-Suche. Keine Aenderung an `core/ai.py`, `planner.py`, `tool_manager.py` oder `executor.py` noetig (Registry-Mechanismus aus ADR-007).

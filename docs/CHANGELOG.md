@@ -1,5 +1,36 @@
 # Changelog
 
+## Handbook v3.3 - Excel-Baustein (v0.5) Scope, Sicherheitsstufen, Governance (ADR-013, 01.07.2026)
+
+Kein Code-Release (keine neue Jarvis-Version) - Governance-/Prozess-Update
+vor Beginn von `v0.5`, ausgelöst durch eine Handbook-Prüfung und explizite
+Product-Owner-Entscheidungen zum Excel-Baustein.
+
+### Geändert
+- `docs/handbook/JARVIS_MASTER_HANDBOOK_v3_3.docx` neu (v3.2 bleibt als
+  Archiv erhalten): Excel-Scope für v0.5 auf Phase 1/nur Lesen präzisiert
+  (Schreiben, Formatieren, Power Query, Makros explizit NICHT enthalten),
+  Sicherheitsstufen um Dateizugriffe ergänzt (Excel lesen = Stufe 0,
+  Excel schreiben = Stufe 2, Datei löschen = Stufe 3), Outlook aus v0.5
+  ausgeklammert, Architektur bleibt flach (keine Migration auf
+  `tools/office/...` für v0.5), Definition of Done um v0.4-/v0.5-
+  spezifische Kriterien ergänzt, Governance-Dokumente (`AI_START.md`,
+  `PROJECT_STATE.md`, ADR-System) offiziell in Kap. 19 aufgenommen,
+  neue Handbook-Versionierungsregel in Kap. 2 (Änderungen nur zwischen
+  zwei Jarvis-Versionen).
+- `docs/AI_START.md`, `docs/PROJECT_STATE.md`, `README.md` verweisen
+  jetzt auf `JARVIS_MASTER_HANDBOOK_v3_3.docx`.
+- `docs/PROJECT_STATE.md`: `Latest ADR` = ADR-013, `Next Planned Version`
+  um den präzisierten Excel-Scope ergänzt.
+
+### Nächster Schritt (noch NICHT umgesetzt)
+- Technischer Vorschlag (Bibliothek, Commands, Registry-Integration)
+  für den Excel-Lesen-Baustein - braucht explizite Freigabe durch den
+  Product Owner, bevor Code geschrieben wird.
+
+### Siehe auch
+- ADR-013 (docs/adr/ADR-013.md)
+
 ## v0.4 - Kurz-/Langzeitgedächtnis + PC-Grundsteuerung (abgeschlossen, 01.07.2026)
 
 `v0.4` ist laut Handbook Kap. 13/27 damit inhaltlich vollständig:

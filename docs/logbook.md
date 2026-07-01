@@ -1,5 +1,55 @@
 # Logbook
 
+## 2026-07-01 - Handbook v3.3: Excel-Baustein (v0.5) Scope, Sicherheitsstufen, Governance (ADR-013)
+
+**Kontext:** Vor Beginn von `v0.5 "Arbeitsmodule"` hat Wolfgang eine
+Handbook-Pruefung (v3.2) angestossen - ausgeloest durch eine externe
+Ruecksprache (Handbook-Review + Dialog mit einem Mentor/"GPT") ueber
+Luecken im Excel-Umfang. Ergebnis: mehrere explizite
+Product-Owner-Entscheidungen, noch VOR jeglicher Excel-Implementierung
+("Noch keinen Code schreiben. Erst nach meiner Freigabe implementieren.").
+
+**Entscheidungen (Details siehe ADR-013):**
+- Excel-Scope v0.5 = Phase 1, nur Lesen (oeffnen, Arbeitsblaetter/
+  Tabellen/Zellen lesen, zusammenfassen). Schreiben, Formatieren,
+  Power Query, Makros explizit NICHT Teil von Phase 1.
+- Architektur bleibt flach (`commands/`) - keine Migration auf die
+  Kap.-30-Zielstruktur (`tools/office/...`) fuer ein einzelnes Modul
+  (Regel 6, YAGNI).
+- Sicherheitsstufen fuer Dateizugriffe ergaenzt (Kap. 10): Excel lesen
+  = Stufe 0, Excel schreiben = Stufe 2, Datei loeschen = Stufe 3.
+- Outlook ist NICHT Teil von v0.5, eigene Priorisierung noetig.
+- Vor Excel-Code: technischer Vorschlag (Bibliothek, Commands,
+  Registry-Integration) noetig, den der Product Owner ausdruecklich
+  freigeben muss.
+
+**Handbook-Versionierung:** Da das Handbook (neu in Kap. 2 dokumentiert)
+nur zwischen zwei Jarvis-Versionen geaendert werden darf, wurden alle
+Praezisierungen jetzt (nach Abschluss von v0.4, vor Beginn von v0.5)
+als Handbook v3.3 nachgezogen: `docs/handbook/JARVIS_MASTER_HANDBOOK_v3_3.docx`
+neu angelegt (v3.2 bleibt unveraendert als Archiv). Aenderungen im
+Detail: Versions-/Aenderungskopf, neue Sicherheitsstufen-Zeilen (Tab. 9),
+Roadmap-Praezisierung v0.5 (Tab. 11), Excel/Outlook-Trennung (Kap. 27),
+neue v0.4-/v0.5-spezifische Definition-of-Done-Kriterien (Kap. 28),
+Plugin-Vision-Praezisierung (Kap. 30), Governance-Dokumente (`AI_START.md`,
+`PROJECT_STATE.md`, ADR-System) offiziell in das bisher leere Kap. 19
+aufgenommen, Schlussabsatz auf v3.3 aktualisiert.
+
+**Doku-Updates:** `docs/AI_START.md`, `docs/PROJECT_STATE.md` und
+`README.md` verweisen jetzt auf `v3_3.docx` statt `v3_2.docx`.
+`PROJECT_STATE.md` (Latest ADR, Next Planned Version) und
+`docs/CHANGELOG.md` entsprechend ergaenzt.
+
+**Bewusst nicht umgesetzt:** Kein Excel-Code, kein technischer
+Vorschlag dafuer - das war explizit NICHT Teil dieser Anweisung
+("mach dann das neue Handbuch").
+
+**Tests:** Reiner Doku-Vorgang, keine Code-Aenderung - Testlauf trotzdem
+zur Sicherheit wiederholt (siehe Ergebnis weiter unten/CHANGELOG).
+
+**Siehe auch:** ADR-013, docs/PROJECT_STATE.md, docs/CHANGELOG.md,
+docs/handbook/JARVIS_MASTER_HANDBOOK_v3_3.docx.
+
 ## 2026-07-01 - v0.4 abgeschlossen, Git initialisiert und getaggt
 
 **Kontext:** Wolfgang hat explizit den Abschluss von v0.4 angeordnet:
