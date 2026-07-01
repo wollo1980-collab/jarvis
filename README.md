@@ -36,7 +36,7 @@ jarvis/
 │   ├── monitor.py               # system_status (CPU/RAM, ADR-011)
 │   ├── installer.py               # install_program (winget, ADR-012)
 │   ├── excel.py                     # read_excel (openpyxl, ADR-014)
-│   └── reports.py                     # analyze_report (ADR-015)
+│   └── reports.py                     # analyze_report (ADR-015), calculate_kpi (ADR-016)
 ├── executor/
 │   └── executor.py             # führt Schritte aus, Bestätigung, ✓/✗/?-Report
 ├── memory/
@@ -239,6 +239,35 @@ Langzeitgedächtnis, ADR-009) - der Executor bleibt dafür unverändert.
 Jede Analyse endet mit einem Pflicht-Hinweis: Jarvis behauptet keine
 geschäftskritische Wahrheit, sondern liefert einen Assistenzhinweis,
 der vor Entscheidungen geprüft werden sollte.
+
+## KPI: Kennzahl (v0.5, ADR-016)
+
+Dritter und aktuell letzter aktiver v0.5-Baustein: Jarvis berechnet die
+Kennzahl je Standort - **deterministisch in Python**, die
+KI wird nur zur Interpretation der bereits berechneten Zahlen genutzt
+(Sicherheitsstufe 0).
+
+```
+Du: Berechne die Kennzahl für C:\Reports\beispiel.xlsx, Ziel 95%
+Jarvis: Musterstadt liegt mit 94,3 % knapp unter dem Zielwert von 95 % ...
+
+Analyse auf Basis der gelieferten Daten. Bitte vor Entscheidungen prüfen.
+```
+
+Die Kopfzeile der Tabelle wird automatisch erkannt (case-insensitive,
+ohne Leerzeichen): Standort-Spalte über `Standort`/`Ort`/`Ort`/
+`Standort`, Ist-Wert-Spalte über `Ist`/`Istwert`/`Wert`/`Quote`/
+`Kennzahl`/`Kennzahl`. Wird keine oder werden
+mehrere passende Spalten gefunden, fragt Jarvis nach statt zu raten.
+`parameters.zielwert` ist Pflicht (ohne Zielwert: Rückfrage).
+
+Ergebnis (`Result.data["kpi"]`) enthält die berechnete Tabelle selbst
+(Ist, Zielwert, Abweichung, Status je Standort) - nachprüfbar
+unabhängig vom KI-Text.
+
+**Power BI ist bewusst NICHT enthalten** - per Product-Owner-
+Entscheidung aus dem aktiven v0.5-Scope genommen (liegt auf dem
+Firmenrechner/im Firmenumfeld), siehe `docs/PROJECT_STATE.md`.
 
 ## Pipeline
 

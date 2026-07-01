@@ -1,5 +1,60 @@
 # Logbook
 
+## 2026-07-01 - KPI implementiert: Kennzahl deterministisch berechnet (ADR-016)
+
+**Kontext:** Nach der Power-BI-Scope-Entscheidung war "KPI" der
+naechste und aktuell letzte aktive v0.5-Baustein. Handbook-Pruefung
+(wie bei Excel/Tabellen-Auswertung) ergab wieder nur ein Stichwort ohne
+Format-/Sicherheits-/DoD-Angaben. Rueckfrage ergab: KI-gestuetzt (wie
+Tabellen-Auswertung), Kennzahl = Kennzahl je Standort, Zielwert
+aus der Spracheingabe.
+
+**Wichtige Korrektur durch Wolfgang:** Mein erster technischer
+Vorschlag sah vor, dass die KI die Prozentrechnung selbst macht
+(analog zu Tabellen-Auswertung). Wolfgang hat das explizit korrigiert: KI
+soll NICHT rechnen. Python berechnet deterministisch (Ist, Abweichung,
+unter Zielwert), die KI bekommt nur die bereits fertige Tabelle zur
+Interpretation/Formulierung. Zusaetzlich hat Wolfgang feste,
+erweiterbare Alias-Listen fuer die Spalten-Erkennung vorgegeben
+(Standort: standort/ort/ort/standort; Ist-Wert: ist/istwert/
+wert/quote/kennzahl/kennzahl), case-insensitive,
+Leerzeichen ignoriert.
+
+**Umsetzung:** `commands/reports.py::CalculateKpiCommand` (Intent
+`calculate_kpi`, Sicherheitsstufe 0) - im selben Modul wie
+`analyze_report` (Kap. 27 fuehrt Reports/KPI als einen
+gemeinsamen Punkt, gleiche AIEngine-Injection/`read_workbook_sheets()`-
+Infrastruktur, kein zweites `configure()` in `main.py` noetig).
+Kopfzeile der ersten (oder per `parameters.sheet` gewaehlten) Tabelle
+wird gegen die Alias-Listen abgeglichen: 0 Treffer -> `FAILED` mit
+Spaltenliste, >1 Treffer -> `NEEDS_CLARIFICATION` - nie geraten (Kap. 4).
+Prozentwerte werden geparst (`%`, Komma, oder ein Excel-Bruch zwischen
+0 und 1 wird ×100 genommen - dokumentierte Annahme). `zielwert` ist
+Pflichtparameter, fehlt er: Rueckfrage. Die KI bekommt nur die fertige
+Tabelle als Text, derselbe Pflicht-Disclaimer wie bei Tabellen-Auswertung
+wird angehaengt. `Result.data["kpi"]` enthaelt die berechneten Zahlen
+selbst, unabhaengig vom KI-Text nachpruefbar.
+
+**Kein Sonderfall in `core/ai.py`:** verifiziert per direktem
+`build_system_prompt()`-Aufruf - `calculate_kpi` samt Beschreibung
+(inkl. Pflicht-Parameter `zielwert`) erscheint automatisch im Prompt.
+
+**Tests:** 17 neue Tests (`tests/test_commands_reports.py`, u. a.
+reine Funktionstests fuer `_parse_percentage`/`_find_matching_columns`,
+Szenarien fuer fehlende/mehrdeutige Spalten, deterministische
+Berechnung, KI bekommt nur die fertige Tabelle) - 134 Tests gesamt,
+alle gruen.
+
+**Damit sind alle drei aktiven v0.5-Bausteine laut Wolfgangs
+Reihenfolge umgesetzt:** Excel lesen (ADR-014), Tabellen-Auswertung
+(ADR-015), KPI (dieses ADR). Power BI bleibt bewusst aussen vor
+(Product-Owner-Entscheidung, siehe Eintrag oben/`docs/PROJECT_STATE.md`).
+Naechster Schritt ist eine Product-Owner-Entscheidung: v0.5 abschliessen
+(Tag setzen) oder weitere Bausteine ergaenzen.
+
+**Siehe auch:** ADR-016 (docs/adr/ADR-016.md), README.md Abschnitt
+"KPI: Kennzahl (v0.5, ADR-016)", CHANGELOG (v0.5.2).
+
 ## 2026-07-01 - Product-Owner-Entscheidung: Power BI aus v0.5-Scope genommen
 
 **Kontext:** Nach Tabellen-Auswertung (ADR-015) stand als naechster

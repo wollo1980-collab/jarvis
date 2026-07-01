@@ -1,5 +1,39 @@
 # Changelog
 
+## v0.5.2 - KPI: Kennzahl (ADR-016, 01.07.2026)
+
+Dritter Arbeitsmodule-Baustein - baut auf `read_workbook_sheets()` und
+der `AIEngine`-Injection aus v0.5.1 auf. Damit sind alle drei aktiven
+v0.5-Bausteine (Excel lesen, Tabellen-Auswertung, KPI) laut Wolfgangs
+Reihenfolge umgesetzt. Power BI ist bewusst NICHT enthalten
+(Product-Owner-Entscheidung, siehe `docs/PROJECT_STATE.md`).
+
+### Neu
+- `commands/reports.py::CalculateKpiCommand` (Intent `calculate_kpi`,
+  Sicherheitsstufe 0, keine Bestätigung nötig): berechnet die
+  Kennzahl je Standort **deterministisch in Python**
+  (Ist-Wert, Abweichung, "unter Zielwert"). Die KI
+  (`AIEngine.answer()`) interpretiert nur die bereits berechnete
+  Tabelle - sie rechnet nichts nach. `Result.data["kpi"]` enthält die
+  berechneten Zahlen selbst.
+- Spalten-Erkennung über feste, case-insensitive Alias-Listen
+  (Standort: `standort`/`ort`/`ort`/`standort`; Ist-Wert:
+  `ist`/`istwert`/`wert`/`quote`/`kennzahl`/
+  `kennzahl`). Keine oder mehrere Treffer → Rückfrage/
+  Fehler statt Raten.
+- `parameters.zielwert` als Pflichtparameter (`NEEDS_CLARIFICATION`
+  wenn nicht genannt).
+- 17 neue Tests (`tests/test_commands_reports.py`) - 134 Tests
+  gesamt, alle grün.
+
+### Bewusst nicht enthalten
+- Keine KI-Arithmetik - explizite Korrektur durch Wolfgang gegenüber
+  dem ersten technischen Vorschlag (KI hätte selbst rechnen sollen).
+- Power BI - aus dem aktiven v0.5-Scope genommen.
+
+### Siehe auch
+- ADR-016 (docs/adr/ADR-016.md)
+
 ## v0.5.1 - Tabellen-Auswertung: Datenauswertung (ADR-015, 01.07.2026)
 
 Zweiter Arbeitsmodule-Baustein - baut auf Excel-Lesen (v0.5.0) auf.
