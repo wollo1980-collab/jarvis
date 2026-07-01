@@ -1,41 +1,40 @@
 # PROJECT STATE
 
 Stand: 2026-07-01
-Quelle: `README.md`, `docs/handbook/JARVIS_MASTER_HANDBOOK_v3_3.docx`, `docs/logbook.md`, `docs/CHANGELOG.md`, `docs/adr/*.md`
+Quelle: `README.md`, `docs/handbook/JARVIS_MASTER_HANDBOOK_v3_4.docx`, `docs/logbook.md`, `docs/CHANGELOG.md`, `docs/adr/*.md`
 
 ## Current Version
-`v0.5.2` (dritter Baustein: KPI) - alle drei aktiven v0.5-Bausteine (Excel lesen, Tabellen-Auswertung, KPI) sind umgesetzt. `v0.5` als Gesamtversion ist NOCH NICHT getaggt. `v0.4` bleibt abgeschlossen und als Tag `v0.4` gesetzt.
+`v0.5` - abgeschlossen und als Tag `v0.5` gesetzt (zusammen mit `v0.4`). Handbook wurde danach gemäß Kap. 2 auf `v3.4` aktualisiert. `v0.6` ist noch nicht begonnen - aktuell in der Planungsphase (technischer Vorschlag ausstehend).
 
 ## Status
-`v0.3` und `v0.4` sind abgeschlossen.
+`v0.3`, `v0.4` und `v0.5` sind abgeschlossen und getaggt (`v0.4`, `v0.5`).
 `v0.5 "Arbeitsmodule"` - alle drei aktiven Bausteine umgesetzt:
 - **Excel-Lesen, Phase 1** (`commands/excel.py::ReadExcelCommand`, Intent `read_excel`, Sicherheitsstufe 0, ADR-014): liest `.xlsx`/`.xlsm` über `openpyxl` (read-only), Blattnamen/Dimensionen im Ergebnistext, Rohdaten in `Result.data["sheets"]` (pro Blatt auf 500 Zeilen begrenzt). Lese-Logik in wiederverwendbarer Funktion `read_workbook_sheets()`.
 - **Tabellen-Auswertung: Datenauswertung** (`commands/reports.py::AnalyzeReportCommand`, Intent `analyze_report`, Sicherheitsstufe 0, ADR-015): liest einen Datentabelle und lässt `AIEngine.answer()` die Daten analysieren, mit Pflicht-Disclaimer. Erster Command mit direktem KI-Zugriff (`configure()`-Injection).
-- **KPI: Kennzahl** (`commands/reports.py::CalculateKpiCommand`, Intent `calculate_kpi`, Sicherheitsstufe 0, ADR-016): berechnet die Kennzahl je Standort **deterministisch in Python** (Spalten-Erkennung über feste Alias-Listen, Zielwert als Pflichtparameter aus der Spracheingabe); die KI interpretiert nur die bereits berechnete Tabelle, rechnet nichts nach. `Result.data["kpi"]` enthält die berechneten Zahlen selbst.
+- **KPI: Kennzahl** (`commands/reports.py::CalculateKpiCommand`, Intent `calculate_kpi`, Sicherheitsstufe 0, ADR-016): berechnet die Kennzahl je Standort **deterministisch in Python**; die KI interpretiert nur die bereits berechnete Tabelle. `Result.data["kpi"]` enthält die berechneten Zahlen selbst.
 - Tests: `134 / 134` grün.
-- **Power BI ist NICHT enthalten** (Product-Owner-Entscheidung, siehe unten).
+- **Power BI ist NICHT enthalten** - jetzt auch im Handbook selbst als Backlog-Punkt (Kap. 29, v3.4) festgehalten, nicht mehr nur als PROJECT_STATE-Sonderfall.
 
 Aus v0.4 weiterhin gültig:
 - **Kurz-/Langzeitgedaechtnis** (Handbook Kap. 9/13/27): Kurzzeit-Anteil (`memory/store.py::JsonMemoryStore`) persistiert Gespraechsverlauf tagesuebergreifend; Langzeit-Anteil (`memory/long_term.py::LongTermMemory`, ADR-009), nur auf ausdruecklichen Zuruf.
 - **PC-Grundsteuerung** (Kap. 17/27): oeffnen (`open_program`), ueberwachen (`system_status`, ADR-011), installieren (`install_program`, ADR-012).
 
 ## Current Development Phase
-`v0.5 "Arbeitsmodule"` laut Handbook Kap. 13 - alle drei aktiven Teilschritte umgesetzt (Excel-Lesen, Tabellen-Auswertung, KPI). Power BI ist aus dem aktiven v0.5-Scope herausgenommen (Product-Owner-Entscheidung, 01.07.2026).
+`v0.5` abgeschlossen. Laut Handbook Kap. 13 ist die naechste Roadmap-Phase `v0.6 "Handy"` (Telegram-Bot, Fernzugriff). Diese Version ist noch NICHT begonnen - aktuell laeuft ausschliesslich die Planung (Handbook-Pruefung + technischer Vorschlag), noch kein Code.
 
 ## Next Planned Version
-`v0.5` inhaltlich vollstaendig (aktiver Scope), aber **noch NICHT getaggt**. Naechster Schritt ist eine Product-Owner-Entscheidung: `v0.5` jetzt abschliessen/taggen, oder weitere Pruefungen/Bausteine zuerst (z. B. manuelle Live-Tests, siehe Offene Aufgaben).
+`v0.6 "Handy"` laut Handbook-Roadmap (Kap. 13): Schwerpunkt Telegram-Bot/Fernzugriff (Lerninhalte: FastAPI, Webhooks, VPN). Ein technischer Vorschlag (Scope/DoD/Architektur/Sicherheitsmodell/Bibliotheken/Registry-Integration/Tests/Risiken/offene PO-Entscheidungen) wird aktuell erarbeitet - noch KEIN Code geschrieben, noch keine Freigabe erteilt.
 
 ## Next Goal According To Handbook
-`v0.5` (Kap. 13/27, praezisiert in v3.3/ADR-013) hat als Kerninhalt "Tabellen-Auswertung, KPI, Power BI, Excel". Excel Phase 1 (ADR-014), Tabellen-Auswertung (ADR-015) und KPI (ADR-016) sind erledigt.
-**Power BI** steht zwar weiterhin im Handbook-Text (Kap. 13/27) als Teil von "Arbeitsmodule", ist aber per Product-Owner-Entscheidung (01.07.2026, siehe unten) fuer die aktive v0.5-Umsetzung ausgeklammert - Grund: Power BI liegt auf dem Firmenrechner/im Firmenumfeld, keine praktische Implementierung in diesem Rahmen. Diese Entscheidung gilt bis zur naechsten Handbook-Version als verbindlich (Kap. 2: Handbook wird nur zwischen zwei Jarvis-Versionen geaendert) und hat in der Zwischenzeit Vorrang vor dem aktuellen Handbook-Wortlaut.
+`v0.5` (Kap. 13/27, praezisiert in v3.4/ADR-017) ist inhaltlich vollstaendig: Excel Phase 1 (ADR-014), Tabellen-Auswertung (ADR-015), KPI (ADR-016) - alle als "abgeschlossen" im Handbook selbst markiert (Kap. 28). Power BI ist im Handbook (Kap. 29 Backlog, v3.4) als zurueckgestellt dokumentiert, kein offener v0.5-Punkt mehr.
+Naechster Baustein laut Roadmap (Kap. 13): `v0.6 Handy (Telegram-Bot, Fernzugriff)`.
 Vor jedem weiteren Baustein gilt weiterhin: Handbook-Pruefung (Scope/DoD/Architektur/Sicherheitsmodell) + technischer Vorschlag zur Freigabe durch den Product Owner, bevor Code geschrieben wird (Muster aus ADR-013/ADR-014/ADR-015/ADR-016).
 
-## Product-Owner-Entscheidung: Power BI aus v0.5-Scope genommen (01.07.2026)
-**Entscheidung:** Power BI wird in v0.5 nicht praktisch implementiert. Fuer Jarvis v0.5 bleibt der Fokus auf drei Bausteinen: (1) Excel lesen, (2) Tabellen-Auswertung analysieren, (3) KPI aus Excel-/Reportdaten berechnen. Power BI wird als optionale Unternehmensintegration bzw. spaeterer Baustein behandelt, kein aktiver v0.5-Scope.
-**Begruendung:** Power BI liegt auf dem Firmenrechner/im Firmenumfeld - keine praktische Implementierbarkeit im aktuellen Jarvis-Rahmen.
-**Charakter der Entscheidung:** Priorisierungs-/Scope-Entscheidung des Product Owner, keine Architekturentscheidung - deshalb bewusst KEINE eigene ADR (siehe Kap. 20: ADRs sind fuer Architekturentscheidungen vorgesehen).
-**Handbook-Bezug:** Das Master-Handbook (Kap. 13/27) nennt Power BI weiterhin als Teil von "Arbeitsmodule/v0.5". Gemaess der in Handbook v3.3/Kap. 2 festgelegten Regel ("Handbook wird nur ZWISCHEN zwei Versionen geaendert") wird der Handbook-Text erst bei der naechsten geplanten Handbook-Version entsprechend nachgezogen. Bis dahin gilt diese Product-Owner-Entscheidung als verbindlich und hat Vorrang fuer die weitere Entwicklung von v0.5.
-**Status:** Aktiv, keine Code-Aenderung ausgeloest.
+## Handbook-Update: v3.3 -> v3.4 (01.07.2026, ADR-017)
+**Anlass:** Abschluss von v0.5 (Tag `v0.5` gesetzt) - gemaess Kap. 2 (Handbook wird nur zwischen zwei Versionen geaendert) war der Zeitpunkt fuer den Nachzug erreicht.
+**Aenderungen:** Kap. 13 (Roadmap) aktualisiert (v0.5 abgeschlossen, Power BI aus aktivem Scope), Kap. 27 (Praezisierung v3.4), Kap. 28 (neue DoD-Abschnitte fuer Tabellen-Auswertung und KPI), Kap. 29 (Backlog um Power BI ergaenzt), Kap. 19 (neue generalisierte Regel: Product-Owner-Entscheidungen zwischen zwei Handbook-Versionen gelten sofort ueber PROJECT_STATE.md/logbook.md, werden zur naechsten Version nachgezogen).
+**Damit entfaellt die bisherige Sonderregelung:** Die vorherige "Power BI steht noch im Handbook-Text, PO-Entscheidung hat Vorrang"-Situation ist aufgeloest - das Handbook selbst (v3.4) spiegelt jetzt den tatsaechlichen, abgeschlossenen v0.5-Scope wider.
+**Details:** ADR-017 (docs/adr/ADR-017.md).
 
 ## Tests
 Letzter Check am 2026-07-01: `pytest tests -v` mit zusaetzlichem `PYTHONPATH`.
@@ -55,13 +54,13 @@ Keiner aktuell. `tests/test_integration.py::test_end_to_end_tool_execution` (vor
 - `.git_broken_5/` (Reste eines fruehen, abgebrochenen git-init-Versuchs) liegt noch im Arbeitsordner, ist per `.gitignore` von der Versionierung ausgeschlossen. Kann bei Gelegenheit manuell aufgeraeumt werden, wurde bewusst nicht geloescht (keine destruktive Aktion ohne Rueckfrage).
 
 ### Feature-TODOs (naechste Roadmap-Bausteine, NICHT jetzt umsetzen)
+- `v0.6 Handy`: Telegram-Bot, Fernzugriff - Planung laeuft (technischer Vorschlag), noch keine Freigabe/Code.
 - Alias-Liste fuer Standort-/Ist-Wert-Spalten (ADR-016) erweitern, sobald sich an echten Reports zeigt, dass andere Spaltennamen gebraucht werden.
-- Power BI - per Product-Owner-Entscheidung (01.07.2026) aus dem aktiven v0.5-Scope genommen (Firmenrechner/Firmenumfeld, keine praktische Implementierbarkeit hier). Behandelt als optionale Unternehmensintegration/spaeterer Baustein, keine Prioritaet aktuell.
+- Power BI - jetzt im Handbook selbst (Kap. 29 Backlog, v3.4) als optionale Unternehmensintegration/spaeterer Baustein dokumentiert. Pruefzeitpunkt laut Handbook: "falls sich das Umfeld aendert oder eine konkrete Notwendigkeit entsteht".
 - Eigene `AIEngine.summarize_report()`-Methode - nur pruefen, falls die Wiederverwendung von `answer()` bei `analyze_report` sich als inhaltlich unzureichend erweist (ADR-015).
 - Excel Phase 2 (Schreiben, Formatieren, Power Query, Makros) - explizit nicht Teil von Phase 1 (ADR-013/ADR-014), keine Priorisierung dafuer.
 - `.xls` (Legacy-Format) - von `openpyxl` nicht unterstuetzt, keine eigene Priorisierung bisher.
-- Outlook-Integration - explizit aus v0.5 ausgeklammert (Handbook v3.3, Kap. 27), eigene, spaetere Priorisierung noetig.
-- `v0.6 Handy`: Telegram-Bot, Fernzugriff.
+- Outlook-Integration - explizit aus v0.5 ausgeklammert (Handbook, Kap. 27), eigene, spaetere Priorisierung noetig.
 - `Deinstallieren` (winget) - im Handbook (Kap. 17) genannt, aber nicht Teil der v0.4-Priorisierung (Kap. 27, siehe ADR-012); braucht eigene Priorisierung und vermutlich eigene Sicherheitsstufen-Bewertung.
 - Festplatten-Ueberwachung/-Bereinigung - separater Handbook-Punkt (Kap. 17), nicht in v0.4 enthalten (siehe ADR-011).
 - Temperatur-Monitoring - unter Windows von `psutil` nicht unterstuetzt (Plattform-Limitierung, kein Priorisierungsthema).
@@ -69,10 +68,10 @@ Keiner aktuell. `tests/test_integration.py::test_end_to_end_tool_execution` (vor
 Im Code wurden keine `TODO`-/`FIXME`-Marker gefunden.
 
 ## Latest ADR
-`ADR-016 - KPI-Berechnung: Python rechnet deterministisch, KI interpretiert nur`
+`ADR-017 - Handbook v3.4: v0.5-Abschluss, Power-BI-Backlog, Governance-Regel`
 
 ## Latest Architecture Change
-`commands/reports.py::CalculateKpiCommand` (Intent `calculate_kpi`, Sicherheitsstufe 0) berechnet die Kennzahl je Standort deterministisch in Python (Spalten-Erkennung ueber feste Alias-Listen, Prozent-Parsing) - die KI (`AIEngine.answer()`, bereits injiziert seit ADR-015) interpretiert ausschliesslich die fertige Tabelle. Liegt im selben Modul wie `analyze_report` (Kap. 27: Reports/KPI als ein gemeinsamer Punkt), keine zweite `configure()`-Verdrahtung noetig. Keine Aenderung an `core/ai.py` (verifiziert per `build_system_prompt()`).
+Keine Code-Architekturaenderung - ADR-017 ist eine reine Dokumentations-/Governance-Aenderung (Handbook-Update). Letzte Code-Architekturaenderung bleibt ADR-016 (`commands/reports.py::CalculateKpiCommand`, deterministische KPI-Berechnung, KI nur zur Interpretation).
 
 ## Known Limitations
 - Langzeitgedaechtnis funktioniert nur auf Zuruf; es gibt keine automatische Fakten-Extraktion.
@@ -86,7 +85,7 @@ Im Code wurden keine `TODO`-/`FIXME`-Marker gefunden.
 - `calculate_kpi` erkennt Standort-/Ist-Wert-Spalten nur ueber eine feste Alias-Liste (ADR-016) - unbekannte Spaltennamen fuehren zu einem klaren Fehler, nicht zu einer automatischen Erkennung. Die Prozent-Parsing-Heuristik (Zahl zwischen 0 und 1 wird als Excel-Prozentbruch behandelt) kann bei einem echten Rohwert ≤ 1 falsch interpretieren.
 
 ## Git
-Ein einzelner, ehrlicher Initial-Commit aus dem aktuellen Arbeitsstand (kein rekonstruierter Verlauf aus alten ZIP-Staenden), getaggt als `v0.4`. Danach je ein Commit fuer Handbook v3.3/ADR-013, Excel-Lesen (ADR-014), Tabellen-Auswertung (ADR-015), die Power-BI-Scope-Entscheidung und KPI (ADR-016). Fruehere Versionen (v0.1-v0.3) existieren nur als Text in `docs/CHANGELOG.md`/`docs/logbook.md`, nicht als eigene Git-Commits/Tags - das im Handbook (Kap. 21) urspruenglich vorgesehene inkrementelle Nachziehen der Commit-Historie wurde bewusst nicht gemacht (keine kuenstliche Fake-Historie). Kein neuer Tag seit `v0.4` - `v0.5` wird erst nach der finalen Abschlusspruefung getaggt (laeuft gerade).
+Ein einzelner, ehrlicher Initial-Commit aus dem aktuellen Arbeitsstand (kein rekonstruierter Verlauf aus alten ZIP-Staenden), getaggt als `v0.4`. Danach je ein Commit fuer Handbook v3.3/ADR-013, Excel-Lesen (ADR-014), Tabellen-Auswertung (ADR-015), die Power-BI-Scope-Entscheidung, KPI (ADR-016) und die v0.5-Abschlusspruefung, getaggt als `v0.5`. Fruehere Versionen (v0.1-v0.3) existieren nur als Text in `docs/CHANGELOG.md`/`docs/logbook.md`, nicht als eigene Git-Commits/Tags - das im Handbook (Kap. 21) urspruenglich vorgesehene inkrementelle Nachziehen der Commit-Historie wurde bewusst nicht gemacht (keine kuenstliche Fake-Historie). Das Handbook-v3.4-Update (dieser Stand) ist noch nicht committed.
 
 ## Product Owner Rules
 - Product Owner entscheidet Prioritaeten.

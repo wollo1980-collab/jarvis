@@ -1,5 +1,31 @@
 # Changelog
 
+## Handbook v3.4 - v0.5-Abschluss, Power-BI-Backlog, Governance-Regel (ADR-017, 01.07.2026)
+
+Kein Code-Release - reine Dokumentations-/Governance-Aktualisierung nach
+Abschluss von v0.5 (Tag `v0.5` gesetzt), gemäß der in Kap. 2 festgelegten
+Regel ("Handbook wird nur zwischen zwei Versionen geändert").
+
+### Geändert
+- `docs/handbook/JARVIS_MASTER_HANDBOOK_v3_4.docx` neu (v3.2/v3.3 bleiben
+  als Archiv erhalten): Kap. 13 (Roadmap) aktualisiert - v0.5 als
+  abgeschlossen markiert, Power BI aus aktivem Scope genommen; Kap. 27
+  um "Präzisierung v3.4: v0.5 Abschluss" ergänzt; Kap. 28 (Definition of
+  Done) um Abschnitte für Tabellen-Auswertung und KPI erweitert (inkl. der
+  Vorgabe "deterministische Berechnung, KI nur zur Interpretation" bei
+  KPI); Kap. 29 (Backlog) um "Power BI-Integration" ergänzt; Kap. 19
+  (Governance) um eine generalisierte Regel ergänzt, wie mit
+  Product-Owner-Entscheidungen zwischen zwei Handbook-Versionen
+  umgegangen wird.
+- `docs/AI_START.md`, `README.md`, `docs/PROJECT_STATE.md` verweisen
+  jetzt auf `JARVIS_MASTER_HANDBOOK_v3_4.docx`.
+- Vollständiger Text-Diff zwischen v3.3 und v3.4 geprüft - ausschließlich
+  die oben genannten, beabsichtigten Änderungen, keine Kollateralschäden
+  in unveränderten Kapiteln.
+
+### Siehe auch
+- ADR-017 (docs/adr/ADR-017.md)
+
 ## v0.5 - Arbeitsmodule: Excel lesen, Tabellen-Auswertung, KPI (aktiver Scope abgeschlossen, 01.07.2026)
 
 Alle drei von Wolfgang priorisierten aktiven v0.5-Bausteine sind

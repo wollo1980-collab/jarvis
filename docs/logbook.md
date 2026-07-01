@@ -1,5 +1,65 @@
 # Logbook
 
+## 2026-07-01 - Handbook v3.4: v0.5-Abschluss, Power-BI-Backlog, Governance-Regel (ADR-017)
+
+**Kontext:** Nach dem `v0.5`-Tag hat Wolfgang angeordnet, strikt nach
+AI_START.md und Handbook zu arbeiten und zuerst das Handbook auf v3.4
+zu aktualisieren, bevor v0.6 geplant wird - ausschliesslich mit den
+Erkenntnissen aus dem abgeschlossenen v0.5, keine neuen Features/
+Roadmap-Erweiterungen.
+
+**Technischer Weg:** `python-docx` installiert, um die vorhandene
+`.docx`-Struktur (Absaetze/Tabellen mit Word-Styles) gezielt zu
+bearbeiten statt sie als Text neu zu erzeugen (Tabellen wie Kap. 13
+Roadmap und Kap. 29 Backlog muessen echte Word-Tabellen bleiben).
+Stolperstein: `document.styles['Heading 3']` warf einen `KeyError`,
+obwohl der Style nachweislich existiert (pandoc-generierte
+`styles.xml`-Eigenheit) - geloest, indem Style-OBJEKTE von bestehenden
+Absaetzen wiederverwendet wurden statt sie per Namens-String
+nachzuschlagen.
+
+**Umsetzung (v3.4 gegenueber v3.3):**
+- Kap. 13 (Roadmap): v0.5-Kerninhalt aktualisiert - "abgeschlossen
+  (siehe ADR-014/015/016)", Power BI aus aktivem Scope genommen,
+  Verweis auf Kap. 29 Backlog.
+- Kap. 27: neue "Praezisierung v3.4: v0.5 Abschluss".
+- Kap. 28 (Definition of Done): zwei neue Abschnitte "Tabellen-Auswertung"
+  und "KPI" mit Checklisten, die exakt das tatsaechlich Umgesetzte
+  spiegeln (u. a. "keine KI-Arithmetik" bei KPI, "kein Sonderfall in
+  core/ai.py" bei beiden). Excel-Abschnitt als "- abgeschlossen"
+  markiert.
+- Kap. 29 (Backlog): neue Zeile "Power BI-Integration" (Firmenrechner/
+  Firmenumfeld, Pruefzeitpunkt "falls sich das Umfeld aendert").
+- Kap. 19 (Governance): neue, generalisierte Regel - wie mit
+  Product-Owner-Entscheidungen umgegangen wird, die zwischen zwei
+  Handbook-Versionen getroffen werden (sofort verbindlich ueber
+  PROJECT_STATE.md/logbook.md, Handbook-Nachzug zur naechsten Version).
+  Macht einen bereits zweimal angewandten Mechanismus (v3.3-Genese,
+  jetzt Power BI) als Regel explizit.
+- Versions-Kopfzeile und Freeze-Hinweis auf v3.4/"Basis fuer v0.6"
+  aktualisiert.
+
+**Bewusst NICHT geaendert:** Kap. 1 (Vision, Power BI bleibt
+mittelfristige Ambition), Kap. 22 (Academy-Lerninhalte), Kap. 30
+(Plugin-Vision-Praezisierung aus v3.3 bleibt gueltig - kein neues
+Office-Modul seit v3.3 hinzugekommen).
+
+**Konsistenz-Pruefung:** Vollstaendiger Text-Diff zwischen v3.3- und
+v3.4-Extraktion zeigt ausschliesslich die oben genannten Aenderungen -
+keine unbeabsichtigten Abweichungen. Alle Tabellen (Roadmap, Backlog)
+per `python-docx` inspiziert und bestaetigt.
+
+**Tests:** Keine Code-Aenderung, 134/134 weiterhin gruen (nur zur
+Bestaetigung erneut ausgefuehrt).
+
+**Naechster Schritt:** Kap. 13/27/28 des neuen Handbooks fuer den
+v0.6-Baustein (Handy: Telegram-Bot, Fernzugriff) lesen und einen
+technischen Vorschlag erarbeiten - noch kein Code, noch keine
+Freigabe.
+
+**Siehe auch:** ADR-017 (docs/adr/ADR-017.md), CHANGELOG (Handbook
+v3.4-Abschnitt).
+
 ## 2026-07-01 - v0.5 (aktiver Scope) abgeschlossen, finale Pruefung vor Tag
 
 **Kontext:** Wolfgang hat nach dem KPI-Commit eine abschliessende

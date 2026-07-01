@@ -9,7 +9,7 @@ Zuerst Projektstand, Roadmap, ADRs und offene Aufgaben lesen.
 
 ## Pflicht-Lesereihenfolge
 1. `README.md`
-2. `docs/handbook/JARVIS_MASTER_HANDBOOK_v3_3.docx` (v3.2 bleibt als Archiv, Grundlage fuer v0.4)
+2. `docs/handbook/JARVIS_MASTER_HANDBOOK_v3_4.docx` (v3.2/v3.3 bleiben als Archiv, Grundlage fuer v0.4/v0.5)
 3. `docs/PROJECT_STATE.md`
 4. `docs/logbook.md`
 5. `docs/CHANGELOG.md`
