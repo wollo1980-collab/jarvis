@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.5 - Arbeitsmodule: Excel lesen, Tabellen-Auswertung, KPI (aktiver Scope abgeschlossen, 01.07.2026)
+
+Alle drei von Wolfgang priorisierten aktiven v0.5-Bausteine sind
+umgesetzt: Excel lesen (v0.5.0, ADR-014), Tabellen-Auswertung/Auswertung-
+Analyse (v0.5.1, ADR-015), KPI/Kennzahl (v0.5.2, ADR-016).
+134/134 Tests grün. **Power BI ist bewusst NICHT enthalten** -
+Product-Owner-Entscheidung (01.07.2026): liegt auf dem Firmenrechner/
+im Firmenumfeld, keine praktische Implementierbarkeit im aktuellen
+Rahmen. Behandelt als optionale Unternehmensintegration/späterer
+Baustein, kein Codeverstoß gegen Handbook Kap. 13/27 - die Entscheidung
+gilt bis zur nächsten Handbook-Version (Kap. 2) als verbindliche
+Arbeitsgrundlage. Siehe `docs/PROJECT_STATE.md` für die finale
+Statuszusammenfassung.
+
 ## v0.5.2 - KPI: Kennzahl (ADR-016, 01.07.2026)
 
 Dritter Arbeitsmodule-Baustein - baut auf `read_workbook_sheets()` und

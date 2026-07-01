@@ -1,5 +1,47 @@
 # Logbook
 
+## 2026-07-01 - v0.5 (aktiver Scope) abgeschlossen, finale Pruefung vor Tag
+
+**Kontext:** Wolfgang hat nach dem KPI-Commit eine abschliessende
+Pruefung vor dem `v0.5`-Tag angeordnet: komplette Testsuite,
+PROJECT_STATE.md gegen Handbook v3.3 abgleichen, Vollstaendigkeit von
+v0.5 sicherstellen, CHANGELOG/Logbook finalisieren, danach erst taggen.
+
+**Tests:** `pytest tests -v` erneut vollstaendig ausgefuehrt -
+134/134 gruen, keine Regression seit dem letzten Stand.
+
+**Handbook-Abgleich:** Handbook v3.3 erneut extrahiert und Kap. 2, 10,
+13, 19, 27, 28, 30 gegen den letzten bekannten Stand verglichen -
+unveraendert (keine Zwischen-Versions-Aenderung, korrekt gemaess der
+in Kap. 2 selbst festgelegten Regel). Kap. 13 nennt fuer v0.5
+weiterhin "Tabellen-Auswertung, KPI, Power BI, Excel", Kap. 28 hat weiterhin
+nur eine v0.5-Checkliste fuer Excel Phase 1 (keine fuer Tabellen-Auswertung/
+KPI, da diese erst nach v3.3 per ADR-015/ADR-016 entschieden wurden -
+das ist erwartet und kein Widerspruch, siehe Kap.-2-Regel: Handbook
+wird erst zur naechsten Version nachgezogen).
+
+**Vollstaendigkeit v0.5 (aktiver Scope) bestaetigt:**
+- Excel lesen (ADR-014) - erledigt.
+- Tabellen-Auswertung analysieren (ADR-015) - erledigt.
+- KPI berechnen (ADR-016) - erledigt.
+- Power BI bewusst aus aktivem Scope entfernt (Product-Owner-
+  Entscheidung, siehe Eintrag oben) - kein offener Punkt, sondern eine
+  getroffene Entscheidung.
+
+**Aufgeraeumt:** Eine veraltete Git-Notiz in `docs/PROJECT_STATE.md`
+korrigiert (behauptete faelschlich, der KPI-Baustein sei noch nicht
+committed - war zum Zeitpunkt der Pruefung laengst committed, siehe
+Commit `afe1562`).
+
+**CHANGELOG/Logbook finalisiert:** `docs/CHANGELOG.md` um eine
+abschliessende `v0.5`-Zusammenfassung ergaenzt (analog zum
+`v0.4`-Abschluss), die alle drei Bausteine sowie die Power-BI-
+Entscheidung in einem Eintrag buendelt.
+
+**Status:** Konsistent und gruen - bereit fuer Tag `v0.5`.
+
+**Siehe auch:** docs/PROJECT_STATE.md, docs/CHANGELOG.md (v0.5-Abschnitt).
+
 ## 2026-07-01 - KPI implementiert: Kennzahl deterministisch berechnet (ADR-016)
 
 **Kontext:** Nach der Power-BI-Scope-Entscheidung war "KPI" der
