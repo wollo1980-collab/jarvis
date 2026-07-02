@@ -56,7 +56,8 @@ jarvis/
 ├── requirements.txt
 ├── CHANGELOG.md                        # Verweis auf docs/CHANGELOG.md
 ├── main.py                                 # verdrahtet die Pipeline (Konsole)
-└── telegram_main.py                          # separater Einstiegspunkt (Telegram, ADR-018)
+├── telegram_main.py                          # separater Einstiegspunkt (Telegram, ADR-018)
+└── jarvis_runtime.py                           # koordinierender Runtime-Einstiegspunkt v1 (ADR-025)
 ```
 
 ## Setup
@@ -449,6 +450,47 @@ Ordner) werden gelöscht, Pfad-Eindämmung gegen Ziele außerhalb von
 **Bewusst nicht enthalten:** Papierkorb, `C:\Windows\Temp`,
 Browser-Cache/-Profile, Registry-Cleaner, Dienste, Treiber. Siehe
 ADR-023.
+
+## Jarvis-Runtime v1 (ADR-024/ADR-025)
+
+Dritter, koordinierender Einstiegspunkt neben `main.py` (Konsole) und
+`telegram_main.py` (Telegram) - **Koexistenz, keine Ablösung**: beide
+bleiben unverändert bestehen. `jarvis_runtime.py` ist die Grundlage
+für eine künftige Mehrkanal-Architektur (UI, Tray, Wake-Word), aber
+v1 enthält bewusst nur das minimale Gerüst dafür.
+
+```bash
+python jarvis_runtime.py
+```
+
+```
+Jarvis-Runtime (Konsolen-Dummy-Kanal) ist bereit.
+Du: wie spät ist es?
+Jarvis: Antwort auf: wie spät ist es?
+```
+
+**`JarvisRuntime`** instanziiert den Core-Stack (Config/AIEngine/
+Planner/Executor/Memory) **einmal**, wie `main.py` - Kanäle rufen
+`runtime.submit(text, reply_callback)` auf, statt direkt auf den
+Executor zuzugreifen. Eine `queue.Queue` + ein einzelner Worker-Thread
+verarbeiten eingehende Nachrichten **seriell** (kein `asyncio`, keine
+echte Nebenläufigkeits-Absicherung in `JsonMemoryStore`/`Executor`
+nötig - Product-Owner-Entscheidung, KISS). Der Worker fängt Fehler pro
+Nachricht ab und läuft weiter, statt still zu sterben.
+
+**`ConsoleDummyChannel`** ist der einzige Kanal in v1 - liest
+interaktiv von der Konsole, beweist nur, dass das Runtime-Gerüst
+funktioniert. Kein Produktivkanal.
+
+**Fail-closed Sicherheitsstufe 2/3:** Der geteilte Executor bekommt
+einen fail-closed Speech-Adapter (`_RuntimeSpeech`, gleiches Prinzip
+wie `TelegramSpeech`, ADR-018, bewusst dupliziert statt importiert) -
+Commands, die eine Bestätigung anfordern, werden über die Runtime
+sicher abgelehnt statt eine Bestätigung zu erfinden.
+
+**Bewusst nicht enthalten (v1):** UI, Tray, Wake-Word,
+Telegram-Integration in die Runtime, Windows-Autostart, abstraktes
+Channel-Interface (erst beim zweiten echten Kanal). Siehe ADR-024/025.
 
 ## Pipeline
 

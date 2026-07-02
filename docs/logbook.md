@@ -1,5 +1,78 @@
 # Logbook
 
+## 2026-07-02 - Jarvis-Runtime v1 implementiert (ADR-025)
+
+**Kontext:** Nach Freigabe des Implementierungsplans fuer Runtime v1
+(kleinstmoeglicher Architekturbaustein aus ADR-024) hat Wolfgang die
+Umsetzung freigegeben - zuerst ADR-025 schreiben, dann implementieren.
+
+**Product-Owner-Vorgaben (vollstaendig uebernommen):** Neue Datei
+`jarvis_runtime.py`, neue Tests `tests/test_jarvis_runtime.py`, keine
+Aenderung an `main.py`/`telegram_main.py`/`core/*`/`commands/*`/
+`executor/*`, kein UI/Tray/Wake-Word/Telegram-Umbau/Autostart, kein
+neues `runtime/`-Package, kein abstraktes Channel-Interface in v1,
+`queue.Queue` + ein Worker-Thread, fail-closed Speech-Adapter wie bei
+Telegram, `ConsoleDummyChannel` als erster minimaler Kanal,
+Sicherheitsstufe-2/3-Commands muessen fail-closed bleiben, Worker darf
+bei Fehlern nicht still sterben.
+
+**ADR-025 geschrieben** (`docs/adr/ADR-025.md`) - haelt die Umsetzung
+von Runtime v1 fest, aufbauend auf ADR-024s Architekturrichtung.
+
+**Umsetzung** (`jarvis_runtime.py`, ~200 Zeilen, top-level neben
+`main.py`/`telegram_main.py`, kein neues Package):
+
+- `JarvisRuntime`: verdrahtet den Core-Stack 1:1 wie `main.py`
+  (`AIEngine` -> `Planner` -> `Executor` -> `JsonMemoryStore`/
+  `LongTermMemory`, `commands.*.configure(...)`) - einmalig, nicht pro
+  Kanal. `ai` injizierbar fuer Tests (gleiches Muster wie
+  `JarvisBridge` in `telegram_main.py`).
+- `queue.Queue` + ein einzelner Worker-Thread (`start()`/`stop()`/
+  `submit(text, reply_callback)`): Nachrichten werden seriell in
+  Eingangsreihenfolge verarbeitet. Stop-Pfad ueber ein Sentinel-Objekt
+  in der Queue, `stop()` wartet per `thread.join()`.
+- Worker faengt jede Exception pro Nachricht einzeln ab
+  (`try/except Exception` in der Worker-Schleife) und laeuft mit der
+  naechsten Nachricht weiter, statt still zu sterben - inkl. Schutz
+  gegen einen kaputten `reply_callback` (Kanal bereits weg).
+- `_RuntimeSpeech` (privat): fail-closed `say()`/`listen()`-Adapter fuer
+  den geteilten Executor - `listen()` liefert immer `""`, Stufe-2/3-
+  Commands werden dadurch sicher ueber den bestehenden Executor-
+  Bestaetigungsmechanismus abgelehnt. Bewusst dupliziert statt aus
+  `telegram_main.py` importiert (keine `python-telegram-bot`-
+  Abhaengigkeit in der Runtime fuer ein reines Sicherheits-Fallback).
+- `ConsoleDummyChannel`: liest interaktiv von der Konsole, reicht jede
+  Zeile ueber `runtime.submit()` weiter, wartet per `threading.Event`
+  auf die Antwort und druckt sie. Einziger Kanal in v1, kein
+  Produktivkanal - beweist nur, dass Core-Stack + Queue + Worker-Thread
+  + sauberer Shutdown tatsaechlich funktionieren.
+
+**Bewusst nicht enthalten:** UI, Tray, Wake-Word, Telegram-Integration
+in die Runtime, Autostart, abstraktes Channel-Interface (YAGNI - erst
+beim zweiten echten Kanal), `asyncio`, echte Nebenlaeufigkeits-
+Absicherung in `JsonMemoryStore`/`Executor` (nicht noetig, da die Queue
+serialisiert). Keine Aenderung an `main.py`, `telegram_main.py`,
+`core/*`, `commands/*`, `executor/*`.
+
+**Tests:** 11 neue Tests (`tests/test_jarvis_runtime.py`) - Core-Stack-
+Verdrahtung, einzelne Nachricht verarbeitet, mehrere Nachrichten
+sequenziell in Eingangsreihenfolge, gleichzeitige `submit()`-Aufrufe
+aus mehreren Threads gehen nicht verloren/vermischen sich nicht,
+sauberer `stop()` (Worker-Thread danach `is_alive() is False`),
+Sicherheitsstufe-2/3 (`shutdown_pc`) fail-closed ueber die Runtime,
+Worker ueberlebt eine unerwartete Exception bei der Verarbeitung UND
+einen kaputten `reply_callback`, `_RuntimeSpeech` fail-closed,
+`ConsoleDummyChannel` reicht Eingaben korrekt weiter und ignoriert
+leere Zeilen. Vollstaendige Suite: **236/236 gruen** (225 vorher + 11
+neu). `git diff --stat` bestaetigt: nur `jarvis_runtime.py` (neu),
+`tests/test_jarvis_runtime.py` (neu), `docs/adr/ADR-025.md` (neu) -
+keine Aenderung an `main.py`/`telegram_main.py`/`core/*`/`commands/*`/
+`executor/*`.
+
+Kein Tag gesetzt. Jarvis-Eigenstart-Implementierung bleibt weiterhin
+verschoben - ob Runtime v1 dafuer bereits ausreicht, ist eine eigene,
+spaetere Entscheidung.
+
 ## 2026-07-02 - ADR-024: Jarvis-Runtime als koordinierender Einstiegspunkt (Architekturentscheidung)
 
 **Kontext:** Aufbauend auf der zuvor festgehaltenen Architekturrichtung

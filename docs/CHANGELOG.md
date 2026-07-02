@@ -1,5 +1,47 @@
 # Changelog
 
+## Jarvis-Runtime v1 (ADR-025, 02.07.2026)
+
+Eigenständiger Infrastruktur-/Runtime-Baustein zwischen v0.7 und v0.8
+(kein v0.X-Release) - Umsetzung der in ADR-024 festgelegten Architektur-
+richtung als kleinstmöglicher, funktionierender Baustein.
+
+### Neu
+- `jarvis_runtime.py`: dritter, koordinierender Einstiegspunkt neben
+  `main.py`/`telegram_main.py` - **Koexistenz, keine Ablösung**, beide
+  bleiben unverändert.
+- `JarvisRuntime`: instanziiert den Core-Stack (Config/AIEngine/Planner/
+  Executor/Memory) einmalig, wie `main.py`. Kanäle kommunizieren
+  ausschließlich über `submit(text, reply_callback)`.
+- `queue.Queue` + ein einzelner Worker-Thread: serialisierte
+  Verarbeitung eingehender Nachrichten - bewusst kein `asyncio` (KISS,
+  Product-Owner-Entscheidung). Löst das Nebenläufigkeits-/Locking-
+  Problem bei `memory_data/` (ADR-018), ohne `JsonMemoryStore`/
+  `Executor` anzufassen. Worker fängt Fehler pro Nachricht ab und läuft
+  weiter, statt still zu sterben (explizite Vorgabe).
+- `_RuntimeSpeech`: fail-closed Speech-Adapter für den geteilten
+  Executor - Sicherheitsstufe-2/3-Commands werden sicher abgelehnt
+  statt eine Bestätigung zu erfinden (gleiches Prinzip wie
+  `TelegramSpeech`, ADR-018, bewusst dupliziert statt importiert - keine
+  `python-telegram-bot`-Abhängigkeit in der Runtime).
+- `ConsoleDummyChannel`: einziger Kanal in v1 - liest interaktiv von der
+  Konsole, beweist nur, dass das Runtime-Gerüst funktioniert, kein
+  Produktivkanal.
+- 11 neue Tests (`tests/test_jarvis_runtime.py`) - 236 Tests gesamt,
+  alle grün.
+
+### Bewusst nicht enthalten (v1)
+- UI, Tray, Wake-Word, Telegram-Integration in die Runtime,
+  Windows-Autostart.
+- Abstraktes Channel-Interface (erst beim zweiten echten Kanal, YAGNI).
+- `asyncio`, echte Nebenläufigkeits-Absicherung in `JsonMemoryStore`/
+  `Executor`.
+- Keine Änderung an `main.py`, `telegram_main.py`, `core/*`,
+  `commands/*`, `executor/*`.
+
+### Siehe auch
+- ADR-024 (Architekturrichtung), ADR-025 (Umsetzung Runtime v1)
+
 ## v0.7 - PC-Admin (abgeschlossen, getaggt, 02.07.2026)
 
 Handbook auf v3.6 aktualisiert (siehe eigener Abschnitt unten) - Kap. 13

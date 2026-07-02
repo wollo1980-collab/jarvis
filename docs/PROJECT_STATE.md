@@ -17,34 +17,37 @@ Umgesetzt in v0.7 "PC-Admin" (Details: `docs/CHANGELOG.md`, ADRs):
 
 Bewusst nicht enthalten und ins Handbook-Backlog (Kap. 29) verschoben: Treiber, Dienste, HKLM-Autostart-Erweiterung, Papierkorb, `C:\Windows\Temp`, Browser-Cache/-Profile. Neuer Roadmap-Baustein "Jarvis-Eigenstart" zwischen v0.7 und v0.8 im Handbook (Kap. 13) dokumentiert.
 
-Tests: `225 / 225` grün.
+Tests: `236 / 236` grün (225 aus v0.7 + 11 neue aus Jarvis-Runtime v1, ADR-025).
 
 Aus v0.6/v0.5/v0.4 weiterhin gültig: Telegram-Fernzugriff (ADR-018), Excel-Lesen/Tabellen-Auswertung/KPI (ADR-014/015/016), Kurz-/Langzeitgedächtnis (ADR-009), PC-Grundsteuerung (ADR-011/012) - siehe Handbook Kap. 13/27 für den vollständigen Roadmap-Stand.
 
 ## Next Planned Version
-`v0.7` ist vollständig abgeschlossen (Handbook v3.6, Tag `v0.7`). `v0.8 "Multi-KI"` (Handbook Kap. 13: "Claude + GPT + Copilot orchestrieren") ist der nächste geplante Baustein - noch nicht begonnen, kein technischer Vorschlag erstellt. Vor v0.8 steht architektonisch der Jarvis-Eigenstart-Baustein, dessen Implementierung jedoch auf die Runtime-Architektur wartet (siehe unten) - noch kein Code, keine Umsetzung.
+`v0.7` ist vollständig abgeschlossen (Handbook v3.6, Tag `v0.7`). `v0.8 "Multi-KI"` (Handbook Kap. 13: "Claude + GPT + Copilot orchestrieren") ist der nächste geplante Baustein - noch nicht begonnen, kein technischer Vorschlag erstellt. Vor v0.8 steht architektonisch der Jarvis-Eigenstart-Baustein, dessen Implementierung weiterhin verschoben ist - ob Runtime v1 dafür bereits ausreicht, ist eine eigene, spätere Entscheidung.
 
-## Architekturrichtung: Jarvis-Runtime (ADR-024, wartet auf künftige Konsolidierung)
-Architekturentscheidung dokumentiert in **ADR-024** (kein Code, keine Implementierung - `jarvis_runtime.py` existiert weiterhin nicht als Datei). Da das Handbook laut Kap. 2 nur zwischen zwei Hauptversionen geändert wird und v3.6 gerade erst konsolidiert wurde, gilt ADR-024 ab sofort maßgeblich (Kap. 19) und wird erst bei der nächsten Konsolidierung (nach Abschluss des Runtime-Bausteins oder spätestens v0.8) formal ins Handbook übernommen.
+## Jarvis-Runtime v1 implementiert (ADR-024/ADR-025, wartet auf künftige Konsolidierung)
+Architekturrichtung (ADR-024) und Umsetzung von **Runtime v1** (ADR-025) sind beide dokumentiert und (v1) implementiert - `jarvis_runtime.py` existiert jetzt als Datei. Da das Handbook laut Kap. 2 nur zwischen zwei Hauptversionen geändert wird und v3.6 gerade erst konsolidiert wurde, gelten beide ADRs ab sofort maßgeblich (Kap. 19) und werden erst bei der nächsten Konsolidierung (nach v0.8 oder einem weiteren Runtime-Ausbau) formal ins Handbook übernommen.
 
 **Auslöser:** Wolfgang möchte langfristig ein eigenes UI im Stil von Film-Jarvis (UI, Tray, Wake Word, Telegram, Core sollen koordiniert zusammenspielen). Der Windows-Autostart soll deshalb nicht fest auf `main.py` (Konsolenmodus) gebaut werden.
 
-**Entscheidung (ADR-024):**
-- Neuer, künftiger Runtime-Einstiegspunkt **`jarvis_runtime.py`** (noch nicht implementiert) - koordiniert später mehrere gleichzeitige Kanäle über einen einmalig instanziierten Core-Stack. Kein Ersatz der bestehenden Kern-Architektur (Handbook Kap. 7) - reine Koordinationsschicht darüber.
-- **Koexistenz statt Ablösung:** `main.py` bleibt dauerhaft Konsolen-/Entwicklungsmodus, `telegram_main.py` bleibt dauerhaft eigenständig - wird nicht entfernt/obsolet markiert.
-- **Nebenläufigkeitsmodell festgelegt:** einfache `queue.Queue` mit einem Worker-Thread, bewusst **kein** `asyncio` (KISS, Product-Owner-Entscheidung). Löst das Locking-Problem bei `memory_data/` durch serialisierte Verarbeitung, ohne `JsonMemoryStore`/`Executor` anzufassen.
-- **Erster Runtime-Kanal:** kein UI/Tray/Wake-Word - ein minimaler Konsolen-/Dummy-/Status-Kanal soll zuerst nur das Runtime-Gerüst und die serielle Verarbeitung beweisen.
-- **Telegram explizit nicht Bestandteil von ADR-024** - eine spätere Runtime-Integration bleibt optional, separate Entscheidung.
-- **Jarvis-Eigenstart-Implementierung** bleibt wie zuvor verschoben, Ziel weiterhin `jarvis_runtime.py` statt `main.py`.
-- **Wake-Word-Backlog-Korrektur:** Handbook Kap. 29 nennt fälschlich noch "v0.4" als Prüfzeitpunkt für Wake-Word (Porcupine) - Korrektur bei nächster Konsolidierung fällig, jetzt nur vermerkt (siehe ADR-024).
+**Umgesetzt (Runtime v1, ADR-025):**
+- **`jarvis_runtime.py`** - dritter, koordinierender Einstiegspunkt. **Koexistenz statt Ablösung:** `main.py`/`telegram_main.py` bleiben unverändert bestehen.
+- `JarvisRuntime`: instanziiert den Core-Stack einmalig (gleiche Verdrahtung wie `main.py`), Kanäle kommunizieren nur über `submit(text, reply_callback)`.
+- `queue.Queue` + ein Worker-Thread (kein `asyncio`, KISS) - serialisierte Verarbeitung löst das Locking-Problem bei `memory_data/`, ohne `JsonMemoryStore`/`Executor` anzufassen. Worker fängt Fehler pro Nachricht ab, stirbt nicht still.
+- `_RuntimeSpeech`: fail-closed Speech-Adapter (Sicherheitsstufe 2/3 sicher abgelehnt, gleiches Prinzip wie `TelegramSpeech`, dupliziert statt importiert).
+- `ConsoleDummyChannel`: einziger Kanal in v1, kein Produktivkanal - beweist nur das Runtime-Gerüst.
+- **Keine Änderung an `main.py`, `telegram_main.py`, `core/*`, `commands/*`, `executor/*`** (per `git diff --stat` verifiziert).
 
-Details, Begründung und Alternativen: `docs/adr/ADR-024.md`.
+**Weiterhin offen/nicht Bestandteil von v1:** UI, Tray, Wake-Word, Telegram-Integration in die Runtime, Windows-Autostart, abstraktes Channel-Interface (erst beim zweiten echten Kanal), Jarvis-Eigenstart-Implementierung (Ziel weiterhin `jarvis_runtime.py`).
+
+**Wake-Word-Backlog-Korrektur:** Handbook Kap. 29 nennt fälschlich noch "v0.4" als Prüfzeitpunkt für Wake-Word (Porcupine) - Korrektur bei nächster Konsolidierung fällig, jetzt nur vermerkt (ADR-024).
+
+Details, Begründung und Alternativen: `docs/adr/ADR-024.md` (Architekturrichtung), `docs/adr/ADR-025.md` (Umsetzung v1).
 
 ## Tests
 Letzter Check am 2026-07-02: `pytest tests -v` mit zusätzlichem `PYTHONPATH`.
 
 ### Test Status
-`225 / 225` bestanden
+`236 / 236` bestanden
 
 ### Known Failure
 Keiner aktuell.
@@ -57,7 +60,8 @@ Keiner aktuell.
 - `.git_broken_5/` (Reste eines frühen, abgebrochenen git-init-Versuchs) liegt noch im Arbeitsordner, per `.gitignore` ausgeschlossen - bewusst nicht gelöscht (keine destruktive Aktion ohne Rückfrage).
 
 ### Feature-TODOs (nächste Roadmap-Bausteine, NICHT jetzt umsetzen)
-- Jarvis-Runtime (`jarvis_runtime.py`) und darauf aufbauender Jarvis-Eigenstart - siehe Abschnitt "Architekturrichtung: Jarvis-Runtime" oben. Kein Code, keine Umsetzung.
+- Jarvis-Eigenstart (Windows-Autostart) aufbauend auf `jarvis_runtime.py` - siehe Abschnitt "Jarvis-Runtime v1 implementiert" oben. Kein Code, keine Umsetzung.
+- Weitere Runtime-Kanäle (UI, Tray, Wake-Word, Telegram-Integration) und ein abstraktes Channel-Interface - erst bei Bedarf (YAGNI), kein Code, keine Umsetzung.
 
 Vollständige, aktuelle Liste jetzt im Handbook (Kap. 13 Roadmap, Kap. 29 Backlog) - hier nur technische Detail-Notizen, die (noch) keinen eigenen Handbook-Backlog-Eintrag brauchen:
 - Dritter KI-Verwender: falls ein weiteres Modul KI-Zugriff braucht, `configure()`-Duplizierung (`reports.py`/`monitor.py`) zu einer gemeinsamen Abstraktion zusammenführen prüfen (Wolfgangs Entscheidung bei ADR-020).
@@ -69,10 +73,10 @@ Vollständige, aktuelle Liste jetzt im Handbook (Kap. 13 Roadmap, Kap. 29 Backlo
 Im Code wurden keine `TODO`-/`FIXME`-Marker gefunden.
 
 ## Latest ADR
-`ADR-024 - Jarvis-Runtime als koordinierender Einstiegspunkt (Architekturentscheidung, keine Implementierung)`
+`ADR-025 - Jarvis-Runtime v1 - minimales Gerüst (Queue, Worker-Thread, Konsolen-Dummy-Kanal)`
 
 ## Latest Architecture Change
-`executor/executor.py` bekommt einen optionalen `preview(plan) -> Optional[str]`-Hook - die erste Änderung an dieser Datei in der gesamten v0.7-Entwicklung. Commands ohne `preview()` verhalten sich exakt wie zuvor (rückwärtskompatibel, per Regressionstests verifiziert). `CleanTempFilesCommand` nutzt den Hook, verlässt sich aber nie auf das Vorschau-Ergebnis - `execute()` scannt beim tatsächlichen Löschen immer erneut. Details: ADR-023.
+Neue Datei `jarvis_runtime.py` (dritter, koordinierender Einstiegspunkt, koexistiert mit `main.py`/`telegram_main.py`, keine davon geändert): `JarvisRuntime` verdrahtet den bekannten Core-Stack einmalig und verarbeitet Nachrichten über `queue.Queue` + einen einzelnen Worker-Thread (kein `asyncio`) seriell; `_RuntimeSpeech` ist ein fail-closed Speech-Adapter (Sicherheitsstufe 2/3 bleiben sicher abgelehnt, gleiches Prinzip wie `TelegramSpeech`); `ConsoleDummyChannel` ist der einzige, minimale Kanal in v1. Details: ADR-025 (Umsetzung), ADR-024 (Architekturrichtung).
 
 ## Known Limitations
 - Langzeitgedächtnis funktioniert nur auf Zuruf; keine automatische Fakten-Extraktion.
@@ -82,6 +86,7 @@ Im Code wurden keine `TODO`-/`FIXME`-Marker gefunden.
 - `read_excel`/`analyze_report`/`calculate_kpi`: nur `.xlsx`/`.xlsm`, nur Werte, 500 Zeilen/Blatt.
 - `telegram_main.py`: nur vier Intents erreichbar, kein gleichzeitiger Betrieb mit der Konsole, `TelegramSpeech.listen()` fail-closed (ADR-018).
 - `analyze_pc`/`analyze_event_log`/`disable_/enable_autostart_entry`/`analyze_/clean_temp_files`: alle Windows-exklusiv, jeweiliger Scope siehe Handbook Kap. 17 (Umsetzungsstand-Annotationen).
+- `jarvis_runtime.py` (v1, ADR-025): rein internes Gerüst - nur `ConsoleDummyChannel`, kein UI/Tray/Wake-Word/Telegram, kein Windows-Autostart, kein abstraktes Channel-Interface.
 
 ## Git
 Initial-Commit getaggt als `v0.4`. Danach Handbook v3.3/ADR-013, Excel-Lesen (ADR-014), Tabellen-Auswertung (ADR-015), Power-BI-Scope-Entscheidung, KPI (ADR-016), v0.5-Abschluss, getaggt als `v0.5`. Danach Handbook v3.4/ADR-017, Telegram-Fernzugriff (ADR-018), getaggt als `v0.6`, danach Handbook v3.5/ADR-019 inkl. Kap.-2-Konsistenzkorrektur. Danach `48f0f83` (PC-Analyse, ADR-020), `5f330fb` (Ereignisprotokoll-Analyse, ADR-021), `efe067f` (PROJECT_STATE-Korrektur), `b108c06` (Autostart-Verwaltung, ADR-022), `a765c9d` (Temp-Bereinigung, ADR-023), `920e32c` (v0.7-Abschlussdokumentation), `a7eb86d` (Handbook v3.6, Entwicklungsprozess-Konsolidierung) - getaggt als `v0.7`. Frühere Versionen (v0.1-v0.3) existieren nur als Text in `docs/CHANGELOG.md`/`docs/logbook.md`.
