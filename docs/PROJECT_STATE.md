@@ -1,111 +1,52 @@
 # PROJECT STATE
 
 Stand: 2026-07-02
-Quelle: `README.md`, `docs/handbook/JARVIS_MASTER_HANDBOOK_v3_5.docx`, `docs/logbook.md`, `docs/CHANGELOG.md`, `docs/adr/*.md`
+Quelle: `README.md`, `docs/handbook/JARVIS_MASTER_HANDBOOK_v3_6.docx`, `docs/logbook.md`, `docs/CHANGELOG.md`, `docs/adr/*.md`
+
+**Hinweis (ab v3.6, siehe Handbook Kap. 19):** Dieses Dokument ist ein temporärer Arbeitsbereich zwischen zwei Handbook-Versionen, keine dauerhafte Wissensquelle. Nach jedem Konsolidierungsprozess wird es auf den aktuellen Projektstatus zurückgebaut - dauerhaft gültige Entscheidungen (Roadmap, Backlog, Governance-Regeln) leben im Handbook, nicht hier.
 
 ## Current Version
-`v0.7.0` - **inhaltlich abgeschlossen** (Product-Owner-Entscheidung 2026-07-02): vier Bausteine umgesetzt (PC-Analyse Phase 1, Ereignisprotokoll-Analyse Phase 2, Autostart verwalten Phase 3, Temp-Bereinigung Phase 4). Treiber und Dienste bleiben bewusst offen (als riskanteste Kap.-17-Bausteine ins Backlog verschoben, separate spaetere Priorisierung). `v0.7` als Gesamtversion ist NOCH NICHT getaggt - Tag folgt erst nach dem vollstaendigen Abschlussprozess (Handbook v3.6, siehe unten). `v0.4`/`v0.5`/`v0.6` bleiben abgeschlossen und getaggt. Handbook ist aktuell noch auf `v3.5` (inkl. Kap.-2-Konsistenzkorrektur, siehe Git-Historie) - v3.6 steht fuer den v0.7-Abschluss noch aus.
+`v0.7.0` - abgeschlossen und konsolidiert (Handbook v3.6). `v0.4`/`v0.5`/`v0.6` bleiben abgeschlossen und getaggt. `v0.7` ist inhaltlich fertig und im Handbook dokumentiert, aber **noch NICHT getaggt** - der Tag ist der letzte offene Schritt.
 
 ## Status
-`v0.3`, `v0.4`, `v0.5` und `v0.6` sind abgeschlossen und getaggt (`v0.4`, `v0.5`, `v0.6`).
-`v0.7 "PC-Admin"` ist inhaltlich abgeschlossen (Product-Owner-Entscheidung 2026-07-02) - Tag steht noch aus (Abschlussprozess: Handbook v3.6, Tag). Begruendung der Product-Owner-Entscheidung: System-Analyse ist vollstaendig abgedeckt, Autostart-Verwaltung ist im Benutzer-Scope umgesetzt, Temp-Bereinigung ist im sicheren Benutzer-Scope umgesetzt. Treiber und Dienste bleiben bewusst offen, weil sie die riskantesten Bausteine sind und separat priorisiert werden sollen (siehe "Backlog" unten). Umgesetzt:
-- **PC-Analyse, Phase 1** (`commands/monitor.py::AnalyzePcCommand`, Intent `analyze_pc`, Sicherheitsstufe 0, ADR-020): Festplattenbelegung, Top-5-Prozesse nach CPU/RAM, mehrfach laufende Prozesse (nur Hinweis), Autostart-Programme (Registry Run-Keys HKCU+HKLM sowie Startup-Ordner, nur anzeigen). Python sammelt/strukturiert deterministisch, die KI (`AIEngine.answer()`) formuliert nur den Bericht - wie bei `calculate_kpi` (ADR-016). Zweiter Command mit direktem KI-Zugriff, eigenes zu `reports.py` bewusst dupliziertes `configure()`-Muster (keine gemeinsame Abstraktion, solange nur zwei Verwender). **Keine Änderung an `core/ai.py`, `core/planner.py`, `core/tool_manager.py`, `executor/executor.py` oder anderen `commands/*.py`-Dateien** (per `git diff --stat` verifiziert).
-- **Ereignisprotokoll-Analyse, Phase 2** (`commands/monitor.py::AnalyzeEventLogCommand`, Intent `analyze_event_log`, Sicherheitsstufe 0, ADR-021): liest die jüngsten Fehler/Warnungen aus `System`- und `Application`-Log über `wevtutil` (Windows-Bordmittel, `subprocess`, keine neue Abhängigkeit), serverseitig gefiltert (Level Error/Warning), begrenzt auf 20 Einträge je Log. `/f:RenderedXml` für sprachversions-unabhängiges Parsen (`xml.etree.ElementTree`). Jede Log-Quelle einzeln abgesichert (Teilergebnis statt Totalausfall); schlagen beide fehl, liefert der Command `Status.FAILED` ohne KI-Aufruf. Nutzt die bereits vorhandene `configure()`-Infrastruktur aus Phase 1 - **keine Änderung an `main.py`** nötig. **Keine Änderung an `core/ai.py`, `core/planner.py`, `core/tool_manager.py`, `executor/executor.py`** (per `git diff --stat` verifiziert: nur `commands/monitor.py`, `tests/test_commands_monitor.py`, `docs/adr/ADR-021.md`).
-- **Autostart verwalten, Phase 3** (`commands/monitor.py::DisableAutostartEntryCommand`/`EnableAutostartEntryCommand`, Intents `disable_autostart_entry`/`enable_autostart_entry`, Sicherheitsstufe 2, ADR-022) - **erster schreibender** PC-Admin-Command: deaktiviert/aktiviert Autostart-Einträge anhand des Namens, beschränkt auf HKCU Run-Key und Startup-Ordner (Benutzer), kein HKLM, keine Administratorrechte. Deaktivieren entfernt Registry-Einträge aus dem echten Run-Key und sichert sie im Klartext in einem eigenen Jarvis-Registry-Zweig (`HKCU\Software\Jarvis\DisabledAutostart\Run`) - bewusst kein `StartupApproved`-Binärformat. Startup-Ordner-Einträge werden per Datei-Verschieben in einen Jarvis-Unterordner (`_jarvis_disabled`) deaktiviert. Namensbasierte Zielauflösung mit `NEEDS_CLARIFICATION` bei Mehrdeutigkeit, präzise Fehlermeldung bei Treffern außerhalb des Scopes, idempotent bei bereits deaktivierten/aktiven Einträgen. Kein Blacklist-Mechanismus, kein KI-Zugriff. Notwendige Anpassung an Phase 1: `_collect_startup_folder_autostart()` filtert jetzt auf Dateien, damit der neue Unterordner nicht in `analyze_pc`-Berichten auftaucht. Beide Commands bleiben in `commands/monitor.py` (kein neues Modul, KISS/YAGNI, Product-Owner-Entscheidung). **Keine Änderung an `main.py`, `core/ai.py`, `core/planner.py`, `core/tool_manager.py`, `executor/executor.py`** (per `git diff --stat` verifiziert: nur `commands/monitor.py`, `tests/test_commands_monitor.py`, `docs/adr/ADR-022.md`).
-- **Temp-/Festplatten-Bereinigung, Phase 4** (`commands/monitor.py::AnalyzeTempFilesCommand`/`CleanTempFilesCommand`, Intents `analyze_temp_files`/`clean_temp_files`, Sicherheitsstufe 0/3, ADR-023) - **erster löschender** PC-Admin-Command (anders als das reversible Deaktivieren in Phase 3). `clean_temp_files` nutzt einen neuen, optionalen `preview(plan) -> Optional[str]`-Hook im Executor (**erste Änderung an `executor/executor.py` in der gesamten v0.7-Entwicklung**) - zeigt vor der Bestätigung eine frisch gescannte Vorschau; `execute()` verlässt sich nie auf dieses Ergebnis, sondern scannt beim tatsächlichen Löschen erneut. Commands ohne `preview()` (alle bisherigen) verhalten sich exakt wie zuvor - rückwärtskompatibel, per neuen Executor-Tests verifiziert. Beschränkt auf `%TEMP%`, nur Dateien älter als 24h, nur Dateien (nie Ordner), Pfad-Eindämmung. Sicherheitsstufe 3 (`confirmation_phrase = "BEREINIGEN"`) statt Stufe 2, da Handbook Kap. 10 "Datei löschen" explizit als kritisch klassifiziert. Papierkorb ausdrücklich nicht Bestandteil. **Keine Änderung an `main.py`, `core/ai.py`, `core/planner.py`, `core/tool_manager.py`** (per `git diff --stat` verifiziert: `commands/monitor.py`, `executor/executor.py`, beide Testdateien, `docs/adr/ADR-023.md`).
-- Tests: `225 / 225` grün.
-- Security-Log, Löschen von Log-Einträgen, automatische Reparaturmaßnahmen, HKLM-Schreibzugriffe/Administratorrechte, Startup-Ordner (Alle Benutzer) schreibend, Blacklist, Papierkorb, `C:\Windows\Temp`, Browser-Cache/-Profile, Registry-Cleaner, Dienste, Treiber sind bewusst NICHT enthalten (Phase 1/2/3/4).
+Umgesetzt in v0.7 "PC-Admin" (Details: `docs/CHANGELOG.md`, ADRs):
+- **PC-Analyse** (`analyze_pc`, Sicherheitsstufe 0, ADR-020)
+- **Ereignisprotokoll-Analyse** (`analyze_event_log`, Sicherheitsstufe 0, ADR-021)
+- **Autostart-Verwaltung** (`disable_/enable_autostart_entry`, Sicherheitsstufe 2, Benutzer-Scope, ADR-022)
+- **Temp-Bereinigung** (`analyze_/clean_temp_files`, Sicherheitsstufe 0/3, Benutzer-Scope, ADR-023) - inkl. neuem optionalen `preview()`-Hook in `executor/executor.py` (rückwärtskompatibel)
 
-Aus v0.6 weiterhin gültig:
-- **Telegram-Fernzugriff** (`telegram_main.py`, ADR-018), manueller Smoke-Test bestanden (02.07.2026). Web-Interface/WireGuard VPN/Eigene App bewusst nicht umgesetzt (Handbook Kap. 16, v3.5).
+Bewusst nicht enthalten und ins Handbook-Backlog (Kap. 29) verschoben: Treiber, Dienste, HKLM-Autostart-Erweiterung, Papierkorb, `C:\Windows\Temp`, Browser-Cache/-Profile. Neuer Roadmap-Baustein "Jarvis-Eigenstart" zwischen v0.7 und v0.8 im Handbook (Kap. 13) dokumentiert.
 
-Aus v0.5 weiterhin gültig:
-- **Excel-Lesen, Phase 1** (`commands/excel.py::ReadExcelCommand`, ADR-014), **Tabellen-Auswertung** (`commands/reports.py::AnalyzeReportCommand`, ADR-015), **KPI** (`commands/reports.py::CalculateKpiCommand`, ADR-016). Power BI weiterhin nicht enthalten (Handbook Kap. 29 Backlog).
+Tests: `225 / 225` grün.
 
-Aus v0.4 weiterhin gültig:
-- **Kurz-/Langzeitgedaechtnis** (Handbook Kap. 9/13/27): Kurzzeit-Anteil (`memory/store.py::JsonMemoryStore`) persistiert Gespraechsverlauf tagesuebergreifend; Langzeit-Anteil (`memory/long_term.py::LongTermMemory`, ADR-009), nur auf ausdruecklichen Zuruf.
-- **PC-Grundsteuerung** (Kap. 17/27): oeffnen (`open_program`), ueberwachen (`system_status`, ADR-011), installieren (`install_program`, ADR-012).
-
-## Current Development Phase
-`v0.7 "PC-Admin"` ist inhaltlich abgeschlossen (Product-Owner-Entscheidung 2026-07-02) - Phase 1 (System-Analyse, ADR-020), Phase 2 (Ereignisprotokoll-Analyse, ADR-021), Phase 3 (Autostart verwalten, HKCU+Benutzer-Startup, ADR-022) und Phase 4 (Temp-Bereinigung, ADR-023) umgesetzt. Treiber, Dienste und diverse Scope-Erweiterungen (siehe "Backlog" unten) bewusst NICHT umgesetzt - explizit ins Backlog verschoben. Aktuelle Aufgabe: **Abschlussprozess** (Handbook v3.6, danach Tag) - noch nicht durchgefuehrt, kein Code mehr fuer v0.7 vorgesehen.
+Aus v0.6/v0.5/v0.4 weiterhin gültig: Telegram-Fernzugriff (ADR-018), Excel-Lesen/Tabellen-Auswertung/KPI (ADR-014/015/016), Kurz-/Langzeitgedächtnis (ADR-009), PC-Grundsteuerung (ADR-011/012) - siehe Handbook Kap. 13/27 für den vollständigen Roadmap-Stand.
 
 ## Next Planned Version
-`v0.7` ist inhaltlich abgeschlossen, aber NOCH NICHT getaggt - der Abschlussprozess (Handbook-Aktualisierung auf v3.6, danach `git tag v0.7`) steht noch aus. Erst danach wird `v0.8 "Multi-KI"` (Kap. 13: "Claude + GPT + Copilot orchestrieren") zum naechsten geplanten Baustein.
-
-## Next Goal According To Handbook
-`v0.6` ist inhaltlich vollstaendig und im Handbook (v3.5) selbst als abgeschlossen markiert. `v0.7 "PC-Admin"` (Kap. 13/17) ist mit Phase 1-4 (ADR-020 bis ADR-023) inhaltlich abgeschlossen (Product-Owner-Entscheidung 2026-07-02) - der formale Abschlussprozess (Handbook v3.6, Tag) steht noch aus.
-Von den in Kap. 13 genannten v0.7-Kernthemen ("System-Analyse, Treiber, Reinigung") ist "System-Analyse" vollstaendig, "Reinigung" im sicheren Benutzer-Scope abgedeckt; "Treiber" bleibt bewusst unbearbeitet und wandert ins Backlog (Kap. 29). "Dienste starten/stoppen" (Kap. 17) wandert ebenfalls ins Backlog. Autostart *verwalten* ist im Benutzer-Scope abgedeckt (HKCU+Benutzer-Startup) - HKLM/Administratorrechte-Erweiterung, Papierkorb, `C:\Windows\Temp` und Browser-Cache/-Profile sind als spaetere Erweiterungen dokumentiert (siehe "Backlog" unten), nicht Bestandteil des v0.7-Scopes.
-Vor jedem kuenftigen Baustein (egal ob Backlog-Punkt oder v0.8) gilt weiterhin: Handbook-Pruefung (Scope/DoD/Architektur/Sicherheitsmodell) + technischer Vorschlag zur Freigabe durch den Product Owner, bevor Code geschrieben wird (Muster aus ADR-013 bis ADR-023).
-
-## Backlog (aus v0.7-Abschluss, wartet auf Handbook v3.6 Kap. 29)
-Product-Owner-Entscheidung 2026-07-02 (v0.7-Abschluss): folgende Punkte sind bewusst NICHT Teil von v0.7, explizit als spaetere, separat zu priorisierende Bausteine dokumentiert. Formale Aufnahme in Handbook Kap. 29 (Backlog-Tabelle) erfolgt beim v3.6-Update (Kap. 19-Mechanismus, gleiches Vorgehen wie bei Power BI/v0.5 und Post-Arbeitsmodule-Generalisierung/v0.6).
-- **Treiber pruefen/aktualisieren** (Kap. 17) - bewusst nicht in v0.7, hoechstes Risiko/hoechste Komplexitaet aller Kap.-17-Bausteine (Handbook Kap. 10 nennt Treiber-Deinstallation als eigenes Stufe-3-Beispiel).
-- **Dienste starten/stoppen** (Kap. 17) - bewusst nicht in v0.7, zweithoechstes Risiko (neue Windows-API, Whitelist/Blacklist-Frage fuer sicherheitskritische Dienste).
-- **Autostart-Verwaltung auf HKLM/Alle-Benutzer erweitern** (braucht Administratorrechte/Elevation) - bewusst nicht in Phase 3 (ADR-022).
-- **Temp-Bereinigung um Papierkorb erweitern** - bewusst nicht in Phase 4 (ADR-023 explizit ohne Papierkorb).
-- **Temp-Bereinigung um `C:\Windows\Temp` erweitern** (braucht Administratorrechte) - bewusst nicht in Phase 4, gleiche Begruendung wie HKLM bei ADR-022.
-- **Browser-Cache-/Profil-Bereinigung** - bewusst nicht in Phase 4 (ADR-023), eigener, spaeter zu bewertender Baustein.
-- Zusaetzlich weiterhin offen (nicht neu durch den v0.7-Abschluss, siehe Feature-TODOs unten): "Deinstallieren" (winget), Security-Log in der Ereignisprotokoll-Analyse.
-
-## Ausstehende Handbook-Aktualisierung (v3.6, vor dem Tag)
-Sammelabschnitt fuer alles, was beim naechsten Handbook-Update (v3.6, nach Kap.-2-Regel erst jetzt zulaessig, da v0.7 inhaltlich abgeschlossen ist) in die `.docx` uebernommen werden muss - noch NICHT durchgefuehrt, dieser Schritt ist Teil des ausstehenden v0.7-Abschlussprozesses:
-1. Kap. 13 (Roadmap): `v0.7 "PC-Admin"` als abgeschlossen markieren (analog zu v0.5/v0.6 in fruaheren Handbook-Updates).
-2. Kap. 29 (Backlog): die sechs oben gelisteten Backlog-Punkte (Treiber, Dienste, HKLM-Autostart, Papierkorb, `C:\Windows\Temp`, Browser-Cache/-Profile) ergaenzen.
-3. Kap. 28 (Definition of Done): neuen Abschnitt "v0.7 - spezifisch (PC-Admin)" ergaenzen (analog zu den v0.5/v0.6-Abschnitten).
-4. Jarvis-Eigenstart (Kap.-19-Dokumentation, siehe unten) als eigenstaendiger Infrastruktur-/Runtime-Abschnitt.
-
-Product-Owner-Entscheidung 2026-07-02 (Jarvis-Eigenstart-Teil): Jarvis-Eigenstart (automatischer Start nach Windows-Anmeldung) soll als klar definierter Roadmap-Baustein aufgenommen werden. Da das Handbook laut Kap. 2 nur ZWISCHEN Versionen geaendert wird (nicht mitten in v0.7), wurde die Entscheidung hier vollstaendig festgehalten (ab sofort massgeblich, Kap. 19) und wird beim jetzt anstehenden Versionswechsel (Handbook v3.6, nach Abschluss von v0.7) formal in die `.docx` uebernommen.
-
-**Zweck:** Jarvis startet automatisch nach der Windows-Anmeldung. Der Nutzer muss ihn nicht manuell starten. Jarvis laeuft dauerhaft im Hintergrund und wartet auf Eingaben.
-
-**Scope:** Registrierung im Benutzer-Autostart (HKCU Run-Key oder Benutzer-Startup-Ordner), keine Administratorrechte. Aktivieren/Deaktivieren ueber einen eigenen Jarvis-Command (Namensvorschlag `enable_jarvis_autostart`/`disable_jarvis_autostart`, analog zum bei ADR-022 etablierten Muster fuer fremde Programme). Kein HKLM. Keine Aufgabenplanung (Task Scheduler). Kein Windows-Dienst.
-
-**Nicht-Scope:** Keine Hintergrunddienste. Keine Mehrbenutzer-Installation. Keine Administratorrechte.
-
-**Vorbereiteter Handbook-Text (fuer v3.6):** Neue Unterueberschrift "Jarvis-Eigenstart (Autostart)" - eigenstaendiger Infrastruktur-/Runtime-Abschnitt (siehe Versionsempfehlung unten), nicht Teil von Kap. 17 (PC-Steuerung), da der Baustein die Laufzeit von Jarvis selbst betrifft, nicht dessen Faehigkeiten am/fuer den PC. Verweis auf die technische Naehe zu ADR-022 (gleicher Registry-/Startup-Ordner-Mechanismus, hier reflexiv auf Jarvis selbst angewendet) bleibt sinnvoll. Zusaetzlich ein einleitender Satz vor dem bestehenden "System-Analyst-Vision"-Beispieldialog in Kap. 17: "Nach der Windows-Anmeldung ist Jarvis automatisch verfuegbar, ohne dass der Nutzer ihn manuell starten muss - erst auf dieser Grundlage wird die folgende Vision realistisch nutzbar." Kap. 13 (Roadmap) bekommt bei Umsetzung einen eigenen Eintrag zwischen v0.7 und v0.8 (siehe Versionsempfehlung unten) - keine Ergaenzung der v0.7-Zeile.
-
-**Versionsempfehlung (Product-Owner-Korrektur 2026-07-02):** Eigenstaendiger Infrastruktur-/Runtime-Baustein nach Abschluss von v0.7 und vor Beginn der Multi-KI-Erweiterung (v0.8). Begruendung: Der automatische Start von Jarvis betrifft die Laufzeit des Assistenten selbst und gehoert architektonisch nicht zum fachlichen Schwerpunkt PC-Admin (Kap. 13/17), sondern zur spaeteren Runtime des Gesamtsystems - deshalb kein Teil von v0.7 (weder Phase 4 noch Roadmap-Zeilen-Ergaenzung) und keine Vermischung mit dem PC-Admin-Themenblock. Weiterhin nicht v0.8 selbst (thematisch "Multi-KI", nicht Runtime) und nicht v1.0 (unnoetig lange Wartezeit fuer einen kleinen, risikoarmen, technisch bereits vorbereiteten Baustein). Technische Naehe zu ADR-022 (Registry-/Startup-Ordner-Mechanismus) bleibt bestehen und rechtfertigt zeitliche Naehe zu v0.7, auch wenn thematisch getrennt.
-
-**ADR-Bedarf:** Keine ADR jetzt (reine Roadmap-/Scope-Entscheidung, kein Code betroffen) - analog zur Power-BI-Descoping-Entscheidung und dem Post-Arbeitsmodule-Generalisierungs-Hinweis. Eine ADR (Muster ADR-020/021/022) entsteht bei tatsaechlicher Implementierung.
-
-**AI_START.md/README.md:** Keine Anpassung noetig - AI_START.md ist versionsunabhaengiges Prozessdokument, README.md dokumentiert nur bereits implementierte Features (noch kein Code geschrieben).
+`v0.7` ist konsolidiert, nur der Tag steht noch aus. Danach wird `v0.8 "Multi-KI"` (Handbook Kap. 13) der nächste geplante Baustein - noch nicht begonnen, kein technischer Vorschlag erstellt.
 
 ## Tests
-Letzter Check am 2026-07-02: `pytest tests -v` mit zusaetzlichem `PYTHONPATH`.
+Letzter Check am 2026-07-02: `pytest tests -v` mit zusätzlichem `PYTHONPATH`.
 
 ### Test Status
 `225 / 225` bestanden
 
 ### Known Failure
-Keiner aktuell. `tests/test_integration.py::test_end_to_end_tool_execution` (vormals bekannter, Windows-spezifischer Fehlschlag wegen `os.startfile` vs. gemocktem POSIX-Pfad) lief in den letzten Durchlaeufen gruen durch. Falls der Fehlschlag erneut auftritt, siehe `docs/logbook.md` (Eintraege 2026-07-01) fuer die dokumentierte Ursache.
+Keiner aktuell.
 
 ## Offene Aufgaben
 
 ### Technische TODOs (Definition of Done / Betrieb, kein neuer Scope)
-- Manueller Live-Test der uebrigen Kernfunktionen mit echtem API-Key auf dem echten Windows-Rechner (Definition of Done, Kap. 28) - bisher nur automatisiert/gemockt getestet: `system_status`, `install_program`, `remember_fact`/`forget_fact`, `read_excel`, `analyze_report`, `calculate_kpi`, `analyze_pc` (Telegram-Fernzugriff ist seit 02.07.2026 real getestet). Insbesondere `install_program` real ausfuehren ist ein bewusster, expliziter Schritt (installiert wirklich Software) und sollte gezielt vom Product Owner freigegeben/begleitet werden.
-- Piper-Sprachmodell herunterladen und `tts_enabled: true` fuer einen Live-TTS-Test setzen.
-- Zwei bis drei Piper-Stimmen pruefen und danach `offline vs. Cloud-TTS` entscheiden.
-- `.git_broken_5/` (Reste eines fruehen, abgebrochenen git-init-Versuchs) liegt noch im Arbeitsordner, ist per `.gitignore` von der Versionierung ausgeschlossen. Kann bei Gelegenheit manuell aufgeraeumt werden, wurde bewusst nicht geloescht (keine destruktive Aktion ohne Rueckfrage).
+- Manueller Live-Test der übrigen Kernfunktionen mit echtem API-Key auf dem echten Windows-Rechner (Definition of Done, Handbook Kap. 28) - bisher nur automatisiert/gemockt getestet. `install_program` real ausführen ist ein bewusster, expliziter Schritt und sollte gezielt vom Product Owner freigegeben/begleitet werden.
+- Piper-Sprachmodell herunterladen und `tts_enabled: true` für einen Live-TTS-Test setzen.
+- `.git_broken_5/` (Reste eines frühen, abgebrochenen git-init-Versuchs) liegt noch im Arbeitsordner, per `.gitignore` ausgeschlossen - bewusst nicht gelöscht (keine destruktive Aktion ohne Rückfrage).
 
-### Feature-TODOs (naechste Roadmap-Bausteine, NICHT jetzt umsetzen)
-- Jarvis-Eigenstart (automatischer Start nach Windows-Anmeldung) - Product-Owner-Entscheidung 2026-07-02, empfohlen als eigenstaendiger Infrastruktur-/Runtime-Baustein nach Abschluss von v0.7 und vor v0.8 (siehe Abschnitt "Ausstehende Handbook-Aktualisierung" oben). Kein technischer Vorschlag bisher erstellt, kein Code.
-- Die sechs v0.7-Abschluss-Backlog-Punkte (Treiber, Dienste, HKLM-Autostart, Papierkorb, `C:\Windows\Temp`, Browser-Cache/-Profile) - siehe Abschnitt "Backlog" oben, nicht hier dupliziert.
-- Security-Log in die Ereignisprotokoll-Analyse aufnehmen - bewusst nicht in Phase 2 (sensibler, oft rechteeingeschraenkt, ADR-021), eigene spaetere Diskussion.
-- Dritter KI-Verwender: falls ein weiteres Modul KI-Zugriff braucht, `configure()`-Duplizierung (`reports.py`/`monitor.py`) zu einer gemeinsamen Abstraktion zusammenfuehren pruefen (Wolfgangs Entscheidung bei ADR-020) - `monitor.py` hat inzwischen fuenf Commands (ADR-020/021/022/023), weiterhin nur zwei Module (`reports.py`, `monitor.py`) insgesamt.
-- Den neuen `preview()`-Hook (ADR-023) fuer weitere schreibende PC-Admin-Commands (Dienste, Treiber) nutzen, sobald diese umgesetzt werden - keine eigene Priorisierung, der Hook selbst ist bereits fertig und wiederverwendbar.
-- `Deinstallieren` (winget) - im Handbook (Kap. 17) genannt, noch nicht priorisiert; braucht eigene Sicherheitsstufen-Bewertung.
-- Generalisierung "Tabellen-Auswertung" -> allgemeine Excel-/Report-Analyse - im Handbook als Backlog-Punkt dokumentiert (Kap. 29, v3.5), NICHT umsetzen ohne explizite Priorisierung, kein Refactoring der bestehenden v0.5-Commands.
-- Erweiterung des Telegram-Befehlsumfangs (z. B. Excel/Reports/KPI/PC-Analyse, evtl. Sicherheitsstufe-2-Aktionen mit einer echten `TelegramSpeech.listen()`-Implementierung statt fail-closed) - keine Priorisierung.
-- Web-Interface (FastAPI+ngrok) und WireGuard VPN (Handbook Kap. 16) - ausdruecklich als Alternativen dokumentiert, keine eigene Priorisierung.
-- Eigene App (Handbook Kap. 16) - explizit als Langzeitziel markiert.
-- Alias-Liste fuer Standort-/Ist-Wert-Spalten (ADR-016) erweitern, sobald sich an echten Reports zeigt, dass andere Spaltennamen gebraucht werden.
-- Power BI - im Handbook selbst (Kap. 29 Backlog) als optionale Unternehmensintegration/spaeterer Baustein dokumentiert.
-- Eigene `AIEngine.summarize_report()`-Methode - nur pruefen, falls die Wiederverwendung von `answer()` sich als inhaltlich unzureichend erweist (ADR-015).
-- Excel Phase 2 (Schreiben, Formatieren, Power Query, Makros) - explizit nicht Teil von Phase 1 (ADR-013/ADR-014).
-- `.xls` (Legacy-Format) - von `openpyxl` nicht unterstuetzt, keine eigene Priorisierung.
-- Outlook-Integration - explizit aus v0.5 ausgeklammert (Handbook, Kap. 27), eigene, spaetere Priorisierung noetig.
-- Verknuepfungsziele im Startup-Ordner aufloesen (bräuchte `pywin32`) - bewusst nicht in Phase 1, nur Dateinamen (ADR-020).
-- Temperatur-Monitoring - unter Windows von `psutil` nicht unterstuetzt (Plattform-Limitierung, kein Priorisierungsthema).
+### Feature-TODOs (nächste Roadmap-Bausteine, NICHT jetzt umsetzen)
+Vollständige, aktuelle Liste jetzt im Handbook (Kap. 13 Roadmap, Kap. 29 Backlog) - hier nur technische Detail-Notizen, die (noch) keinen eigenen Handbook-Backlog-Eintrag brauchen:
+- Dritter KI-Verwender: falls ein weiteres Modul KI-Zugriff braucht, `configure()`-Duplizierung (`reports.py`/`monitor.py`) zu einer gemeinsamen Abstraktion zusammenführen prüfen (Wolfgangs Entscheidung bei ADR-020).
+- Den `preview()`-Hook (ADR-023) für weitere schreibende PC-Admin-Commands (Dienste, Treiber) nutzen, sobald diese umgesetzt werden.
+- Alias-Liste für Standort-/Ist-Wert-Spalten (ADR-016) erweitern, sobald sich an echten Reports zeigt, dass andere Spaltennamen gebraucht werden.
+- Eigene `AIEngine.summarize_report()`-Methode - nur prüfen, falls die Wiederverwendung von `answer()` sich als inhaltlich unzureichend erweist (ADR-015).
+- Verknüpfungsziele im Startup-Ordner auflösen (bräuchte `pywin32`) - bewusst nicht in Phase 1, nur Dateinamen (ADR-020).
 
 Im Code wurden keine `TODO`-/`FIXME`-Marker gefunden.
 
@@ -113,28 +54,16 @@ Im Code wurden keine `TODO`-/`FIXME`-Marker gefunden.
 `ADR-023 - Temp-/Festplatten-Bereinigung (v0.7 Phase 4) - optionaler preview()-Hook im Executor, immer frischer Scan`
 
 ## Latest Architecture Change
-`executor/executor.py` bekommt einen optionalen `preview(plan) -> Optional[str]`-Hook - die **erste Aenderung an dieser Datei in der gesamten v0.7-Entwicklung**. Ein Command kann diese Methode implementieren; ist sie vorhanden, zeigt der Executor ihren Text vor der Bestaetigungsfrage an. Commands ohne `preview()` (alle bisherigen: `InstallProgramCommand`, `ShutdownPcCommand`, `DisableAutostartEntryCommand` usw.) verhalten sich exakt wie zuvor - vollstaendig rueckwaertskompatibel, per neuen Regressionstests in `tests/test_executor.py` verifiziert. Kein Zugriff fuer Commands auf `SpeechEngine`, die Anzeige-Logik bleibt im Executor. `commands/monitor.py::CleanTempFilesCommand` nutzt den Hook: `preview()` und `execute()` scannen unabhaengig voneinander frisch - `execute()` verlaesst sich nie auf das `preview()`-Ergebnis (Product-Owner-Kernvorgabe). Sicherheitsstufe 3 (`confirmation_phrase = "BEREINIGEN"`) statt Stufe 2 wie bei Autostart-Verwalten, da Handbook Kap. 10 "Datei loeschen" explizit als kritisch klassifiziert. Beschraenkt auf `%TEMP%`, nur Dateien aelter als 24h, nur Dateien (nie Ordner), Pfad-Eindaemmung. Keine Aenderung an `core/ai.py`, `core/planner.py`, `core/tool_manager.py`, `main.py` oder anderen `commands/*.py`-Dateien (per `git diff --stat` verifiziert leer).
+`executor/executor.py` bekommt einen optionalen `preview(plan) -> Optional[str]`-Hook - die erste Änderung an dieser Datei in der gesamten v0.7-Entwicklung. Commands ohne `preview()` verhalten sich exakt wie zuvor (rückwärtskompatibel, per Regressionstests verifiziert). `CleanTempFilesCommand` nutzt den Hook, verlässt sich aber nie auf das Vorschau-Ergebnis - `execute()` scannt beim tatsächlichen Löschen immer erneut. Details: ADR-023.
 
 ## Known Limitations
-- Langzeitgedaechtnis funktioniert nur auf Zuruf; es gibt keine automatische Fakten-Extraktion.
-- `listen()` (Konsole) bleibt Konsole; Mikrofon/Wake-Word ist weiterhin nicht umgesetzt.
-- Kokoro TTS unterstuetzt aktuell kein Deutsch.
-- Fehlt ein TTS-Modell oder Backend, faellt Jarvis auf reine Konsolenausgabe zurueck.
-- `system_status` liest keine Temperatur aus (`psutil` unterstuetzt das unter Windows nicht) - unveraendert seit ADR-011, `analyze_pc` deckt Festplattenbelegung inzwischen ab.
-- `install_program` deckt kein "Deinstallieren" ab (bewusst nicht in v0.4-Scope, siehe ADR-012) und braucht `winget` (App Installer aus dem Microsoft Store) auf dem Zielsystem.
-- `read_excel`/`analyze_report`/`calculate_kpi` lesen nur `.xlsx`/`.xlsm` (kein `.xls`), nur Werte (keine Formeln/Formatierung/Makros), pro Arbeitsblatt auf 500 Zeilen begrenzt.
-- `analyze_report`/`analyze_pc` liefern eine KI-generierte Analyse, die falsch liegen kann - deshalb Pflicht-Disclaimer in jeder Antwort (ADR-015/ADR-020).
-- `calculate_kpi` erkennt Standort-/Ist-Wert-Spalten nur ueber eine feste Alias-Liste (ADR-016).
-- `telegram_main.py`: nur vier Intents erreichbar (weder `analyze_pc` noch die v0.5-Commands), kein gleichzeitiger Betrieb mit der Konsole, `TelegramSpeech.listen()` bewusst nicht funktionsfaehig (fail-closed, ADR-018).
-- `analyze_pc`: Windows-exklusiv (klarer Fehler auf anderen Plattformen), keine Aufloesung von Startup-Ordner-Verknuepfungszielen (nur Dateinamen), kein Ereignisprotokoll (ADR-020, jetzt separat durch `analyze_event_log` abgedeckt, ADR-021).
-- `analyze_event_log`: Windows-exklusiv (klarer Fehler auf anderen Plattformen), nur `System`/`Application` (kein Security-Log), nur die letzten 20 Eintraege je Log, Meldungstext auf 200 Zeichen gekuerzt, kein Loeschen/Reparieren (ADR-021).
-- `disable_autostart_entry`/`enable_autostart_entry`: Windows-exklusiv, nur HKCU Run-Key und Startup-Ordner (Benutzer) - kein HKLM, keine Administratorrechte, kein `StartupApproved`-Binaerformat, kein Blacklist, kein Loeschen (nur Deaktivieren), keine neuen Eintraege/Bearbeitung bestehender Befehle (ADR-022).
-- `analyze_temp_files`/`clean_temp_files`: Windows-exklusiv, nur `%TEMP%` (kein `C:\Windows\Temp`, keine Administratorrechte), nur Dateien aelter als 24h, nur Dateien (nie Ordner), kein Papierkorb, kein Browser-Cache/-Profil (ADR-023).
+- Langzeitgedächtnis funktioniert nur auf Zuruf; keine automatische Fakten-Extraktion.
+- Mikrofon/Wake-Word weiterhin nicht umgesetzt.
+- Kokoro TTS unterstützt aktuell kein Deutsch.
+- `system_status`/`analyze_pc`: keine Temperatur (psutil-Limitierung unter Windows).
+- `read_excel`/`analyze_report`/`calculate_kpi`: nur `.xlsx`/`.xlsm`, nur Werte, 500 Zeilen/Blatt.
+- `telegram_main.py`: nur vier Intents erreichbar, kein gleichzeitiger Betrieb mit der Konsole, `TelegramSpeech.listen()` fail-closed (ADR-018).
+- `analyze_pc`/`analyze_event_log`/`disable_/enable_autostart_entry`/`analyze_/clean_temp_files`: alle Windows-exklusiv, jeweiliger Scope siehe Handbook Kap. 17 (Umsetzungsstand-Annotationen).
 
 ## Git
-Ein einzelner, ehrlicher Initial-Commit aus dem aktuellen Arbeitsstand (kein rekonstruierter Verlauf aus alten ZIP-Staenden), getaggt als `v0.4`. Danach je ein Commit fuer Handbook v3.3/ADR-013, Excel-Lesen (ADR-014), Tabellen-Auswertung (ADR-015), die Power-BI-Scope-Entscheidung, KPI (ADR-016) und die v0.5-Abschlusspruefung, getaggt als `v0.5`. Danach Commits fuer Handbook v3.4/ADR-017, Telegram-Fernzugriff (ADR-018), getaggt als `v0.6`, danach Handbook v3.5/ADR-019 inkl. einer kleinen Kap.-2-Konsistenzkorrektur. Danach Commit `48f0f83` fuer PC-Analyse (v0.7 Phase 1, ADR-020), Commit `5f330fb` fuer die Ereignisprotokoll-Analyse (v0.7 Phase 2, ADR-021), Commit `efe067f` fuer eine PROJECT_STATE.md-Korrektur, Commit `b108c06` fuer die Autostart-Verwaltung (v0.7 Phase 3, ADR-022) inkl. der Jarvis-Eigenstart-Kap.-19-Dokumentation und Commit `a765c9d` fuer die Temp-Bereinigung (v0.7 Phase 4, ADR-023). Fruehere Versionen (v0.1-v0.3) existieren nur als Text in `docs/CHANGELOG.md`/`docs/logbook.md`, nicht als eigene Git-Commits/Tags (keine kuenstliche Fake-Historie). `v0.7` ist inhaltlich abgeschlossen (Product-Owner-Entscheidung 2026-07-02), aber bis zum vollstaendigen Abschlussprozess (Handbook v3.6, Tag) noch ungetaggt.
-
-## Product Owner Rules
-- Product Owner entscheidet Prioritaeten.
-- KI darf Umsetzung vorschlagen, aber keine Roadmap aendern.
-- Bei Konflikt gewinnt das Master-Handbook.
+Initial-Commit getaggt als `v0.4`. Danach Handbook v3.3/ADR-013, Excel-Lesen (ADR-014), Tabellen-Auswertung (ADR-015), Power-BI-Scope-Entscheidung, KPI (ADR-016), v0.5-Abschluss, getaggt als `v0.5`. Danach Handbook v3.4/ADR-017, Telegram-Fernzugriff (ADR-018), getaggt als `v0.6`, danach Handbook v3.5/ADR-019 inkl. Kap.-2-Konsistenzkorrektur. Danach `48f0f83` (PC-Analyse, ADR-020), `5f330fb` (Ereignisprotokoll-Analyse, ADR-021), `efe067f` (PROJECT_STATE-Korrektur), `b108c06` (Autostart-Verwaltung, ADR-022), `a765c9d` (Temp-Bereinigung, ADR-023), `920e32c` (v0.7-Abschlussdokumentation). Frühere Versionen (v0.1-v0.3) existieren nur als Text in `docs/CHANGELOG.md`/`docs/logbook.md`. `v0.7` ist inhaltlich abgeschlossen und konsolidiert (Handbook v3.6) - Tag steht noch aus.

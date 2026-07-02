@@ -4,11 +4,11 @@ Refactor + Gesprächsgedächtnis + Planner/Executor + echte
 Chat-Antworten (v0.3), jetzt plus dauerhaftes Langzeitgedächtnis
 (v0.4). Siehe docs/CHANGELOG.md für die volle Historie.
 
-**Maßgebliches Prozess-/Architekturdokument:** `docs/handbook/JARVIS_MASTER_HANDBOOK_v3_5.docx`.
+**Maßgebliches Prozess-/Architekturdokument:** `docs/handbook/JARVIS_MASTER_HANDBOOK_v3_6.docx`.
 Alle Entscheidungen in diesem Projekt (ADRs, Now/Next/Later-Priorisierung,
 Definition of Done, Sicherheitsstufen) richten sich nach diesem Dokument -
-"Immer nach Handbuch". `v3_2.docx`/`v3_3.docx`/`v3_4.docx` bleiben als
-Archiv erhalten (Grundlage für v0.4 bzw. v0.5 bzw. v0.6). Ältere
+"Immer nach Handbuch". `v3_2.docx`/`v3_3.docx`/`v3_4.docx`/`v3_5.docx` bleiben als
+Archiv erhalten (Grundlage für v0.4 bzw. v0.5 bzw. v0.6 bzw. v0.7). Ältere
 Handbook-Versionen liegen ggf. noch lose in Downloads (nicht im Projekt),
 sind aber NICHT maßgeblich.
 
@@ -16,7 +16,7 @@ sind aber NICHT maßgeblich.
 
 Neue KI-Agenten müssen zuerst `docs/AI_START.md` lesen.
 Der aktuelle Projektstand steht in `docs/PROJECT_STATE.md`.
-Das Master-Handbook `docs/handbook/JARVIS_MASTER_HANDBOOK_v3_5.docx`
+Das Master-Handbook `docs/handbook/JARVIS_MASTER_HANDBOOK_v3_6.docx`
 bleibt die verbindliche Quelle.
 
 ## Struktur

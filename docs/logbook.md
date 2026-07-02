@@ -1,5 +1,96 @@
 # Logbook
 
+## 2026-07-02 - Entwicklungsprozess weiterentwickelt, Handbook v3.6 (Konsolidierung)
+
+**Kontext:** Nach vollständigem Abschluss von v0.7 (Commit `920e32c`) wollte
+Wolfgang den Entwicklungsprozess dauerhaft verbessern: das Handbook soll die
+einzige Single Source of Truth bleiben, ohne dass `PROJECT_STATE.md`/
+`logbook.md` über mehrere Versionen hinweg unbegrenzt wachsen. Ein zehn
+Punkte umfassender Vorschlag wurde erarbeitet (rein konzeptionell, kein
+Code, keine Dateien) und deckte sich groesstenteils mit bereits gelebter
+Praxis (Handbook-Update pro Hauptversion war schon dreimal so gemacht
+worden, v3.3/v3.4/v3.5) - neu war im Kern nur EIN Punkt: die explizite
+Definition von PROJECT_STATE.md als temporaerer, rueckbaubarer
+Arbeitsbereich; alles andere folgt daraus.
+
+**Product-Owner-Entscheidungen:** Sechs Kernregeln freigegeben, mit zwei
+Praezisierungen: (1) keine feste Handbook-Nummerierungsregel (v3.6/v3.7/...)
+- die Regel lautet nur "nach jeder abgeschlossenen Hauptversion wird eine
+neue Handbook-Version erstellt", die konkrete Nummer bleibt
+Product-Owner-Entscheidung im Einzelfall; (2) Product-Owner-Rules wandern
+vollstaendig und dauerhaft ins Handbook, nicht mehr in PROJECT_STATE.md.
+
+**Konsolidierung durchgefuehrt** (Handbook v3.5 -> v3.6, `python-docx`,
+gleiche Methode wie bei v3.3/v3.4/v3.5 - Style-Objekte aus bestehenden
+Absaetzen wiederverwendet, Absatz-Referenzen vor jeder Einfuegung neu
+erfasst, da Indizes sich bei jeder Einfuegung verschieben):
+
+1. **Kap. 2 (Handbook-Versionierung):** Regel von "darf nur zwischen
+   Versionen geaendert werden" zu "WIRD nach jeder abgeschlossenen
+   Hauptversion aktualisiert" verschaerft - Pflicht statt Erlaubnis, ohne
+   festes Nummerierungsschema (Product-Owner-Entscheidung 1).
+2. **Kap. 13 (Roadmap):** v0.7 als abgeschlossen markiert. Neuer Eintrag
+   "Jarvis-Eigenstart (geplant zwischen v0.7 und v0.8)" mit vollstaendigem
+   Zweck/Scope/Nicht-Scope-Text (aus der fruaheren PROJECT_STATE.md-Notiz
+   uebernommen) - bewusst OHNE eigene vX.Y-Versionsnummer und OHNE
+   Umnummerierung von v0.8/v0.9 (haette eine eigene Roadmap-Entscheidung
+   gebraucht), stattdessen als praezisierender Unterabschnitt nach dem
+   etablierten "Praezisierung vX.Y"-Muster.
+3. **Kap. 17 (PC-Steuerung):** alle sieben Faehigkeiten mit
+   Umsetzungsstand annotiert (umgesetzt/Benutzer-Scope/offen, jeweils mit
+   ADR-Verweis). System-Analyst-Vision um einleitenden Satz zum
+   Jarvis-Eigenstart ergaenzt.
+4. **Kap. 19 (Logbook/Governance) - Kernstueck der Konsolidierung:**
+   PROJECT_STATE.md-Bullet um die "temporaerer Arbeitsbereich"-Definition
+   erweitert; bestehende Mid-Version-Entscheidungs-Regel (ab v3.4) erweitert
+   und praezisiert; NEUER Abschnitt "Konsolidierungsprozess" mit den sieben
+   Prozessschritten (ADRs pruefen, PROJECT_STATE.md pruefen, logbook.md
+   pruefen, CHANGELOG.md pruefen, dauerhafte Entscheidungen uebernehmen,
+   temporaere Punkte entfernen, neue Handbook-Version erzeugen) -
+   ausdruecklich klargestellt, dass logbook.md/CHANGELOG.md NICHT geleert
+   werden, nur PROJECT_STATE.md; NEUER Abschnitt "Rolle von
+   PROJECT_STATE.md" mit der rollierend/akkumulierend-Unterscheidung; NEUER
+   Abschnitt "Scope-Erweiterungen und Descoping"; NEUER Abschnitt
+   "Product-Owner-Rules" mit den drei aus PROJECT_STATE.md uebernommenen
+   Regeln (Product-Owner-Entscheidung 2).
+5. **Kap. 27 (Now/Next/Later):** Later-Bullet "Vollstaendige
+   PC-Administration" aktualisiert, neue "Praezisierung v3.6: v0.7
+   Abschluss" nach dem etablierten Muster (v3.3/v3.4/v3.5) ergaenzt.
+6. **Kap. 28 (Definition of Done):** neues allgemeines Kriterium "Neue
+   Handbook-Version erstellt" zwischen Changelog und Git-Tag eingefuegt;
+   neuer Abschnitt "v0.7 - spezifisch (PC-Admin) - abgeschlossen" mit acht
+   Kriterien nach dem etablierten Muster.
+7. **Kap. 29 (Feature-Entscheidungsmatrix/Backlog):** Zuordnungsprinzip-Satz
+   ergaenzt ("jede Idee bekommt Version oder Backlog"); sechs neue
+   Backlog-Zeilen (Treiber, Dienste, HKLM-Autostart, Papierkorb,
+   `C:\Windows\Temp`, Browser-Cache/-Profile) in die bestehende
+   Backlog-Tabelle eingefuegt.
+
+**Vollstaendiger Text-Diff v3.5 vs. v3.6 geprueft** (gleiche Methode wie
+bei allen fruaheren Handbook-Updates: Volltext aus beiden `.docx`
+extrahiert, `diff -u`) - ausschliesslich die oben genannten,
+beabsichtigten Aenderungen, keine Kollateralschaeden in unveraenderten
+Kapiteln (3-12, 14-16, 18, 20-26, 30-32 vollstaendig unberuehrt).
+
+**Begleitdateien aktualisiert:**
+- `docs/AI_START.md`: sechste Pflichtfrage zum Konsolidierungsstatus,
+  Verweis auf `JARVIS_MASTER_HANDBOOK_v3_6.docx`.
+- `README.md`: Handbook-Verweis auf v3.6, Archiv-Liste um v3.5 erweitert.
+- `docs/PROJECT_STATE.md`: grundlegend konsolidiert - Abschnitte "Backlog",
+  "Ausstehende Handbook-Aktualisierung" und "Product Owner Rules"
+  vollstaendig entfernt (Inhalte sind jetzt im Handbook), Status-Abschnitt
+  auf knappe Zusammenfassung mit Verweis auf CHANGELOG/ADRs gekuerzt -
+  erste praktische Anwendung der neuen Konsolidierungsregel.
+- `docs/CHANGELOG.md`: neuer Eintrag "Handbook v3.6 - v0.7-Abschluss,
+  Entwicklungsprozess-Weiterentwicklung" nach dem etablierten Muster
+  (v3.3/v3.4/v3.5).
+
+**Kein Code geschrieben, keine Architektur geaendert** - reine
+Dokumentations-/Governance-Aktualisierung. Kein Tag gesetzt (nur
+Konsolidierung war freigegeben, Tag folgt als separater, noch
+ausstehender Schritt). Tests unveraendert **225/225 gruen** (keine
+Code-Datei beruehrt).
+
 ## 2026-07-02 - v0.7-Abschluss vorbereitet (Scope-Entscheidung, Backlog, Dokumentation)
 
 **Kontext:** Nach Commit von v0.7 Phase 4 (Temp-Bereinigung, ADR-023,

@@ -1,5 +1,59 @@
 # Changelog
 
+## Handbook v3.6 - v0.7-Abschluss, Entwicklungsprozess-Weiterentwicklung (02.07.2026)
+
+Kein Code-Release - reine Dokumentations-/Governance-Aktualisierung nach
+Abschluss von v0.7 (inhaltlich fertig, Tag noch ausstehend), gemäß der in
+Kap. 2 festgelegten Regel ("Handbook wird nur zwischen zwei Versionen
+geändert") - ab v3.6 ist dieses Update nach jeder abgeschlossenen
+Hauptversion Pflicht, nicht mehr nur erlaubt.
+
+### Geändert
+- `docs/handbook/JARVIS_MASTER_HANDBOOK_v3_6.docx` neu (v3.2-v3.5 bleiben
+  als Archiv erhalten): Kap. 13 (Roadmap) - v0.7 als abgeschlossen markiert,
+  neuer Eintrag "Jarvis-Eigenstart" zwischen v0.7 und v0.8 (Zweck/Scope/
+  Nicht-Scope). Kap. 17 (PC-Steuerung) - alle Fähigkeiten mit
+  Umsetzungsstand annotiert, System-Analyst-Vision um Hinweis auf den
+  Jarvis-Eigenstart ergänzt. Kap. 19 (Governance) grundlegend erweitert:
+  PROJECT_STATE.md explizit als temporärer Arbeitsbereich definiert, neuer
+  Abschnitt "Konsolidierungsprozess" (verpflichtend nach jeder
+  Hauptversion), "Product-Owner-Rules" dauerhaft aus PROJECT_STATE.md
+  übernommen, neue Regel zu Scope-Erweiterung/Descoping. Kap. 2
+  (Handbook-Versionierung) verschärft - Update nach jeder Hauptversion ist
+  jetzt Pflicht, ohne festes Nummerierungsschema. Kap. 27 um "Präzisierung
+  v3.6: v0.7 Abschluss" ergänzt. Kap. 28 (Definition of Done) um Abschnitt
+  "v0.7 - spezifisch (PC-Admin)" sowie ein neues allgemeines Kriterium
+  ("neue Handbook-Version erstellt") ergänzt. Kap. 29 (Backlog) um sechs
+  Punkte aus dem v0.7-Abschluss ergänzt (Treiber, Dienste, HKLM-Autostart,
+  Papierkorb, `C:\Windows\Temp`, Browser-Cache/-Profile).
+- `docs/AI_START.md`: sechste Pflichtfrage zum Konsolidierungsstatus
+  ergänzt, verweist jetzt auf `JARVIS_MASTER_HANDBOOK_v3_6.docx`.
+- `README.md`, `docs/PROJECT_STATE.md` verweisen jetzt auf
+  `JARVIS_MASTER_HANDBOOK_v3_6.docx`.
+- `docs/PROJECT_STATE.md` konsolidiert und auf den aktuellen Projektstatus
+  zurückgebaut: Abschnitte "Backlog", "Ausstehende Handbook-Aktualisierung"
+  und "Product Owner Rules" entfernt (Inhalte vollständig ins Handbook
+  übernommen, Kap. 19/29). Rollierende Abschnitte (Status, Tests, Latest
+  ADR) bleiben bestehen.
+- Vollständiger Text-Diff zwischen v3.5 und v3.6 geprüft - ausschließlich
+  die oben genannten, beabsichtigten Änderungen, keine Kollateralschäden
+  in unveränderten Kapiteln.
+
+### Hintergrund
+- Product-Owner-Entscheidung zur Weiterentwicklung des Entwicklungs-
+  prozesses (02.07.2026): das Handbook soll dauerhaft die einzige Single
+  Source of Truth bleiben, ohne dass `PROJECT_STATE.md`/`docs/logbook.md`
+  über mehrere Versionen unbegrenzt wachsen. Sechs Kernregeln freigegeben
+  (Handbook-Update-Pflicht ohne festes Nummernschema, PROJECT_STATE.md als
+  temporärer Arbeitsbereich, konsolidierte Kap.-19-Governance-Regel,
+  Roadmap-Scope-Regeln, Backlog-Zuordnungsprinzip, Product-Owner-Rules
+  dauerhaft im Handbook, AI_START.md-Ergänzung). `docs/logbook.md` und
+  `docs/CHANGELOG.md` bleiben bewusst NICHT Teil der Bereinigung - beide
+  bleiben permanente, anwachsende historische Aufzeichnungen.
+
+### Siehe auch
+- `docs/PROJECT_STATE.md` (konsolidierter, aktueller Stand)
+
 ## v0.7 - PC-Admin: System-Analyse, Autostart-Verwaltung, Temp-Bereinigung (Scope abgeschlossen, Tag ausstehend, 02.07.2026)
 
 Product-Owner-Entscheidung (02.07.2026): v0.7 wird mit dem aktuellen Umfang
