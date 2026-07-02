@@ -26,6 +26,15 @@ analyze_event_log (v0.7 Phase 2, ADR-021) liest ueber wevtutil
 juengsten Fehler/Warnungen aus System- und Application-Log und nutzt
 dasselbe deterministisch-sammeln/KI-nur-formuliert-Muster wie
 analyze_pc.
+
+disable_autostart_entry/enable_autostart_entry (v0.7 Phase 3, ADR-022)
+sind die ersten SCHREIBENDEN PC-Admin-Commands - Sicherheitsstufe 2,
+beschraenkt auf HKCU Run-Key und Startup-Ordner (Benutzer), kein
+HKLM-Schreibzugriff, keine Administratorrechte. Deaktivieren entfernt
+den Eintrag aus der echten Quelle und sichert ihn (Registry: Klartext
+in einem eigenen Jarvis-Registry-Zweig, kein StartupApproved-
+Binaerformat; Startup-Ordner: Verschieben in einen Jarvis-Unterordner)
+- nie loeschen. Kein KI-Zugriff noetig (deterministischer Text).
 """
 from __future__ import annotations
 
@@ -108,6 +117,15 @@ _EVENT_LOG_PROMPT_TEMPLATE = (
     "Fasse wiederkehrende oder auffällige Einträge zusammen. Rechne/zähle "
     "selbst nichts nach - die Daten sind bereits final.\n\nDaten:\n{data}"
 )
+
+# --- disable_autostart_entry / enable_autostart_entry (v0.7 Phase 3, ADR-022) --
+
+# Jarvis-eigener Registry-Zweig (HKCU) fuer deaktivierte Run-Key-Eintraege -
+# Klartext-Sicherung statt des internen, undokumentierten
+# StartupApproved-Binaerformats (Product-Owner-Entscheidung, ADR-022).
+_JARVIS_DISABLED_REGISTRY_PATH = r"Software\Jarvis\DisabledAutostart\Run"
+# Jarvis-eigener Unterordner innerhalb des echten Benutzer-Startup-Ordners.
+_STARTUP_DISABLED_SUBFOLDER_NAME = "_jarvis_disabled"
 
 
 def configure(ai_engine: "AIEngine") -> None:
@@ -243,7 +261,13 @@ def _collect_startup_folder_autostart() -> tuple[list[dict], list[str]]:
         folder = Path(base).joinpath(*_STARTUP_FOLDER_SUFFIX)
         try:
             for item in folder.iterdir():
-                entries.append({"quelle": quelle, "name": item.name})
+                # Nur Dateien (v0.7 Phase 3, ADR-022): Windows startet ohnehin
+                # keine Unterordner-Inhalte direkt aus dem Startup-Ordner -
+                # ohne diesen Filter wuerde der neue, Jarvis-eigene
+                # _jarvis_disabled-Unterordner faelschlich als Autostart-
+                # Eintrag auftauchen.
+                if item.is_file():
+                    entries.append({"quelle": quelle, "name": item.name})
         except OSError as e:
             errors.append(f"{quelle}: {e}")
     return entries, errors
@@ -453,6 +477,260 @@ class AnalyzeEventLogCommand:
         return Result(status=Status.SUCCESS, message=message, data=data)
 
 
+def _user_startup_folder() -> Optional[Path]:
+    env_var, _quelle = _STARTUP_FOLDER_SOURCES[0]  # ("APPDATA", "Startup (Benutzer)")
+    base = os.environ.get(env_var)
+    if base is None:
+        return None
+    return Path(base).joinpath(*_STARTUP_FOLDER_SUFFIX)
+
+
+def _matches(entries: list[dict], name: str) -> list[dict]:
+    name_lower = name.lower()
+    return [e for e in entries if name_lower in e["name"].lower()]
+
+
+def _find_live_hkcu_run_matches(name: str) -> list[dict]:
+    entries, _errors = _collect_registry_autostart()
+    return _matches([e for e in entries if e["quelle"] == "HKCU"], name)
+
+
+def _find_live_user_startup_matches(name: str) -> list[dict]:
+    entries, _errors = _collect_startup_folder_autostart()
+    return _matches([e for e in entries if e["quelle"] == "Startup (Benutzer)"], name)
+
+
+def _find_out_of_scope_matches(name: str) -> list[dict]:
+    """HKLM- bzw. Alle-Benutzer-Treffer - fuer eine praezise Fehlermeldung
+    ('gefunden, aber nicht aenderbar') statt einer irrefuehrenden
+    'nicht gefunden'-Meldung (Kap. 11, ADR-022)."""
+    reg_entries, _e1 = _collect_registry_autostart()
+    folder_entries, _e2 = _collect_startup_folder_autostart()
+    out_of_scope = _matches([e for e in reg_entries if e["quelle"] == "HKLM"], name)
+    out_of_scope += _matches(
+        [e for e in folder_entries if e["quelle"] == "Startup (Alle Benutzer)"], name
+    )
+    return out_of_scope
+
+
+def _find_disabled_registry_matches(name: str) -> list[dict]:
+    entries: list[dict] = []
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _JARVIS_DISABLED_REGISTRY_PATH) as key:
+            i = 0
+            while True:
+                try:
+                    value_name, value, _type = winreg.EnumValue(key, i)
+                except OSError:
+                    break
+                entries.append({"quelle": "HKCU Run-Key (deaktiviert)", "name": value_name, "befehl": value})
+                i += 1
+    except OSError:
+        pass  # Zweig existiert noch nicht - keine Treffer, kein Fehler.
+    return _matches(entries, name)
+
+
+def _find_disabled_startup_matches(name: str) -> list[dict]:
+    folder = _user_startup_folder()
+    if folder is None:
+        return []
+    disabled_folder = folder / _STARTUP_DISABLED_SUBFOLDER_NAME
+    entries: list[dict] = []
+    try:
+        for item in disabled_folder.iterdir():
+            if item.is_file():
+                entries.append({"quelle": "Startup (Benutzer, deaktiviert)", "name": item.name})
+    except OSError:
+        pass  # Ordner existiert noch nicht - keine Treffer, kein Fehler.
+    return _matches(entries, name)
+
+
+def _disable_registry_entry(name: str, value: str) -> None:
+    with winreg.CreateKey(winreg.HKEY_CURRENT_USER, _JARVIS_DISABLED_REGISTRY_PATH) as disabled_key:
+        winreg.SetValueEx(disabled_key, name, 0, winreg.REG_SZ, value)
+    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _RUN_KEY_PATH, 0, winreg.KEY_SET_VALUE) as run_key:
+        winreg.DeleteValue(run_key, name)
+
+
+def _enable_registry_entry(name: str, value: str) -> None:
+    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _RUN_KEY_PATH, 0, winreg.KEY_SET_VALUE) as run_key:
+        winreg.SetValueEx(run_key, name, 0, winreg.REG_SZ, value)
+    with winreg.OpenKey(
+        winreg.HKEY_CURRENT_USER, _JARVIS_DISABLED_REGISTRY_PATH, 0, winreg.KEY_SET_VALUE
+    ) as disabled_key:
+        winreg.DeleteValue(disabled_key, name)
+
+
+def _disable_startup_entry(filename: str) -> None:
+    folder = _user_startup_folder()
+    if folder is None:
+        raise OSError("APPDATA nicht gesetzt")
+    disabled_folder = folder / _STARTUP_DISABLED_SUBFOLDER_NAME
+    disabled_folder.mkdir(parents=True, exist_ok=True)
+    (folder / filename).rename(disabled_folder / filename)
+
+
+def _enable_startup_entry(filename: str) -> None:
+    folder = _user_startup_folder()
+    if folder is None:
+        raise OSError("APPDATA nicht gesetzt")
+    disabled_folder = folder / _STARTUP_DISABLED_SUBFOLDER_NAME
+    (disabled_folder / filename).rename(folder / filename)
+
+
+def _candidate_list_text(matches: list[dict]) -> str:
+    return ", ".join(f"{m['quelle']}: {m['name']}" for m in matches)
+
+
+class DisableAutostartEntryCommand:
+    name = "disable_autostart_entry"
+    description = (
+        "Deaktiviert einen Autostart-Eintrag anhand des Namens - nur HKCU "
+        "Run-Key und Startup-Ordner (Benutzer), kein HKLM, keine "
+        "Administratorrechte. Sicherheitsstufe 2, Bestätigung erforderlich. "
+        "target = Name des Eintrags."
+    )
+    # Systemänderung (Sicherheitsstufe 2, Kap. 10) - einfaches Ja/Nein reicht,
+    # kein confirmation_phrase (das waere Stufe 3, siehe ShutdownPcCommand).
+    requires_confirmation = True
+
+    def execute(self, plan: Plan) -> Result:
+        if platform.system() != "Windows" or winreg is None:
+            return Result(
+                status=Status.FAILED,
+                message="Autostart-Verwaltung ist aktuell nur unter Windows verfügbar.",
+            )
+
+        name = (plan.target or "").strip()
+        if not name:
+            return Result(
+                status=Status.NEEDS_CLARIFICATION,
+                message="Welchen Autostart-Eintrag soll ich deaktivieren?",
+            )
+
+        live_matches = _find_live_hkcu_run_matches(name) + _find_live_user_startup_matches(name)
+
+        if len(live_matches) > 1:
+            return Result(
+                status=Status.NEEDS_CLARIFICATION,
+                message=f"Mehrere Treffer für '{name}': {_candidate_list_text(live_matches)}. Bitte genauer angeben.",
+            )
+
+        if len(live_matches) == 1:
+            match = live_matches[0]
+            try:
+                if match["quelle"] == "HKCU":
+                    _disable_registry_entry(match["name"], match["befehl"])
+                else:
+                    _disable_startup_entry(match["name"])
+            except OSError as e:
+                return Result(status=Status.FAILED, message=f"Deaktivieren fehlgeschlagen: {e}")
+            return Result(
+                status=Status.SUCCESS,
+                message=(
+                    f"'{match['name']}' ({match['quelle']}) wurde im Autostart deaktiviert. "
+                    f"Sag 'aktiviere {match['name']} wieder', um es zurückzusetzen."
+                ),
+            )
+
+        # Kein aktiver Treffer - bereits deaktiviert, ausserhalb des Scopes,
+        # oder gar nicht vorhanden? Reihenfolge wichtig fuer eine praezise
+        # Meldung statt zu raten (Kap. 11).
+        disabled_matches = _find_disabled_registry_matches(name) + _find_disabled_startup_matches(name)
+        if len(disabled_matches) > 1:
+            return Result(
+                status=Status.NEEDS_CLARIFICATION,
+                message=(
+                    f"Mehrere Treffer für '{name}' (bereits deaktiviert): "
+                    f"{_candidate_list_text(disabled_matches)}. Bitte genauer angeben."
+                ),
+            )
+        if len(disabled_matches) == 1:
+            return Result(status=Status.SUCCESS, message=f"'{disabled_matches[0]['name']}' ist bereits deaktiviert.")
+
+        out_of_scope = _find_out_of_scope_matches(name)
+        if out_of_scope:
+            return Result(
+                status=Status.FAILED,
+                message=(
+                    f"'{name}' gefunden ({_candidate_list_text(out_of_scope)}), liegt aber außerhalb "
+                    f"des änderbaren Bereichs (nur HKCU Run-Key und Startup-Ordner Benutzer)."
+                ),
+            )
+
+        return Result(status=Status.FAILED, message=f"Kein Autostart-Eintrag mit dem Namen '{name}' gefunden.")
+
+
+class EnableAutostartEntryCommand:
+    name = "enable_autostart_entry"
+    description = (
+        "Aktiviert einen zuvor von Jarvis deaktivierten Autostart-Eintrag "
+        "wieder - nur HKCU Run-Key und Startup-Ordner (Benutzer). "
+        "Sicherheitsstufe 2, Bestätigung erforderlich. target = Name des "
+        "Eintrags."
+    )
+    requires_confirmation = True
+
+    def execute(self, plan: Plan) -> Result:
+        if platform.system() != "Windows" or winreg is None:
+            return Result(
+                status=Status.FAILED,
+                message="Autostart-Verwaltung ist aktuell nur unter Windows verfügbar.",
+            )
+
+        name = (plan.target or "").strip()
+        if not name:
+            return Result(
+                status=Status.NEEDS_CLARIFICATION,
+                message="Welchen Autostart-Eintrag soll ich wieder aktivieren?",
+            )
+
+        disabled_matches = _find_disabled_registry_matches(name) + _find_disabled_startup_matches(name)
+
+        if len(disabled_matches) > 1:
+            return Result(
+                status=Status.NEEDS_CLARIFICATION,
+                message=(
+                    f"Mehrere deaktivierte Treffer für '{name}': "
+                    f"{_candidate_list_text(disabled_matches)}. Bitte genauer angeben."
+                ),
+            )
+
+        if len(disabled_matches) == 1:
+            match = disabled_matches[0]
+            try:
+                if match["quelle"] == "HKCU Run-Key (deaktiviert)":
+                    _enable_registry_entry(match["name"], match["befehl"])
+                else:
+                    _enable_startup_entry(match["name"])
+            except OSError as e:
+                return Result(status=Status.FAILED, message=f"Aktivieren fehlgeschlagen: {e}")
+            return Result(status=Status.SUCCESS, message=f"'{match['name']}' wurde im Autostart wieder aktiviert.")
+
+        live_matches = _find_live_hkcu_run_matches(name) + _find_live_user_startup_matches(name)
+        if len(live_matches) > 1:
+            return Result(
+                status=Status.NEEDS_CLARIFICATION,
+                message=(
+                    f"Mehrere Treffer für '{name}' (bereits aktiv): "
+                    f"{_candidate_list_text(live_matches)}. Bitte genauer angeben."
+                ),
+            )
+        if len(live_matches) == 1:
+            return Result(status=Status.SUCCESS, message=f"'{live_matches[0]['name']}' ist bereits aktiv.")
+
+        return Result(
+            status=Status.FAILED,
+            message=f"Kein von Jarvis deaktivierter Autostart-Eintrag mit dem Namen '{name}' gefunden.",
+        )
+
+
 # Registrierungspunkt für dieses Modul - commands/__init__.py liest
 # diese Liste beim Start ein.
-COMMANDS = [SystemStatusCommand(), AnalyzePcCommand(), AnalyzeEventLogCommand()]
+COMMANDS = [
+    SystemStatusCommand(),
+    AnalyzePcCommand(),
+    AnalyzeEventLogCommand(),
+    DisableAutostartEntryCommand(),
+    EnableAutostartEntryCommand(),
+]

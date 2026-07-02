@@ -1,5 +1,45 @@
 # Changelog
 
+## v0.7.0 - Autostart verwalten, Phase 3 (ADR-022, 02.07.2026)
+
+Dritter v0.7-Baustein ("PC-Admin", Handbook Kap. 13/17) - erster
+schreibender PC-Admin-Command.
+
+### Neu
+- `commands/monitor.py::DisableAutostartEntryCommand`/
+  `EnableAutostartEntryCommand` (Intents `disable_autostart_entry`/
+  `enable_autostart_entry`, Sicherheitsstufe 2, Ja/Nein-Bestätigung,
+  kein `confirmation_phrase`): deaktivieren/aktivieren
+  Autostart-Einträge anhand des Namens - beschränkt auf HKCU Run-Key
+  und Startup-Ordner (Benutzer), kein HKLM, keine Administratorrechte.
+- Deaktivieren entfernt Registry-Einträge aus dem echten Run-Key und
+  sichert sie im Klartext in einem eigenen Jarvis-Registry-Zweig
+  (`HKCU\Software\Jarvis\DisabledAutostart\Run`) - bewusst kein
+  Nachbilden des internen `StartupApproved`-Binärformats. Startup-
+  Ordner-Einträge werden per Datei-Verschieben in einen
+  Jarvis-Unterordner (`_jarvis_disabled`) deaktiviert. Nie löschen.
+- Namensbasierte Zielauflösung, `NEEDS_CLARIFICATION` bei
+  Mehrdeutigkeit, präzise Fehlermeldung bei Treffern außerhalb des
+  Scopes (HKLM/Alle-Benutzer), idempotentes Verhalten bei bereits
+  deaktivierten/aktiven Einträgen. Kein Blacklist-Mechanismus, kein
+  KI-Zugriff.
+- `_collect_startup_folder_autostart()` (ADR-020) filtert jetzt auf
+  Dateien (`is_file()`) - verhindert, dass der neue
+  `_jarvis_disabled`-Unterordner in `analyze_pc`-Berichten auftaucht.
+- Beide neuen Commands bleiben in `commands/monitor.py` (kein neues
+  Modul, KISS/YAGNI, Product-Owner-Entscheidung).
+- 22 neue Tests (`tests/test_commands_monitor.py`) - 202 Tests gesamt,
+  alle grün.
+
+### Bewusst nicht enthalten (Phase 3)
+- HKLM-Schreibzugriff, Administratorrechte/Elevation.
+- Startup-Ordner (Alle Benutzer) schreibend.
+- `StartupApproved`-Binärformat, Blacklist/Ausnahmelisten.
+- Löschen, neue Autostart-Einträge erstellen, Bearbeiten bestehender
+  Befehle/Pfade, separates Rollback-/Undo-Log-System.
+- Dienste-Verwaltung, Bereinigung, Treiber-Aktualisierung (weiterhin
+  offene Kap.-17-Bausteine).
+
 ## v0.7.0 - Ereignisprotokoll-Analyse, Phase 2 (ADR-021, 02.07.2026)
 
 Zweiter v0.7-Baustein ("PC-Admin", Handbook Kap. 13/17).

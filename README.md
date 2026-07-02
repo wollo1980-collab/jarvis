@@ -34,7 +34,7 @@ jarvis/
 │   ├── __init__.py         # Registry + minimaler Dispatch
 │   ├── system.py             # open_program, shutdown_pc
 │   ├── memory.py               # remember_fact, forget_fact
-│   ├── monitor.py               # system_status (ADR-011), analyze_pc (ADR-020), analyze_event_log (ADR-021)
+│   ├── monitor.py               # system_status (ADR-011), analyze_pc (ADR-020), analyze_event_log (ADR-021), disable_/enable_autostart_entry (ADR-022)
 │   ├── installer.py               # install_program (winget, ADR-012)
 │   ├── excel.py                     # read_excel (openpyxl, ADR-014)
 │   └── reports.py                     # analyze_report (ADR-015), calculate_kpi (ADR-016)
@@ -368,6 +368,44 @@ aus `commands/monitor.py`, keine Änderung an `main.py` nötig.
 
 **Bewusst nicht enthalten:** Security-Log, Löschen von Log-Einträgen,
 automatische Reparaturmaßnahmen. Siehe ADR-021.
+
+## Autostart verwalten (v0.7 Phase 3, ADR-022)
+
+Dritter v0.7-Baustein und **erster schreibender** PC-Admin-Command:
+Jarvis kann Autostart-Einträge deaktivieren und wieder aktivieren -
+beschränkt auf **HKCU Run-Key** und **Startup-Ordner (Benutzer)**, kein
+HKLM-Schreibzugriff, keine Administratorrechte. Sicherheitsstufe 2 -
+einfache Ja/Nein-Bestätigung, kein `confirmation_phrase`.
+
+```
+Du: Deaktiviere Discord im Autostart
+Jarvis: Ich würde jetzt ausführen: 'Deaktiviere Discord im Autostart'. Bestätigen?
+Du: Ja
+Jarvis: 'Discord' (HKCU) wurde im Autostart deaktiviert. Sag 'aktiviere
+Discord wieder', um es zurückzusetzen.
+```
+
+**Deaktivieren statt Löschen, ohne internes Windows-Binärformat:**
+Registry-Einträge werden aus dem echten Run-Key entfernt und im
+Klartext in einem eigenen Jarvis-Registry-Zweig
+(`HKCU\Software\Jarvis\DisabledAutostart\Run`) gesichert - bewusst
+**kein** Nachbilden des undokumentierten `StartupApproved`-
+Binärformats. Startup-Ordner-Einträge werden per einfachem
+Datei-Verschieben in einen Jarvis-Unterordner (`_jarvis_disabled`)
+deaktiviert. "Wieder aktivieren" ist die vollständige Umkehrung -
+kein separates Rollback-System nötig.
+
+Namensbasierte Zielauflösung, frisch bei jedem Aufruf: mehrere Treffer
+führen zu einer Rückfrage (`NEEDS_CLARIFICATION`, nie raten), ein
+Treffer außerhalb des Scopes (HKLM/Alle-Benutzer) liefert eine
+präzise Fehlermeldung statt eines irreführenden "nicht gefunden".
+Kein KI-Zugriff nötig (deterministischer Text). Kein Blacklist-
+Mechanismus - das Sicherheitsmodell besteht bewusst nur aus
+eindeutiger Zielauflösung + Sicherheitsstufe 2 + Bestätigung.
+
+**Bewusst nicht enthalten:** HKLM-Schreibzugriff, Administratorrechte,
+Startup-Ordner (Alle Benutzer) schreibend, Löschen, neue Einträge
+erstellen. Siehe ADR-022.
 
 ## Pipeline
 

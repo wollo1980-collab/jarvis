@@ -1,5 +1,154 @@
 # Logbook
 
+## 2026-07-02 - Jarvis-Eigenstart als Roadmap-Baustein aufgenommen (Kap.-19-Dokumentation, wartet auf Handbook v3.6)
+
+**Kontext:** Wolfgang stellte fest, dass automatischer Start von Jarvis mit
+Windows im Handbook nicht vorgesehen ist, und wollte dies sauber in
+Architektur und Roadmap aufnehmen - zunaechst rein dokumentarisch, kein
+Code.
+
+**Prozesskonflikt erkannt und geklaert:** Ein direkter `.docx`-Edit
+haette Kap. 2 verletzt (Handbook aendert sich nur ZWISCHEN Versionen,
+nicht mitten in v0.7, das weder committed noch getaggt ist). Wolfgang
+wurde die Wahl zwischen "Kap.-19-Mechanismus nutzen" (Entscheidung
+sofort in PROJECT_STATE.md/logbook.md festhalten, Handbook-Text
+vorbereiten, `.docx`-Edit erst bei v3.6) und "Handbook jetzt direkt
+bearbeiten" (explizite Ausnahme von Kap. 2) vorgelegt. Entscheidung:
+Kap.-19-Mechanismus - identisches Muster wie bei der
+Post-Arbeitsmodule-Generalisierung in v0.6.
+
+**Entscheidung (vollstaendig, ab sofort massgeblich bis Handbook v3.6):**
+Zweck, Scope, Nicht-Scope und vorbereiteter Handbook-Text stehen im
+Abschnitt "Ausstehende Handbook-Erweiterung" von `docs/PROJECT_STATE.md`.
+Kurzfassung: Jarvis startet automatisch nach der Windows-Anmeldung,
+kein manueller Start noetig, laeuft dauerhaft im Hintergrund. Scope:
+HKCU Run-Key oder Benutzer-Startup-Ordner, keine Administratorrechte,
+eigener Aktivieren-/Deaktivieren-Command, kein HKLM, keine
+Aufgabenplanung, kein Windows-Dienst. Nicht-Scope: keine
+Hintergrunddienste, keine Mehrbenutzer-Installation, keine
+Administratorrechte.
+
+**Versionsempfehlung (Product-Owner-Korrektur 2026-07-02):** Eigenstaendiger
+Infrastruktur-/Runtime-Baustein nach Abschluss von v0.7 und vor Beginn
+der Multi-KI-Erweiterung (v0.8) - nicht Ende von v0.7/Phase 4, wie
+urspruenglich vorgeschlagen. Begruendung (Wolfgang): der automatische
+Start von Jarvis betrifft die Laufzeit des Assistenten selbst und
+gehoert architektonisch nicht zum fachlichen Schwerpunkt PC-Admin
+(Kap. 13/17), sondern zur spaeteren Runtime des Gesamtsystems. Technische
+Naehe zu den in Phase 3 (ADR-022) gebauten Mechanismen (HKCU-
+Schreibzugriff, Startup-Ordner-Verschieben) bleibt bestehen und
+rechtfertigt weiterhin zeitliche Naehe zu v0.7, auch wenn thematisch
+getrennt. Weiterhin nicht v0.8 selbst (thematisch "Multi-KI", nicht
+Runtime) und nicht v1.0 (unnoetige Wartezeit fuer einen kleinen,
+risikoarmen Baustein). Alle uebrigen Entscheidungen (Zweck, Scope,
+Nicht-Scope, kein ADR-Bedarf, keine AI_START.md/README.md-Aenderung)
+bleiben unveraendert.
+
+**Keine ADR jetzt** (reine Roadmap-/Scope-Entscheidung, kein Code
+betroffen - analog Power-BI-Descoping) - ADR entsteht bei tatsaechlicher
+Implementierung. **Keine Aenderung an AI_START.md/README.md** (README
+dokumentiert nur bereits Implementiertes, AI_START.md ist
+versionsunabhaengig).
+
+Kein Code geschrieben, keine ADR angelegt, Handbook-`.docx` unveraendert.
+
+## 2026-07-02 - Autostart verwalten implementiert, v0.7 Phase 3 (ADR-022)
+
+**Kontext:** Nach Commit von v0.7 Phase 2 (Ereignisprotokoll-Analyse,
+ADR-021, `5f330fb`) und einer Dokumentationskorrektur (`efe067f`) wurde
+per AI_START.md neu eingestiegen. Vergleich der vier verbleibenden
+Kap.-17-Bausteine (Autostart verwalten, Dienste, Bereinigung, Treiber)
+vorgelegt. Empfehlung: Autostart verwalten - hoechste Wiederverwendung
+aus Phase 1, kleinster architektonischer Sprung. Wolfgang hat diese
+Empfehlung freigegeben, aber in zwei Review-Runden wesentliche
+Architekturkorrekturen am urspruenglichen Entwurf vorgenommen.
+
+**Product-Owner-Korrekturen gegenueber dem ersten Entwurf:**
+1. **Keine Blacklist** - Sicherheitsmodell bleibt bewusst einfach
+   (eindeutige Zielauflösung + Stufe 2 + Bestaetigung, keine
+   Sonderfaelle).
+2. **Kein Nachbilden des internen `StartupApproved`-Binaerformats** -
+   stattdessen eine technisch saubere Alternative mit ausschliesslich
+   oeffentlich dokumentierten Registry-APIs untersucht und gefunden.
+3. **Scope-Reduktion auf HKCU + Benutzer-Startup** - keine
+   HKLM-Schreibzugriffe, keine Administratorrechte in dieser Phase.
+4. **Kein neues Modul** - beide Commands bleiben in
+   `commands/monitor.py` (KISS/YAGNI, thematische Naehe zu
+   `system_status`/`analyze_pc`/`analyze_event_log`).
+
+**Umsetzung:** `commands/monitor.py::DisableAutostartEntryCommand`/
+`EnableAutostartEntryCommand`. Sicherheitsstufe 2
+(`requires_confirmation = True`, kein `confirmation_phrase`).
+
+*Registry (HKCU Run-Key):* Deaktivieren entfernt den Wert per
+`winreg.DeleteValue` aus dem echten Run-Key und sichert Name+Wert im
+Klartext (`REG_SZ`) in einem eigenen Jarvis-Registry-Zweig
+(`HKCU\Software\Jarvis\DisabledAutostart\Run`, per `winreg.CreateKey`/
+`SetValueEx`). Aktivieren schreibt den Originalwert zurueck in den
+echten Run-Key und entfernt ihn aus dem Jarvis-Zweig. Bewusst
+**kein** `StartupApproved`-Flag - bekannter Kompromiss: der
+Task-Manager zeigt den Eintrag danach nicht als "Deaktiviert" an,
+er verschwindet schlicht aus dessen Liste (funktional identisch).
+
+*Startup-Ordner (Benutzer):* Deaktivieren verschiebt die Datei
+(`Path.rename`) in einen Jarvis-Unterordner `_jarvis_disabled`
+innerhalb des echten Startup-Ordners. Aktivieren verschiebt sie
+zurueck. Reine Dateisystem-Operation, kein Registry-/Binaerformat-
+Bezug.
+
+*Notwendige Anpassung an Phase 1 (ADR-020):*
+`_collect_startup_folder_autostart()` listete bisher alle
+`Path.iterdir()`-Eintraege inklusive Unterordnern - ohne Fix wuerde
+der neue `_jarvis_disabled`-Unterordner selbst als scheinbarer
+Autostart-Eintrag im `analyze_pc`-Bericht auftauchen. Fix: nur noch
+`item.is_file()` wird aufgenommen (Windows startet ohnehin keine
+Unterordner-Inhalte direkt aus dem Startup-Ordner) - notwendige
+Korrektur innerhalb der bereits freigegebenen Datei, keine
+Scope-Erweiterung.
+
+*Namensbasierte Zielauflösung (Kap. 11, nie raten):* frisch bei jedem
+Aufruf, case-insensitive Teilstring-Suche. Kein Treffer im relevanten
+Bereich, aber ein Treffer in HKLM/Alle-Benutzer (ueber die
+Phase-1-Funktionen erkennbar) -> eigener, praeziser Fehlertext
+("gefunden, aber ausserhalb des aenderbaren Bereichs") statt
+irrefuehrendem "nicht gefunden". Genau ein Treffer -> Aktion wird
+ausgefuehrt. Mehrere Treffer -> `Status.NEEDS_CLARIFICATION` mit den
+konkreten Kandidaten, keine Aktion. Bereits deaktiviert/aktiv ->
+idempotenter `Status.SUCCESS`, kein Fehler.
+
+**Kein Blacklist-Mechanismus** (Product-Owner-Entscheidung) - Sicherheit
+entsteht ausschliesslich aus eindeutiger Zielaufloesung + Sicherheitsstufe
+2 + Bestaetigung. **Kein KI-Zugriff** - beide Commands liefern
+deterministischen Text, kein `configure()`-Bedarf, keine Aenderung an
+`main.py`. **Weiterhin in `commands/monitor.py`, kein neues Modul**
+(Product-Owner-Entscheidung, KISS/YAGNI).
+
+**Bewusst nicht enthalten:** HKLM-Schreibzugriffe, Administratorrechte/
+Elevation, Startup-Ordner (Alle Benutzer) schreibend,
+`StartupApproved`-Binaerformat, Blacklist, Loeschen (nur Deaktivieren),
+neue Autostart-Eintraege erstellen, Bearbeiten bestehender
+Befehle/Pfade, separates Rollback-/Undo-Log-System (Aktivieren selbst
+ist der vollstaendige Rollback), Dienste/Bereinigung/Treiber. Keine
+Aenderung an `core/ai.py`, `core/planner.py`, `core/tool_manager.py`,
+`executor/executor.py` oder anderen `commands/*.py`-Dateien.
+
+**Tests:** 22 neue Tests (`tests/test_commands_monitor.py`) -
+Plattformpruefung, fehlendes target, Registry-Erfolgsfall,
+Startup-Ordner-Erfolgsfall, kein Treffer, mehrere Treffer, idempotent
+bereits deaktiviert/aktiv, Treffer ausserhalb des Scopes (HKLM +
+Alle-Benutzer-Startup), Schreibfehler ohne Teilzustand, Stufe-2-ohne-
+Phrase-Verifikation, Registrierung (je Command), sowie ein
+Regressionstest fuer den `_collect_startup_folder_autostart()`-Fix
+(Unterordner wird ignoriert). Vollstaendige Suite: **202/202 gruen**
+(180 vorher + 22 neu). `git diff --stat` bestaetigt: nur
+`commands/monitor.py` und `tests/test_commands_monitor.py` geaendert,
+`docs/adr/ADR-022.md` neu - keine Aenderung an `main.py` oder anderen
+Kernmodulen.
+
+v0.7 bleibt weiterhin offen/ungetaggt (Dienste, Bereinigung, Treiber
+noch offen) - kein Tag gesetzt, keine v0.7-Abschlussentscheidung
+getroffen.
+
 ## 2026-07-02 - Ereignisprotokoll-Analyse implementiert, v0.7 Phase 2 (ADR-021)
 
 **Kontext:** Nach Commit von v0.7 Phase 1 (PC-Analyse, ADR-020, `48f0f83`)

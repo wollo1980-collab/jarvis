@@ -7,7 +7,13 @@ import xml.etree.ElementTree as ET
 from unittest.mock import MagicMock, patch
 
 import commands.monitor as monitor_commands
-from commands.monitor import AnalyzeEventLogCommand, AnalyzePcCommand, SystemStatusCommand
+from commands.monitor import (
+    AnalyzeEventLogCommand,
+    AnalyzePcCommand,
+    DisableAutostartEntryCommand,
+    EnableAutostartEntryCommand,
+    SystemStatusCommand,
+)
 from core.models import Plan, Status
 
 
@@ -481,3 +487,344 @@ def test_analyze_event_log_registered_in_registry():
     from commands import REGISTRY
 
     assert "analyze_event_log" in REGISTRY
+
+
+# --- disable_autostart_entry / enable_autostart_entry (v0.7 Phase 3, ADR-022) --
+
+
+class _FakeRegKey:
+    """Minimaler Ersatz fuer ein PyHKEY-Objekt - unterstuetzt den
+    with-Block wie winreg.OpenKey()/CreateKey()."""
+
+    def __init__(self, store: dict):
+        self.store = store
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def _install_fake_winreg(
+    monkeypatch,
+    hkcu_run=None,
+    hklm_run=None,
+    disabled=None,
+    hkcu_run_missing=False,
+    hklm_run_missing=False,
+    disabled_missing=False,
+):
+    """Ersetzt winreg.OpenKey/CreateKey/EnumValue/SetValueEx/DeleteValue
+    durch eine einfache In-Memory-Registry, gekeyt nach (hive, path).
+    Bewusst unabhaengig von _patch_registry (das nur nach Hive keyt - das
+    reicht hier nicht, weil derselbe Run-Key-Pfad fuer HKCU UND HKLM
+    verwendet wird UND ein dritter, Jarvis-eigener Pfad existiert)."""
+    hkcu = monitor_commands.winreg.HKEY_CURRENT_USER
+    hklm = monitor_commands.winreg.HKEY_LOCAL_MACHINE
+    stores = {
+        (hkcu, monitor_commands._RUN_KEY_PATH): (hkcu_run if hkcu_run is not None else {}, hkcu_run_missing),
+        (hklm, monitor_commands._RUN_KEY_PATH): (hklm_run if hklm_run is not None else {}, hklm_run_missing),
+        (hkcu, monitor_commands._JARVIS_DISABLED_REGISTRY_PATH): (
+            disabled if disabled is not None else {},
+            disabled_missing,
+        ),
+    }
+
+    def fake_open_key(hive, path, *args, **kwargs):
+        store, missing = stores[(hive, path)]
+        if missing:
+            raise OSError("Registry-Pfad nicht vorhanden")
+        return _FakeRegKey(store)
+
+    def fake_create_key(hive, path):
+        store, _missing = stores[(hive, path)]
+        return _FakeRegKey(store)
+
+    def fake_enum_value(key, index):
+        items = list(key.store.items())
+        if index >= len(items):
+            raise OSError("keine weiteren Werte")
+        value_name, value = items[index]
+        return value_name, value, 1
+
+    def fake_set_value_ex(key, name, reserved, type_, value):
+        key.store[name] = value
+
+    def fake_delete_value(key, name):
+        del key.store[name]
+
+    monkeypatch.setattr(monitor_commands.winreg, "OpenKey", fake_open_key)
+    monkeypatch.setattr(monitor_commands.winreg, "CreateKey", fake_create_key)
+    monkeypatch.setattr(monitor_commands.winreg, "EnumValue", fake_enum_value)
+    monkeypatch.setattr(monitor_commands.winreg, "SetValueEx", fake_set_value_ex)
+    monkeypatch.setattr(monitor_commands.winreg, "DeleteValue", fake_delete_value)
+    return stores
+
+
+def _setup_autostart_env(monkeypatch, tmp_path, windows=True):
+    monkeypatch.setattr(monitor_commands.platform, "system", lambda: "Windows" if windows else "Linux")
+    appdata = tmp_path / "AppData"
+    programdata = tmp_path / "ProgramData"
+    appdata.mkdir(parents=True, exist_ok=True)
+    programdata.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("APPDATA", str(appdata))
+    monkeypatch.setenv("PROGRAMDATA", str(programdata))
+    user_startup = appdata.joinpath(*monitor_commands._STARTUP_FOLDER_SUFFIX)
+    allusers_startup = programdata.joinpath(*monitor_commands._STARTUP_FOLDER_SUFFIX)
+    user_startup.mkdir(parents=True, exist_ok=True)
+    allusers_startup.mkdir(parents=True, exist_ok=True)
+    return user_startup, allusers_startup
+
+
+# --- disable_autostart_entry -----------------------------------------------
+
+
+def test_disable_fails_clearly_on_non_windows(monkeypatch, tmp_path):
+    _setup_autostart_env(monkeypatch, tmp_path, windows=False)
+    cmd = DisableAutostartEntryCommand()
+
+    result = cmd.execute(Plan(intent="disable_autostart_entry", target="Discord"))
+
+    assert result.status == Status.FAILED
+
+
+def test_disable_needs_target(monkeypatch, tmp_path):
+    _setup_autostart_env(monkeypatch, tmp_path)
+    _install_fake_winreg(monkeypatch)
+    cmd = DisableAutostartEntryCommand()
+
+    result = cmd.execute(Plan(intent="disable_autostart_entry", target=""))
+
+    assert result.status == Status.NEEDS_CLARIFICATION
+
+
+def test_disable_registry_entry_success(monkeypatch, tmp_path):
+    _setup_autostart_env(monkeypatch, tmp_path)
+    hkcu_run = {"Discord": "C:\\Discord.exe"}
+    disabled = {}
+    _install_fake_winreg(monkeypatch, hkcu_run=hkcu_run, disabled=disabled)
+    cmd = DisableAutostartEntryCommand()
+
+    result = cmd.execute(Plan(intent="disable_autostart_entry", target="Discord"))
+
+    assert result.status == Status.SUCCESS
+    assert "HKCU" in result.message
+    assert "Discord" not in hkcu_run
+    assert disabled["Discord"] == "C:\\Discord.exe"
+
+
+def test_disable_startup_entry_success(monkeypatch, tmp_path):
+    user_startup, _allusers = _setup_autostart_env(monkeypatch, tmp_path)
+    _install_fake_winreg(monkeypatch)
+    (user_startup / "Dropbox.lnk").touch()
+    cmd = DisableAutostartEntryCommand()
+
+    result = cmd.execute(Plan(intent="disable_autostart_entry", target="Dropbox"))
+
+    assert result.status == Status.SUCCESS
+    assert "Startup (Benutzer)" in result.message
+    assert not (user_startup / "Dropbox.lnk").exists()
+    assert (user_startup / monitor_commands._STARTUP_DISABLED_SUBFOLDER_NAME / "Dropbox.lnk").exists()
+
+
+def test_disable_no_match_fails(monkeypatch, tmp_path):
+    _setup_autostart_env(monkeypatch, tmp_path)
+    _install_fake_winreg(monkeypatch)
+    cmd = DisableAutostartEntryCommand()
+
+    result = cmd.execute(Plan(intent="disable_autostart_entry", target="Unbekannt"))
+
+    assert result.status == Status.FAILED
+
+
+def test_disable_multiple_matches_needs_clarification(monkeypatch, tmp_path):
+    user_startup, _allusers = _setup_autostart_env(monkeypatch, tmp_path)
+    hkcu_run = {"Discord": "C:\\Discord.exe"}
+    _install_fake_winreg(monkeypatch, hkcu_run=hkcu_run)
+    (user_startup / "Discord Update.lnk").touch()
+    cmd = DisableAutostartEntryCommand()
+
+    result = cmd.execute(Plan(intent="disable_autostart_entry", target="Discord"))
+
+    assert result.status == Status.NEEDS_CLARIFICATION
+    assert "Discord" in result.message
+
+
+def test_disable_already_disabled_is_idempotent_success(monkeypatch, tmp_path):
+    _setup_autostart_env(monkeypatch, tmp_path)
+    disabled = {"Discord": "C:\\Discord.exe"}
+    _install_fake_winreg(monkeypatch, disabled=disabled)
+    cmd = DisableAutostartEntryCommand()
+
+    result = cmd.execute(Plan(intent="disable_autostart_entry", target="Discord"))
+
+    assert result.status == Status.SUCCESS
+    assert "bereits deaktiviert" in result.message
+
+
+def test_disable_out_of_scope_hklm_gives_specific_error(monkeypatch, tmp_path):
+    _setup_autostart_env(monkeypatch, tmp_path)
+    hklm_run = {"Steam": "C:\\Steam.exe"}
+    _install_fake_winreg(monkeypatch, hklm_run=hklm_run)
+    cmd = DisableAutostartEntryCommand()
+
+    result = cmd.execute(Plan(intent="disable_autostart_entry", target="Steam"))
+
+    assert result.status == Status.FAILED
+    assert "außerhalb" in result.message
+    assert "HKLM" in result.message
+
+
+def test_disable_out_of_scope_allusers_startup_gives_specific_error(monkeypatch, tmp_path):
+    _user_startup, allusers_startup = _setup_autostart_env(monkeypatch, tmp_path)
+    _install_fake_winreg(monkeypatch)
+    (allusers_startup / "SharedTool.lnk").touch()
+    cmd = DisableAutostartEntryCommand()
+
+    result = cmd.execute(Plan(intent="disable_autostart_entry", target="SharedTool"))
+
+    assert result.status == Status.FAILED
+    assert "außerhalb" in result.message
+
+
+def test_disable_registry_write_failure_reported(monkeypatch, tmp_path):
+    _setup_autostart_env(monkeypatch, tmp_path)
+    hkcu_run = {"Discord": "C:\\Discord.exe"}
+    _install_fake_winreg(monkeypatch, hkcu_run=hkcu_run)
+    monkeypatch.setattr(
+        monitor_commands.winreg, "SetValueEx", MagicMock(side_effect=OSError("Registry-Fehler"))
+    )
+    cmd = DisableAutostartEntryCommand()
+
+    result = cmd.execute(Plan(intent="disable_autostart_entry", target="Discord"))
+
+    assert result.status == Status.FAILED
+    assert "Discord" in hkcu_run  # unveraendert - kein Teilzustand
+
+
+def test_disable_requires_confirmation_stufe2_not_stufe3():
+    cmd = DisableAutostartEntryCommand()
+    assert cmd.requires_confirmation is True
+    assert getattr(cmd, "confirmation_phrase", None) is None
+
+
+def test_disable_registered_in_registry():
+    from commands import REGISTRY
+
+    assert "disable_autostart_entry" in REGISTRY
+
+
+# --- enable_autostart_entry -------------------------------------------------
+
+
+def test_enable_fails_clearly_on_non_windows(monkeypatch, tmp_path):
+    _setup_autostart_env(monkeypatch, tmp_path, windows=False)
+    cmd = EnableAutostartEntryCommand()
+
+    result = cmd.execute(Plan(intent="enable_autostart_entry", target="Discord"))
+
+    assert result.status == Status.FAILED
+
+
+def test_enable_needs_target(monkeypatch, tmp_path):
+    _setup_autostart_env(monkeypatch, tmp_path)
+    _install_fake_winreg(monkeypatch)
+    cmd = EnableAutostartEntryCommand()
+
+    result = cmd.execute(Plan(intent="enable_autostart_entry", target=""))
+
+    assert result.status == Status.NEEDS_CLARIFICATION
+
+
+def test_enable_registry_entry_success(monkeypatch, tmp_path):
+    _setup_autostart_env(monkeypatch, tmp_path)
+    hkcu_run = {}
+    disabled = {"Discord": "C:\\Discord.exe"}
+    _install_fake_winreg(monkeypatch, hkcu_run=hkcu_run, disabled=disabled)
+    cmd = EnableAutostartEntryCommand()
+
+    result = cmd.execute(Plan(intent="enable_autostart_entry", target="Discord"))
+
+    assert result.status == Status.SUCCESS
+    assert hkcu_run["Discord"] == "C:\\Discord.exe"
+    assert "Discord" not in disabled
+
+
+def test_enable_startup_entry_success(monkeypatch, tmp_path):
+    user_startup, _allusers = _setup_autostart_env(monkeypatch, tmp_path)
+    _install_fake_winreg(monkeypatch)
+    disabled_folder = user_startup / monitor_commands._STARTUP_DISABLED_SUBFOLDER_NAME
+    disabled_folder.mkdir()
+    (disabled_folder / "Dropbox.lnk").touch()
+    cmd = EnableAutostartEntryCommand()
+
+    result = cmd.execute(Plan(intent="enable_autostart_entry", target="Dropbox"))
+
+    assert result.status == Status.SUCCESS
+    assert (user_startup / "Dropbox.lnk").exists()
+    assert not (disabled_folder / "Dropbox.lnk").exists()
+
+
+def test_enable_no_match_fails(monkeypatch, tmp_path):
+    _setup_autostart_env(monkeypatch, tmp_path)
+    _install_fake_winreg(monkeypatch)
+    cmd = EnableAutostartEntryCommand()
+
+    result = cmd.execute(Plan(intent="enable_autostart_entry", target="Unbekannt"))
+
+    assert result.status == Status.FAILED
+
+
+def test_enable_multiple_matches_needs_clarification(monkeypatch, tmp_path):
+    user_startup, _allusers = _setup_autostart_env(monkeypatch, tmp_path)
+    disabled = {"Discord": "C:\\Discord.exe"}
+    _install_fake_winreg(monkeypatch, disabled=disabled)
+    disabled_folder = user_startup / monitor_commands._STARTUP_DISABLED_SUBFOLDER_NAME
+    disabled_folder.mkdir()
+    (disabled_folder / "Discord Update.lnk").touch()
+    cmd = EnableAutostartEntryCommand()
+
+    result = cmd.execute(Plan(intent="enable_autostart_entry", target="Discord"))
+
+    assert result.status == Status.NEEDS_CLARIFICATION
+
+
+def test_enable_already_active_is_idempotent_success(monkeypatch, tmp_path):
+    _setup_autostart_env(monkeypatch, tmp_path)
+    hkcu_run = {"Discord": "C:\\Discord.exe"}
+    _install_fake_winreg(monkeypatch, hkcu_run=hkcu_run)
+    cmd = EnableAutostartEntryCommand()
+
+    result = cmd.execute(Plan(intent="enable_autostart_entry", target="Discord"))
+
+    assert result.status == Status.SUCCESS
+    assert "bereits aktiv" in result.message
+
+
+def test_enable_requires_confirmation_stufe2_not_stufe3():
+    cmd = EnableAutostartEntryCommand()
+    assert cmd.requires_confirmation is True
+    assert getattr(cmd, "confirmation_phrase", None) is None
+
+
+def test_enable_registered_in_registry():
+    from commands import REGISTRY
+
+    assert "enable_autostart_entry" in REGISTRY
+
+
+# --- Phase-1-Anpassung: _jarvis_disabled darf nicht als Autostart-Eintrag ---
+# in analyze_pc auftauchen (ADR-022) --------------------------------------
+
+
+def test_collect_startup_folder_ignores_subdirectories(monkeypatch, tmp_path):
+    user_startup, _allusers = _setup_autostart_env(monkeypatch, tmp_path)
+    (user_startup / "Dropbox.lnk").touch()
+    (user_startup / monitor_commands._STARTUP_DISABLED_SUBFOLDER_NAME).mkdir()
+
+    entries, errors = monitor_commands._collect_startup_folder_autostart()
+
+    names = {e["name"] for e in entries}
+    assert "Dropbox.lnk" in names
+    assert monitor_commands._STARTUP_DISABLED_SUBFOLDER_NAME not in names
