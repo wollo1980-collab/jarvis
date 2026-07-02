@@ -17,12 +17,12 @@ Umgesetzt in v0.7 "PC-Admin" (Details: `docs/CHANGELOG.md`, ADRs):
 
 Bewusst nicht enthalten und ins Handbook-Backlog (Kap. 29) verschoben: Treiber, Dienste, HKLM-Autostart-Erweiterung, Papierkorb, `C:\Windows\Temp`, Browser-Cache/-Profile. Neuer Roadmap-Baustein "Jarvis-Eigenstart" zwischen v0.7 und v0.8 im Handbook (Kap. 13) dokumentiert.
 
-Tests: `249 / 249` grün (225 aus v0.7 + 11 aus Jarvis-Runtime v1, ADR-025 + 13 aus Single-Instance-Schutz, ADR-026).
+Tests: `264 / 264` grün (225 aus v0.7 + 11 aus Jarvis-Runtime v1, ADR-025 + 13 aus Single-Instance-Schutz, ADR-026 + 15 aus Runtime v2/TelegramChannel, ADR-027).
 
 Aus v0.6/v0.5/v0.4 weiterhin gültig: Telegram-Fernzugriff (ADR-018), Excel-Lesen/Tabellen-Auswertung/KPI (ADR-014/015/016), Kurz-/Langzeitgedächtnis (ADR-009), PC-Grundsteuerung (ADR-011/012) - siehe Handbook Kap. 13/27 für den vollständigen Roadmap-Stand.
 
 ## Next Planned Version
-`v0.7` ist vollständig abgeschlossen (Handbook v3.6, Tag `v0.7`). `v0.8 "Multi-KI"` (Handbook Kap. 13: "Claude + GPT + Copilot orchestrieren") ist der nächste geplante Baustein - noch nicht begonnen, kein technischer Vorschlag erstellt. Vor v0.8 steht architektonisch der Jarvis-Eigenstart-Baustein: eine Bewertung ergab, dass Runtime v1 dafür allein nicht ausreicht (einziger Kanal `ConsoleDummyChannel` blockiert auf `input()`, für unbeaufsichtigten Autostart ungeeignet) - ein Runtime-v2-Ausbau (Telegram-Kanal, Channel-Interface, Autostart) wurde jedoch von Wolfgang bewusst vertagt. Stattdessen zuerst der davon unabhängige Single-Instance-Schutz (ADR-026, siehe unten) - Voraussetzung für jeden künftigen Runtime-Ausbau. Jarvis-Eigenstart selbst bleibt weiterhin verschoben.
+`v0.7` ist vollständig abgeschlossen (Handbook v3.6, Tag `v0.7`). `v0.8 "Multi-KI"` (Handbook Kap. 13: "Claude + GPT + Copilot orchestrieren") ist der nächste geplante Baustein - noch nicht begonnen, kein technischer Vorschlag erstellt. Vor v0.8 steht architektonisch der Jarvis-Eigenstart-Baustein: nach dem Single-Instance-Schutz (ADR-026) ist jetzt auch Runtime v2 (Telegram-Kanal, ADR-027) umgesetzt - die Runtime hat damit erstmals einen Kanal, der ohne angehängte Konsole nutzbar ist. Jarvis-Eigenstart selbst (Windows-Autostart, HKCU Run-Key) bleibt trotzdem ein eigener, noch nicht begonnener Schritt - keine Implementierung, kein technischer Vorschlag bisher.
 
 ## Jarvis-Runtime v1 implementiert (ADR-024/ADR-025, wartet auf künftige Konsolidierung)
 Architekturrichtung (ADR-024) und Umsetzung von **Runtime v1** (ADR-025) sind beide dokumentiert und (v1) implementiert - `jarvis_runtime.py` existiert jetzt als Datei. Da das Handbook laut Kap. 2 nur zwischen zwei Hauptversionen geändert wird und v3.6 gerade erst konsolidiert wurde, gelten beide ADRs ab sofort maßgeblich (Kap. 19) und werden erst bei der nächsten Konsolidierung (nach v0.8 oder einem weiteren Runtime-Ausbau) formal ins Handbook übernommen.
@@ -59,11 +59,29 @@ Nach Freigabe von Runtime v1 hat Wolfgang eine Bewertung angefordert, ob der Inf
 
 Details, Begründung und Alternativen: `docs/adr/ADR-026.md`.
 
+## Runtime v2 implementiert: TelegramChannel (ADR-027, wartet auf künftige Konsolidierung)
+Nach dem Single-Instance-Schutz wurde ein Architekturvorschlag für "Jarvis-Eigenstart / Runtime v2" erarbeitet, als Richtung freigegeben, in ADR-027 dokumentiert und anschließend nach einem Product-Owner-geprüften Implementierungsplan umgesetzt: Telegram ist jetzt der erste echte Runtime-Kanal neben `ConsoleDummyChannel`.
+
+**Wichtige Zwischenentscheidung:** Geprüft und verworfen wurde, `jarvis_runtime.py` komplett unverändert zu lassen und `TelegramChannel` `filter_plan()` selbst anwenden zu lassen (dann unverändertes `submit(text, reply_callback)`) - das hätte eine TOCTOU-Sicherheitslücke geschaffen: `_process()` plant intern ohnehin erneut, und dieser zweite Plan (nicht der geprüfte erste) würde tatsächlich ausgeführt - bei KI-Nichtdeterminismus oder echter Nebenläufigkeit (History ändert sich zwischen Vorab-Check und Verarbeitung) könnte eine nicht erlaubte Anfrage so ungeprüft durchrutschen.
+
+**Umgesetzt (ADR-027):**
+- **`telegram_channel.py`** (neu) - `TelegramChannel`, einzige Stelle im Runtime-Umfeld mit `python-telegram-bot`/Asyncio-Code, vollständig von `jarvis_runtime.py` getrennt.
+- Sicherheitslogik wiederverwendet statt dupliziert: `ALLOWED_INTENTS`/`filter_plan`/`rejection_reason`/`is_authorized` unverändert aus `telegram_main.py` importiert.
+- `JarvisRuntime.submit()`/`_process()` um optionalen `plan_filter`-Parameter erweitert (Default `None`, vollständig rückwärtskompatibel zu `ConsoleDummyChannel`/Runtime v1) - `JarvisRuntime` bleibt telegram-unwissend. Bei Ablehnung: kein Executor-Aufruf, keine History-Schreibung.
+- Asyncio-Brücke (`asyncio.get_running_loop()` + `asyncio.run_coroutine_threadsafe()`) zwischen dem synchronen Runtime-Worker-Thread und PTBs eigenem Event-Loop - einzige Stelle im Projekt mit dieser Brücke, explizit begründet (ADR-027).
+- `jarvis_runtime.py::main()` startet `TelegramChannel` automatisch in einem eigenen Thread, sobald `JARVIS_TELEGRAM_BOT_TOKEN`/`JARVIS_TELEGRAM_ALLOWED_CHAT_ID` gesetzt sind - verzögerter Import, `python-telegram-bot` bleibt optional.
+- `_RuntimeSpeech` (fail-closed, ADR-025) gilt automatisch auch für Telegram-Nachrichten - kein eigener Speech-Adapter in `telegram_channel.py` nötig.
+- `core/*`, `commands/*`, `executor/*`, `memory/*`, `telegram_main.py`, `main.py`, `requirements.txt` unverändert (per `git diff --stat` verifiziert).
+
+**Weiterhin nicht enthalten:** Jarvis-Eigenstart (Windows-Autostart) selbst, Tray, eigenes UI, Wake-Word, abstraktes Channel-Interface (kein Verhaltenswert bei zwei strukturell verschiedenen Kanälen), Runtime v3.
+
+Details, Begründung und Alternativen: `docs/adr/ADR-027.md`.
+
 ## Tests
 Letzter Check am 2026-07-02: `pytest tests -v` mit zusätzlichem `PYTHONPATH`.
 
 ### Test Status
-`249 / 249` bestanden
+`264 / 264` bestanden
 
 ### Known Failure
 Keiner aktuell.
@@ -76,8 +94,8 @@ Keiner aktuell.
 - `.git_broken_5/` (Reste eines frühen, abgebrochenen git-init-Versuchs) liegt noch im Arbeitsordner, per `.gitignore` ausgeschlossen - bewusst nicht gelöscht (keine destruktive Aktion ohne Rückfrage).
 
 ### Feature-TODOs (nächste Roadmap-Bausteine, NICHT jetzt umsetzen)
-- Runtime v2 (Telegram-Kanal, abstraktes Channel-Interface) - bewusst vertagt, siehe Abschnitt "Single-Instance-Schutz implementiert" oben. Kein Code, keine Umsetzung.
-- Jarvis-Eigenstart (Windows-Autostart) aufbauend auf `jarvis_runtime.py` - wartet weiterhin auf Runtime v2. Kein Code, keine Umsetzung.
+- Jarvis-Eigenstart (Windows-Autostart, HKCU Run-Key, `enable_/disable_jarvis_autostart`-Intents) aufbauend auf `jarvis_runtime.py` + `telegram_channel.py` - siehe Abschnitt "Runtime v2 implementiert" oben. Kein Code, keine Umsetzung.
+- Abstraktes Channel-Interface - weiterhin zurückgestellt (kein Verhaltenswert bei zwei strukturell verschiedenen Kanälen), erst bei einem dritten echten Kanal erneut prüfen.
 - UI, Tray, Wake-Word - erst bei Bedarf (YAGNI), kein Code, keine Umsetzung.
 
 Vollständige, aktuelle Liste jetzt im Handbook (Kap. 13 Roadmap, Kap. 29 Backlog) - hier nur technische Detail-Notizen, die (noch) keinen eigenen Handbook-Backlog-Eintrag brauchen:
@@ -90,10 +108,10 @@ Vollständige, aktuelle Liste jetzt im Handbook (Kap. 13 Roadmap, Kap. 29 Backlo
 Im Code wurden keine `TODO`-/`FIXME`-Marker gefunden.
 
 ## Latest ADR
-`ADR-026 - Single-Instance-Schutz für memory_data/ (Lock-Datei, PID/Entry-Point/Zeitstempel, offenes Datei-Handle)`
+`ADR-027 - Runtime v2 - TelegramChannel als erster echter Runtime-Kanal`
 
 ## Latest Architecture Change
-Neue Datei `core/single_instance.py`: `SingleInstanceLock` schützt ein `memory_dir` vor gleichzeitigem Zugriff mehrerer Jarvis-Prozesse - Lock-Datei `jarvis.lock` mit PID/Einstiegspunkt/Zeitstempel, atomar erzeugt (`os.open(O_CREAT|O_EXCL)`), zusätzlich per `msvcrt.locking()` auf einem offen gehaltenen Datei-Handle gesperrt (Windows gibt es beim Absturz automatisch frei). Verwaiste Lock-Dateien werden vor jedem Erwerb automatisch erkannt (PID-Lebendigkeit + Cmdline-Abgleich gegen PID-Wiederverwendung) und entfernt. `main.py`, `telegram_main.py`, `jarvis_runtime.py` erwerben den Lock jetzt als allererste Aktion in `main()` - die ersten Änderungen an `main.py`/`telegram_main.py` seit deren jeweiliger Einführung. Details: ADR-026.
+Neue Datei `telegram_channel.py`: `TelegramChannel` bindet Telegram als ersten echten Runtime-Kanal ein, läuft gleichzeitig mit `ConsoleDummyChannel` in einem eigenen Thread. Importiert die bestehende Telegram-Sicherheitslogik (`ALLOWED_INTENTS`/`filter_plan`/`rejection_reason`/`is_authorized`) unverändert aus `telegram_main.py` statt sie zu duplizieren. `JarvisRuntime.submit()`/`_process()` (`jarvis_runtime.py`) haben dafür einen optionalen, generischen `plan_filter`-Parameter bekommen (Default `None`, rückwärtskompatibel) - `JarvisRuntime` bleibt dadurch telegram-unwissend. Eine Asyncio-Brücke (`asyncio.run_coroutine_threadsafe()`) verbindet den synchronen Runtime-Worker-Thread mit `python-telegram-bot`s eigenem Event-Loop - einzige Stelle im Projekt mit dieser Brücke. Details: ADR-027.
 
 ## Known Limitations
 - Langzeitgedächtnis funktioniert nur auf Zuruf; keine automatische Fakten-Extraktion.
@@ -103,8 +121,9 @@ Neue Datei `core/single_instance.py`: `SingleInstanceLock` schützt ein `memory_
 - `read_excel`/`analyze_report`/`calculate_kpi`: nur `.xlsx`/`.xlsm`, nur Werte, 500 Zeilen/Blatt.
 - `telegram_main.py`: nur vier Intents erreichbar, kein gleichzeitiger Betrieb mit der Konsole, `TelegramSpeech.listen()` fail-closed (ADR-018).
 - `analyze_pc`/`analyze_event_log`/`disable_/enable_autostart_entry`/`analyze_/clean_temp_files`: alle Windows-exklusiv, jeweiliger Scope siehe Handbook Kap. 17 (Umsetzungsstand-Annotationen).
-- `jarvis_runtime.py` (v1, ADR-025): rein internes Gerüst - nur `ConsoleDummyChannel`, kein UI/Tray/Wake-Word/Telegram, kein Windows-Autostart, kein abstraktes Channel-Interface. Für unbeaufsichtigten Autostart in dieser Form ungeeignet (`ConsoleDummyChannel` blockiert auf `input()`).
+- `jarvis_runtime.py` (ADR-024/025/026/027): kein UI/Tray/Wake-Word, kein Windows-Autostart, kein abstraktes Channel-Interface. `ConsoleDummyChannel` bleibt für unbeaufsichtigten Betrieb ungeeignet (blockiert auf `input()`) - Telegram (`telegram_channel.py`) ist der erste Kanal ohne diese Einschränkung.
 - Single-Instance-Schutz (ADR-026) schützt nur vor gleichzeitigem *Prozessstart* gegen dasselbe `memory_dir` - kein Schutz gegen externes Löschen der Lock-Datei durch Dritte (Virenscanner, manuelles Löschen), während eine Instanz noch läuft (bekanntes, akzeptiertes Restrisiko).
+- `telegram_main.py` (eigenständig) und `TelegramChannel` (über die Runtime) dürfen nicht gleichzeitig mit demselben Bot-Token laufen - Telegram erlaubt pro Bot nur eine aktive Long-Polling-Verbindung. Der Single-Instance-Schutz verhindert das im Normalfall bereits indirekt (gleiches `memory_dir`), ist aber kein expliziter Schutz für dieses Szenario.
 
 ## Git
-Initial-Commit getaggt als `v0.4`. Danach Handbook v3.3/ADR-013, Excel-Lesen (ADR-014), Tabellen-Auswertung (ADR-015), Power-BI-Scope-Entscheidung, KPI (ADR-016), v0.5-Abschluss, getaggt als `v0.5`. Danach Handbook v3.4/ADR-017, Telegram-Fernzugriff (ADR-018), getaggt als `v0.6`, danach Handbook v3.5/ADR-019 inkl. Kap.-2-Konsistenzkorrektur. Danach `48f0f83` (PC-Analyse, ADR-020), `5f330fb` (Ereignisprotokoll-Analyse, ADR-021), `efe067f` (PROJECT_STATE-Korrektur), `b108c06` (Autostart-Verwaltung, ADR-022), `a765c9d` (Temp-Bereinigung, ADR-023), `920e32c` (v0.7-Abschlussdokumentation), `a7eb86d` (Handbook v3.6, Entwicklungsprozess-Konsolidierung) - getaggt als `v0.7`. Danach `95e5af9` (Jarvis-Runtime v1, ADR-025) - noch ungetaggt (kein eigener Versionsblock). Single-Instance-Schutz (ADR-026) noch nicht committed. Frühere Versionen (v0.1-v0.3) existieren nur als Text in `docs/CHANGELOG.md`/`docs/logbook.md`.
+Initial-Commit getaggt als `v0.4`. Danach Handbook v3.3/ADR-013, Excel-Lesen (ADR-014), Tabellen-Auswertung (ADR-015), Power-BI-Scope-Entscheidung, KPI (ADR-016), v0.5-Abschluss, getaggt als `v0.5`. Danach Handbook v3.4/ADR-017, Telegram-Fernzugriff (ADR-018), getaggt als `v0.6`, danach Handbook v3.5/ADR-019 inkl. Kap.-2-Konsistenzkorrektur. Danach `48f0f83` (PC-Analyse, ADR-020), `5f330fb` (Ereignisprotokoll-Analyse, ADR-021), `efe067f` (PROJECT_STATE-Korrektur), `b108c06` (Autostart-Verwaltung, ADR-022), `a765c9d` (Temp-Bereinigung, ADR-023), `920e32c` (v0.7-Abschlussdokumentation), `a7eb86d` (Handbook v3.6, Entwicklungsprozess-Konsolidierung) - getaggt als `v0.7`. Danach `95e5af9` (Jarvis-Runtime v1, ADR-025), `987ed0b` (Single-Instance-Schutz, ADR-026), `3b05a95` (ADR-027-Dokumentation) - alle noch ungetaggt (kein eigener Versionsblock). Runtime v2/TelegramChannel-Implementierung (ADR-027) noch nicht committed. Frühere Versionen (v0.1-v0.3) existieren nur als Text in `docs/CHANGELOG.md`/`docs/logbook.md`.

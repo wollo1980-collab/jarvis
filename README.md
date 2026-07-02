@@ -58,7 +58,8 @@ jarvis/
 ├── CHANGELOG.md                        # Verweis auf docs/CHANGELOG.md
 ├── main.py                                 # verdrahtet die Pipeline (Konsole)
 ├── telegram_main.py                          # separater Einstiegspunkt (Telegram, ADR-018)
-└── jarvis_runtime.py                           # koordinierender Runtime-Einstiegspunkt v1 (ADR-025)
+├── jarvis_runtime.py                           # koordinierender Runtime-Einstiegspunkt (ADR-024/025/026/027)
+└── telegram_channel.py                           # zweiter Runtime-Kanal - Telegram über die Runtime (ADR-027)
 ```
 
 ## Setup
@@ -452,13 +453,12 @@ Ordner) werden gelöscht, Pfad-Eindämmung gegen Ziele außerhalb von
 Browser-Cache/-Profile, Registry-Cleaner, Dienste, Treiber. Siehe
 ADR-023.
 
-## Jarvis-Runtime v1 (ADR-024/ADR-025)
+## Jarvis-Runtime (ADR-024/025/026/027)
 
 Dritter, koordinierender Einstiegspunkt neben `main.py` (Konsole) und
 `telegram_main.py` (Telegram) - **Koexistenz, keine Ablösung**: beide
 bleiben unverändert bestehen. `jarvis_runtime.py` ist die Grundlage
-für eine künftige Mehrkanal-Architektur (UI, Tray, Wake-Word), aber
-v1 enthält bewusst nur das minimale Gerüst dafür.
+für eine künftige Mehrkanal-Architektur (UI, Tray, Wake-Word).
 
 ```bash
 python jarvis_runtime.py
@@ -479,19 +479,60 @@ echte Nebenläufigkeits-Absicherung in `JsonMemoryStore`/`Executor`
 nötig - Product-Owner-Entscheidung, KISS). Der Worker fängt Fehler pro
 Nachricht ab und läuft weiter, statt still zu sterben.
 
-**`ConsoleDummyChannel`** ist der einzige Kanal in v1 - liest
-interaktiv von der Konsole, beweist nur, dass das Runtime-Gerüst
-funktioniert. Kein Produktivkanal.
+**`ConsoleDummyChannel`** (Runtime v1, ADR-025) - liest interaktiv von
+der Konsole, beweist nur, dass das Runtime-Gerüst funktioniert. Kein
+Produktivkanal.
 
 **Fail-closed Sicherheitsstufe 2/3:** Der geteilte Executor bekommt
 einen fail-closed Speech-Adapter (`_RuntimeSpeech`, gleiches Prinzip
 wie `TelegramSpeech`, ADR-018, bewusst dupliziert statt importiert) -
 Commands, die eine Bestätigung anfordern, werden über die Runtime
-sicher abgelehnt statt eine Bestätigung zu erfinden.
+sicher abgelehnt statt eine Bestätigung zu erfinden. Gilt automatisch
+für **jeden** Kanal, auch für Telegram (siehe unten).
 
-**Bewusst nicht enthalten (v1):** UI, Tray, Wake-Word,
-Telegram-Integration in die Runtime, Windows-Autostart, abstraktes
-Channel-Interface (erst beim zweiten echten Kanal). Siehe ADR-024/025.
+**Bewusst nicht enthalten:** UI, Tray, Wake-Word, Windows-Autostart,
+abstraktes Channel-Interface (kein Verhaltenswert bei zwei strukturell
+verschiedenen Kanälen, siehe ADR-027).
+
+### TelegramChannel - zweiter Runtime-Kanal (Runtime v2, ADR-027)
+
+`telegram_channel.py` bindet Telegram als **ersten echten** Runtime-
+Kanal ein - `ConsoleDummyChannel` bleibt zusätzlich aktiv, beide laufen
+gleichzeitig. `jarvis_runtime.py` startet `TelegramChannel` automatisch
+in einem eigenen Thread, sobald dieselben Umgebungsvariablen wie bei
+`telegram_main.py` gesetzt sind:
+
+```bash
+export JARVIS_TELEGRAM_BOT_TOKEN="..."
+export JARVIS_TELEGRAM_ALLOWED_CHAT_ID="..."
+python jarvis_runtime.py
+```
+
+Sind die Variablen nicht gesetzt (oder `python-telegram-bot` nicht
+installiert), verhält sich `jarvis_runtime.py` unverändert wie Runtime
+v1 - nur `ConsoleDummyChannel`, kein Fehler.
+
+**Sicherheitslogik wiederverwendet, nicht dupliziert:** `telegram_channel.py`
+importiert `ALLOWED_INTENTS`/`filter_plan`/`rejection_reason`/
+`is_authorized` unverändert aus `telegram_main.py` - derselbe
+Sicherheitsstand wie Telegram Phase 1 (ADR-018), nur über die Runtime
+statt einer eigenen Core-Stack-Instanz. `JarvisRuntime.submit()` hat
+dafür einen optionalen `plan_filter`-Parameter bekommen (Default `None`,
+vollständig rückwärtskompatibel zu `ConsoleDummyChannel`) - `JarvisRuntime`
+selbst kennt die Whitelist nicht, nur die generische Erweiterungsstelle.
+
+**Asyncio-Brücke:** `python-telegram-bot` ist strukturell asynchron
+(eigener Event-Loop), die Runtime bleibt synchron/Thread-basiert
+(ADR-024). Nur `telegram_channel.py` überbrückt beide Modelle über
+`asyncio.run_coroutine_threadsafe()` - die einzige Stelle im Projekt,
+die das tut.
+
+**Zwei Wege, Telegram zu nutzen:** `telegram_main.py` (eigenständig,
+Phase 1) und `TelegramChannel` (über die Runtime) können beide denselben
+Bot-Token verwenden, aber **nicht gleichzeitig** - Telegram erlaubt pro
+Bot nur eine aktive Long-Polling-Verbindung. Der Single-Instance-Schutz
+(unten) verhindert das im Normalfall bereits indirekt (gleiches
+`memory_dir`).
 
 ## Single-Instance-Schutz (ADR-026)
 

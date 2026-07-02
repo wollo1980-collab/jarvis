@@ -1,5 +1,51 @@
 # Changelog
 
+## Runtime v2 - TelegramChannel (ADR-027, 02.07.2026)
+
+Zweiter, echter Runtime-Kanal neben `ConsoleDummyChannel` - Telegram
+über die Runtime, ohne `main.py`/`telegram_main.py` zu verändern. Löst
+die in der Runtime-v1-Bewertung festgestellte Lücke (einziger Kanal
+blockierte auf `input()`, für unbeaufsichtigten Betrieb ungeeignet).
+
+### Neu
+- `telegram_channel.py`: `TelegramChannel` - einzige Stelle im
+  Runtime-Umfeld mit `python-telegram-bot`/Asyncio-Code, vollständig von
+  `jarvis_runtime.py` getrennt.
+- Sicherheitslogik wiederverwendet statt dupliziert: `ALLOWED_INTENTS`,
+  `filter_plan`, `rejection_reason`, `is_authorized` werden unverändert
+  aus `telegram_main.py` importiert - derselbe Sicherheitsstand wie
+  Telegram Phase 1 (ADR-018).
+- `JarvisRuntime.submit()`/`_process()` bekommen einen optionalen
+  `plan_filter`-Parameter (Default `None`, vollständig rückwärtskompatibel) -
+  `JarvisRuntime` selbst bleibt telegram-unwissend, nur eine generische
+  Erweiterungsstelle ist neu. Bei Ablehnung: kein Executor-Aufruf, keine
+  History-Schreibung (exakte Parität zu `JarvisBridge.handle_message`).
+- Asyncio-Brücke (`asyncio.get_running_loop()` +
+  `asyncio.run_coroutine_threadsafe()`) zwischen dem synchronen
+  Runtime-Worker-Thread und `python-telegram-bot`s eigenem Event-Loop -
+  explizit dokumentiert (ADR-027), einzige Stelle im Projekt mit dieser
+  Brücke.
+- `jarvis_runtime.py::main()` startet `TelegramChannel` automatisch in
+  einem eigenen Thread, sobald `JARVIS_TELEGRAM_BOT_TOKEN`/
+  `JARVIS_TELEGRAM_ALLOWED_CHAT_ID` gesetzt sind (verzögerter Import -
+  `python-telegram-bot` bleibt optional, `ConsoleDummyChannel` läuft
+  weiterhin ohne PTB-Installation).
+- 15 neue Tests (`tests/test_jarvis_runtime.py`: 4 neue für `plan_filter`,
+  1 bestehender Test angepasst; `tests/test_telegram_channel.py`: 11 neu,
+  u. a. echter Cross-Thread-Asyncio-Bridge-Test, Sicherheitsstufe-
+  Rejection-Test, `stop_signals=None`-Regressionstest gegen einen
+  bekannten PTB-Absturz außerhalb des Hauptthreads, Identitätstest gegen
+  künftiges versehentliches Duplizieren der Sicherheitslogik) - 264
+  Tests gesamt, alle grün.
+
+### Bewusst nicht enthalten
+Windows-Autostart (Jarvis-Eigenstart bleibt eigener, späterer Schritt),
+Tray, eigenes UI, Wake-Word, abstraktes Channel-Interface (kein
+Verhaltenswert bei zwei strukturell verschiedenen Kanälen), Runtime v3.
+
+### Siehe auch
+`docs/adr/ADR-027.md`.
+
 ## Single-Instance-Schutz (ADR-026, 02.07.2026)
 
 Eigenständiger Infrastruktur-Baustein, unabhängig von Kanälen/UI/

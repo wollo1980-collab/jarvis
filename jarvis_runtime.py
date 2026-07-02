@@ -1,28 +1,35 @@
 """
-Jarvis-Runtime v1 (ADR-025) - minimales Gerüst für einen künftig
-mehrkanaligen, dauerhaft laufenden Einstiegspunkt. main.py und
-telegram_main.py bleiben unverändert und eigenständig (Koexistenz
-statt Ablösung, ADR-024) - diese Runtime ersetzt sie nicht.
+Jarvis-Runtime (ADR-024/025/026/027) - koordinierender, künftig
+dauerhaft laufender Einstiegspunkt für mehrere gleichzeitige Kanäle.
+main.py und telegram_main.py bleiben unverändert und eigenständig
+(Koexistenz statt Ablösung, ADR-024) - diese Runtime ersetzt sie nicht.
 
-v1 enthält bewusst nur:
+Enthält:
 - Core-Stack einmalig instanziiert (gleiche Verdrahtung wie main.py)
 - queue.Queue + ein einzelner Worker-Thread, serialisierte Verarbeitung
-  (kein asyncio, siehe ADR-024/025)
+  (kein asyncio in der Runtime selbst, siehe ADR-024/025)
 - Fail-closed Speech-Adapter für den geteilten Executor (Sicherheitsstufe
   2/3 bleibt gesperrt, gleiches Prinzip wie TelegramSpeech in
   telegram_main.py, ADR-018) - dupliziert statt importiert, um keine
-  Abhängigkeit von python-telegram-bot in der Runtime zu erzeugen.
-- Ein einziger, minimaler Kanal: ConsoleDummyChannel - beweist nur, dass
-  das Gerüst funktioniert, kein Produktivkanal.
+  Abhängigkeit von python-telegram-bot in dieser Datei zu erzeugen.
+- Single-Instance-Schutz (ADR-026) - verhindert gleichzeitigen Betrieb
+  mehrerer Jarvis-Prozesse gegen dasselbe memory_dir.
+- ConsoleDummyChannel - erster, minimaler Kanal (ADR-025), kein
+  Produktivkanal.
+- Optionaler zweiter Kanal, TelegramChannel (telegram_channel.py,
+  ADR-027) - wird nur gestartet, wenn die bekannten Umgebungsvariablen
+  gesetzt UND python-telegram-bot installiert ist (verzögerter Import,
+  keine Pflichtabhängigkeit für diese Datei).
 
-Bewusst NICHT enthalten (ADR-024/025): UI, Tray, Wake-Word, Telegram-
-Integration, Autostart, abstraktes Channel-Interface (erst beim zweiten
-echten Kanal), echte Nebenläufigkeits-Absicherung in Memory (nicht
-nötig, da die Queue serialisiert).
+Bewusst NICHT enthalten: UI, Tray, Wake-Word, Autostart, abstraktes
+Channel-Interface (kein Verhaltenswert bei zwei strukturell
+verschiedenen Kanälen, ADR-027), echte Nebenläufigkeits-Absicherung in
+Memory (nicht nötig, da die Queue serialisiert).
 """
 from __future__ import annotations
 
 import logging
+import os
 import queue
 import threading
 from datetime import date
@@ -33,7 +40,7 @@ import commands.monitor as monitor_commands
 import commands.reports as reports_commands
 from core.ai import AIEngine
 from core.config import Config
-from core.models import Message
+from core.models import Message, Plan
 from core.planner import Planner
 from core.single_instance import InstanceAlreadyRunningError, SingleInstanceLock
 from executor.executor import Executor
@@ -107,11 +114,24 @@ class JarvisRuntime:
             self._worker.join()
         logger.info("Jarvis-Runtime gestoppt.")
 
-    def submit(self, text: str, reply_callback: Callable[[str], None]) -> None:
+    def submit(
+        self,
+        text: str,
+        reply_callback: Callable[[str], None],
+        plan_filter: Optional[Callable[[list[Plan]], tuple[list[Plan], Optional[str]]]] = None,
+    ) -> None:
         """Von einem Kanal aufgerufen: legt eine Nachricht in die Queue.
         Blockiert den Aufrufer nicht - die Verarbeitung passiert
-        asynchron im Worker-Thread."""
-        self._queue.put((text, reply_callback))
+        asynchron im Worker-Thread.
+
+        plan_filter (optional, ADR-027): wird nach dem Planen auf die
+        berechneten Schritte angewendet, bevor der Executor sie sieht -
+        liefert (erlaubte_schritte, Ablehnungsgrund). Damit kann ein
+        Kanal (z. B. Telegram) eine eigene Whitelist durchsetzen, ohne
+        dass JarvisRuntime selbst irgendetwas ueber diese Whitelist
+        wissen muss. Ohne plan_filter (Default) verhaelt sich submit()
+        exakt wie in Runtime v1."""
+        self._queue.put((text, reply_callback, plan_filter))
 
     def _run_worker(self) -> None:
         while True:
@@ -119,9 +139,9 @@ class JarvisRuntime:
             if item is _STOP:
                 self._queue.task_done()
                 break
-            text, reply_callback = item
+            text, reply_callback, plan_filter = item
             try:
-                self._process(text, reply_callback)
+                self._process(text, reply_callback, plan_filter)
             except Exception:
                 # Der Worker darf bei Fehlern nicht still sterben - loggen
                 # und mit der naechsten Nachricht weitermachen.
@@ -129,9 +149,29 @@ class JarvisRuntime:
             finally:
                 self._queue.task_done()
 
-    def _process(self, text: str, reply_callback: Callable[[str], None]) -> None:
+    def _process(
+        self,
+        text: str,
+        reply_callback: Callable[[str], None],
+        plan_filter: Optional[Callable[[list[Plan]], tuple[list[Plan], Optional[str]]]] = None,
+    ) -> None:
         history = self.memory.get_history(limit=20)
         steps = self.planner.plan(text, history)
+
+        if plan_filter is not None:
+            steps, rejection = plan_filter(steps)
+            if rejection:
+                # Abgelehnt: Executor wird nicht aufgerufen, keine
+                # History-Schreibung - exakt wie telegram_main.py's
+                # JarvisBridge.handle_message() bei einer Ablehnung.
+                try:
+                    reply_callback(rejection)
+                except Exception:
+                    logger.exception(
+                        "reply_callback fehlgeschlagen fuer abgelehnte Anfrage: %r", text
+                    )
+                return
+
         long_term_summary = self.long_term.summary_text()
         report = self.executor.run(steps, history, long_term_summary)
         response_text = "\n".join(report.summary_lines()) or "Alles klar."
@@ -188,6 +228,47 @@ def setup_logging(config: Config) -> None:
     )
 
 
+# Dieselben Umgebungsvariablen wie telegram_main.py (ADR-018) - Werte
+# hier als eigene Literale gehalten statt aus telegram_main importiert,
+# damit jarvis_runtime.py ohne python-telegram-bot importierbar bleibt
+# (der Import von TelegramChannel/telegram_main erfolgt nur verzögert,
+# innerhalb von _start_telegram_channel(), ADR-027).
+TELEGRAM_BOT_TOKEN_ENV = "JARVIS_TELEGRAM_BOT_TOKEN"
+TELEGRAM_ALLOWED_CHAT_ID_ENV = "JARVIS_TELEGRAM_ALLOWED_CHAT_ID"
+
+
+def _start_telegram_channel(runtime: JarvisRuntime):
+    """Startet TelegramChannel (ADR-027) in einem eigenen Thread, falls
+    die bekannten Umgebungsvariablen gesetzt UND python-telegram-bot
+    installiert ist - liefert (channel, thread) oder None. Ohne
+    Telegram-Konfiguration verhält sich main() exakt wie in Runtime v1
+    (nur ConsoleDummyChannel)."""
+    bot_token = os.environ.get(TELEGRAM_BOT_TOKEN_ENV)
+    allowed_chat_id = os.environ.get(TELEGRAM_ALLOWED_CHAT_ID_ENV)
+    if not bot_token or not allowed_chat_id:
+        logger.info(
+            "Kein Telegram-Kanal gestartet - %s/%s nicht gesetzt.",
+            TELEGRAM_BOT_TOKEN_ENV,
+            TELEGRAM_ALLOWED_CHAT_ID_ENV,
+        )
+        return None
+
+    try:
+        from telegram_channel import TelegramChannel
+    except ImportError:
+        logger.warning(
+            "Telegram-Umgebungsvariablen gesetzt, aber python-telegram-bot "
+            "ist nicht installiert - Telegram-Kanal wird uebersprungen."
+        )
+        return None
+
+    channel = TelegramChannel(runtime, bot_token, allowed_chat_id)
+    thread = threading.Thread(target=channel.run, name="jarvis-runtime-telegram", daemon=True)
+    thread.start()
+    logger.info("TelegramChannel gestartet (eigener Thread, Runtime v2).")
+    return channel, thread
+
+
 def main() -> None:
     config = Config.load()
     setup_logging(config)
@@ -208,10 +289,16 @@ def main() -> None:
         runtime = JarvisRuntime(config)
         runtime.start()
 
+        telegram = _start_telegram_channel(runtime)
+
         channel = ConsoleDummyChannel(runtime)
         try:
             channel.run()
         finally:
+            if telegram is not None:
+                telegram_channel_obj, telegram_thread = telegram
+                telegram_channel_obj.stop()
+                telegram_thread.join(timeout=5.0)
             runtime.stop()
     finally:
         lock.release()

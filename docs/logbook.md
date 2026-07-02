@@ -1,5 +1,80 @@
 # Logbook
 
+## 2026-07-02 - Runtime v2 implementiert: TelegramChannel (ADR-027)
+
+**Kontext:** Nach Commit des Single-Instance-Schutzes (`987ed0b`, ADR-026)
+wurde ein Architekturvorschlag fuer "Jarvis-Eigenstart / Runtime v2"
+angefordert. Ergebnis: Runtime v1 ist fuer unbeaufsichtigten Betrieb
+ungeeignet (`ConsoleDummyChannel` blockiert auf `input()`) - Runtime v2
+sollte deshalb genau einen echten, konsolenfreien Kanal hinzufuegen.
+Wolfgang klaerte per Rueckfrage, ob Telegram direkt Teil von Runtime v2
+sein muss oder ob zunaechst nur ein "Framework" ohne Kanal sinnvoll waere -
+Antwort: nein, ein telegramloser Zwischenschritt haette nichts Neues zu
+beweisen (Mehrkanal-Faehigkeit war bereits durch Runtime v1 bewiesen).
+Architekturvorschlag als Richtung freigegeben, danach **ADR-027**
+geschrieben und committed (`3b05a95`), danach ein vollstaendiger,
+Product-Owner-geprueft er Implementierungsplan erarbeitet (7-Schritte-
+Reihenfolge, Test-/Regressions-/Fehlerfall-Liste, kritische Pruefung
+gegen Handbook/KISS/YAGNI).
+
+**Wichtige Zwischenfrage vor der Freigabe:** Wolfgang fragte, ob
+`jarvis_runtime.py` komplett unveraendert bleiben koennte, indem
+`TelegramChannel` `filter_plan()` selbst anwendet und dann unveraendertes
+`submit(text, reply_callback)` aufruft. Antwort: technisch moeglich, aber
+sicherheitsrelevant riskant (TOCTOU) - eine zweite, unabhaengige
+Planungs-Berechnung im Worker (`_process()` plant ohnehin erneut) koennte
+wegen KI-Nichtdeterminismus oder echter Nebenlaeufigkeit (History aendert
+sich zwischen Vorab-Check und tatsaechlicher Verarbeitung) einen anderen
+Plan liefern als den geprueften - eine bestaetigungsfreie, aber nicht
+erlaubte Anfrage koennte so ungeprueft durchrutschen. Deshalb blieb es bei
+der im Plan vorgesehenen `plan_filter`-Erweiterung von `submit()`/
+`_process()`, die Check und Ausfuehrung auf demselben, einmal berechneten
+Plan haelt.
+
+**Umsetzung (exakt nach Plan, 7 Schritte):**
+1. `jarvis_runtime.py`: `submit()`/`_process()`/`_run_worker()` um
+   optionalen `plan_filter`-Parameter erweitert (Default `None`, voll
+   rueckwaertskompatibel) - bei Ablehnung kein Executor-Aufruf, keine
+   History-Schreibung (Paritaet zu `telegram_main.py::JarvisBridge`).
+2. Ein bestehender Test angepasst (`test_worker_does_not_die_on_unexpected_exception`
+   - Mock-Signatur um `plan_filter` ergaenzt), 4 neue Tests fuer
+   `plan_filter` in `tests/test_jarvis_runtime.py`.
+3. Testsuite isoliert gruen (15/15 in `test_jarvis_runtime.py`), bevor
+   ueberhaupt Telegram-Code entstand - trennt das hoehere Regressionsrisiko
+   der Kernklassen-Aenderung vom Telegram-spezifischen Risiko.
+4. `telegram_channel.py` neu angelegt: `TelegramChannel`, `_on_message`-
+   Handler, Import von `ALLOWED_INTENTS`/`filter_plan`/`rejection_reason`/
+   `is_authorized` unveraendert aus `telegram_main.py` (keine Duplizierung).
+   Asyncio-Bruecke: `asyncio.get_running_loop()` beim Erfassen des PTB-Loops,
+   `asyncio.run_coroutine_threadsafe()` fuer die Antwort aus dem
+   Runtime-Worker-Thread. `run_polling(stop_signals=None)` - vermeidet einen
+   bekannten PTB-Absturz bei Signal-Handler-Installation ausserhalb des
+   Hauptthreads (dieser Kanal laeuft in einem eigenen Thread).
+5. `tests/test_telegram_channel.py` neu angelegt (11 Tests).
+6. `jarvis_runtime.py::main()` erweitert: startet `TelegramChannel`
+   automatisch in einem eigenen Thread, sobald `JARVIS_TELEGRAM_BOT_TOKEN`/
+   `JARVIS_TELEGRAM_ALLOWED_CHAT_ID` gesetzt sind - verzoegerter Import
+   (`python-telegram-bot` bleibt optional, `ConsoleDummyChannel` funktioniert
+   weiterhin ohne PTB-Installation). Manuell geprueft: ohne Env-Vars liefert
+   `_start_telegram_channel()` sauber `None`.
+7. Volle Testsuite: 264/264 gruen. `git diff --stat` gegen `core/*`,
+   `commands/*`, `executor/*`, `memory/*`, `telegram_main.py`, `main.py`,
+   `requirements.txt`, `docs/*` geprueft - leer, wie vorgegeben.
+
+**Sicherheitsschicht unveraendert:** `_RuntimeSpeech` (fail-closed, ADR-025)
+gilt automatisch auch fuer Telegram-Nachrichten, da `TelegramChannel` nur
+den bereits bestehenden, geteilten Executor ueber `runtime.submit()`
+erreicht - kein eigener `TelegramSpeech`-Adapter noetig, anders als bei
+`telegram_main.py`.
+
+**Doku:** README (Abschnitt "Jarvis-Runtime" umbenannt/erweitert, neuer
+Unterabschnitt "TelegramChannel - zweiter Runtime-Kanal", Struktur-Baum),
+`docs/CHANGELOG.md`, dieses Logbook, `docs/PROJECT_STATE.md` aktualisiert.
+
+Kein Tag gesetzt. Jarvis-Eigenstart (Windows-Autostart), Tray, eigenes
+UI, Wake-Word und Runtime v3 bleiben weiterhin eigene, spaetere
+Entscheidungen.
+
 ## 2026-07-02 - Single-Instance-Schutz implementiert (ADR-026)
 
 **Kontext:** Nach Abschluss und Commit von Runtime v1 (`95e5af9`) hat

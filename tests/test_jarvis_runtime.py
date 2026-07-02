@@ -70,6 +70,107 @@ def test_submit_and_process_single_message(tmp_path):
         runtime.stop()
 
 
+def test_submit_without_plan_filter_is_unchanged(tmp_path):
+    """Regressionsanker (ADR-027): der bisherige 2-Arg-Aufruf verhaelt
+    sich exakt wie in Runtime v1 - plan_filter ist optional."""
+    config = _make_config(tmp_path)
+    runtime = JarvisRuntime(config, ai=FakeAI())
+    runtime.start()
+    try:
+        done = threading.Event()
+        replies = []
+
+        def reply_callback(text):
+            replies.append(text)
+            done.set()
+
+        runtime.submit("hallo", reply_callback)
+        _wait(done)
+
+        assert replies == ["Antwort auf: hallo"]
+    finally:
+        runtime.stop()
+
+
+def test_plan_filter_allows_plan_executes_normally(tmp_path):
+    config = _make_config(tmp_path)
+    runtime = JarvisRuntime(config, ai=FakeAI())
+    runtime.start()
+    try:
+        done = threading.Event()
+        replies = []
+
+        def reply_callback(text):
+            replies.append(text)
+            done.set()
+
+        def allow_all(steps):
+            return steps, None
+
+        runtime.submit("hallo", reply_callback, plan_filter=allow_all)
+        _wait(done)
+
+        assert replies == ["Antwort auf: hallo"]
+        history = runtime.memory.get_history()
+        assert [m.content for m in history] == ["hallo", "Antwort auf: hallo"]
+    finally:
+        runtime.stop()
+
+
+def test_plan_filter_rejects_plan_without_calling_executor(tmp_path):
+    """Sicherheitskritisch (ADR-027): eine Ablehnung darf den Executor
+    nicht erreichen - sonst waeren Sicherheitsstufe-2/3-unabhaengige
+    Einschraenkungen (z. B. eine Intent-Whitelist) wirkungslos."""
+    config = _make_config(tmp_path)
+    runtime = JarvisRuntime(config, ai=FakeAI())
+    runtime.executor.run = MagicMock(side_effect=AssertionError("Executor haette nicht laufen duerfen"))
+    runtime.start()
+    try:
+        done = threading.Event()
+        replies = []
+
+        def reply_callback(text):
+            replies.append(text)
+            done.set()
+
+        def reject_all(steps):
+            return [], "Anfrage abgelehnt: nicht erlaubt"
+
+        runtime.submit("hallo", reply_callback, plan_filter=reject_all)
+        _wait(done)
+
+        assert replies == ["Anfrage abgelehnt: nicht erlaubt"]
+        runtime.executor.run.assert_not_called()
+    finally:
+        runtime.stop()
+
+
+def test_plan_filter_rejection_does_not_write_history(tmp_path):
+    """Parität zu telegram_main.py::JarvisBridge.handle_message: eine
+    Ablehnung wird nicht ins Gespraechsgedaechtnis geschrieben."""
+    config = _make_config(tmp_path)
+    runtime = JarvisRuntime(config, ai=FakeAI())
+    runtime.start()
+    try:
+        done = threading.Event()
+        replies = []
+
+        def reply_callback(text):
+            replies.append(text)
+            done.set()
+
+        def reject_all(steps):
+            return [], "Anfrage abgelehnt: nicht erlaubt"
+
+        runtime.submit("hallo", reply_callback, plan_filter=reject_all)
+        _wait(done)
+
+        assert replies == ["Anfrage abgelehnt: nicht erlaubt"]
+        assert runtime.memory.get_history() == []
+    finally:
+        runtime.stop()
+
+
 def test_messages_processed_sequentially_in_order(tmp_path):
     config = _make_config(tmp_path)
     runtime = JarvisRuntime(config, ai=FakeAI())
@@ -176,11 +277,11 @@ def test_worker_does_not_die_on_unexpected_exception(tmp_path):
     original_process = runtime._process
     call_count = {"n": 0}
 
-    def flaky_process(text, reply_callback):
+    def flaky_process(text, reply_callback, plan_filter=None):
         call_count["n"] += 1
         if call_count["n"] == 1:
             raise RuntimeError("simulierter Absturz")
-        original_process(text, reply_callback)
+        original_process(text, reply_callback, plan_filter)
 
     runtime._process = flaky_process
     runtime.start()
