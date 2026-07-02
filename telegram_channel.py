@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 from typing import Optional
 
 from telegram import Update
@@ -52,12 +53,27 @@ class TelegramChannel:
         self.bot_token = bot_token
         self.allowed_chat_id = allowed_chat_id
         self._application: Optional[Application] = None
+        # Der PTB-Event-Loop laeuft in DIESEM Kanal-Thread (run_polling), nicht
+        # im Runtime-/Main-Thread, der stop() aufruft. _loop wird per
+        # _post_init() im Loop erfasst, _loop_ready signalisiert, dass er
+        # verfuegbar ist.
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
+        self._loop_ready = threading.Event()
+
+    async def _post_init(self, application: Application) -> None:
+        """Laeuft im PTB-Event-Loop-Thread nach der Initialisierung und vor
+        dem Polling. Erfasst den laufenden Loop, damit stop() den Shutdown
+        aus einem fremden Thread thread-/eventloop-konform einplanen kann."""
+        self._loop = asyncio.get_running_loop()
+        self._loop_ready.set()
 
     def run(self) -> None:
         """Blockierend - für den Aufruf in einem eigenen Thread gedacht
         (jarvis_runtime.py::main() startet diesen Kanal nicht im
         Hauptthread, der weiterhin ConsoleDummyChannel bedient)."""
-        self._application = Application.builder().token(self.bot_token).build()
+        self._application = (
+            Application.builder().token(self.bot_token).post_init(self._post_init).build()
+        )
         self._application.bot_data["channel"] = self
         self._application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _on_message))
 
@@ -69,8 +85,24 @@ class TelegramChannel:
         self._application.run_polling(stop_signals=None)
 
     def stop(self) -> None:
-        if self._application is not None:
-            self._application.stop_running()
+        """Wird aus dem Runtime-/Main-Thread aufgerufen. Application.stop_running()
+        MUSS im PTB-Event-Loop-Thread laufen - ein Direktaufruf aus einem
+        fremden Thread wirft `RuntimeError: no running event loop`. Deshalb den
+        Aufruf thread-sicher in den erfassten Loop einplanen (gleiche Bruecke
+        wie beim reply_callback, ADR-027)."""
+        app = self._application
+        if app is None:
+            return
+        # Kurz auf den Loop warten, falls stop() sehr frueh (vor _post_init)
+        # kommt - im Normalfall laengst gesetzt.
+        self._loop_ready.wait(timeout=5.0)
+        loop = self._loop
+        if loop is None:
+            logger.warning(
+                "TelegramChannel.stop(): Event-Loop nicht verfuegbar - Shutdown uebersprungen."
+            )
+            return
+        loop.call_soon_threadsafe(app.stop_running)
 
 
 async def _on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

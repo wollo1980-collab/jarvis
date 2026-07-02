@@ -223,7 +223,7 @@ def test_run_polling_called_with_stop_signals_none(mock_application_cls):
     Hauptthreads abstuerzt (dieser Kanal laeuft in einem eigenen
     Hintergrund-Thread neben ConsoleDummyChannel)."""
     mock_app = MagicMock()
-    mock_application_cls.builder.return_value.token.return_value.build.return_value = mock_app
+    mock_application_cls.builder.return_value.token.return_value.post_init.return_value.build.return_value = mock_app
 
     channel = TelegramChannel(runtime=MagicMock(), bot_token="TOKEN", allowed_chat_id="111")
     channel.run()
@@ -231,18 +231,59 @@ def test_run_polling_called_with_stop_signals_none(mock_application_cls):
     mock_app.run_polling.assert_called_once_with(stop_signals=None)
 
 
-@patch("telegram_channel.Application")
-def test_stop_requests_polling_shutdown(mock_application_cls):
+def _run_loop_in_thread():
+    loop = asyncio.new_event_loop()
+    t = threading.Thread(target=loop.run_forever, name="test-ptb-loop", daemon=True)
+    t.start()
+    return loop, t
+
+
+def _stop_loop(loop, t):
+    loop.call_soon_threadsafe(loop.stop)
+    t.join(timeout=2.0)
+    loop.close()
+
+
+def test_stop_from_foreign_thread_does_not_raise_runtime_error():
+    """Regression (Bugfix): stop() wird aus dem Runtime-/Main-Thread
+    aufgerufen, waehrend der PTB-Event-Loop in einem eigenen Thread laeuft.
+    Application.stop_running() MUSS im Loop-Thread laufen - ein Direktaufruf
+    aus dem fremden Thread wirft `RuntimeError: no running event loop`. Der
+    Fake unten reproduziert genau diese Bedingung (asyncio.get_running_loop()
+    im aktuellen Thread); der Fix plant stop_running() thread-sicher in den
+    Loop ein, sodass es im Loop-Thread laeuft und NICHT wirft."""
+    loop, loop_thread = _run_loop_in_thread()
+    called = threading.Event()
+    ran_in = {}
+
+    def fake_stop_running():
+        # wirft RuntimeError, falls NICHT innerhalb eines laufenden Loops
+        # aufgerufen - genau wie PTBs echtes Application.stop_running().
+        asyncio.get_running_loop()
+        ran_in["ident"] = threading.get_ident()
+        called.set()
+
     mock_app = MagicMock()
-    mock_application_cls.builder.return_value.token.return_value.build.return_value = mock_app
+    mock_app.stop_running.side_effect = fake_stop_running
 
-    channel = TelegramChannel(runtime=MagicMock(), bot_token="TOKEN", allowed_chat_id="111")
-    channel.run()
-    channel.stop()
+    try:
+        channel = TelegramChannel(runtime=MagicMock(), bot_token="TOKEN", allowed_chat_id="111")
+        channel._application = mock_app
+        channel._loop = loop
+        channel._loop_ready.set()
 
-    mock_app.stop_running.assert_called_once()
+        # Aufruf aus dem Haupt-Thread (fremd zum Loop) - darf nicht werfen:
+        channel.stop()
+
+        assert called.wait(timeout=2.0), "stop_running() wurde nicht im Loop ausgefuehrt"
+        mock_app.stop_running.assert_called_once()
+        # im Loop-Thread gelaufen, NICHT im aufrufenden (Haupt-)Thread:
+        assert ran_in["ident"] == loop_thread.ident
+        assert ran_in["ident"] != threading.get_ident()
+    finally:
+        _stop_loop(loop, loop_thread)
 
 
 def test_stop_without_run_is_a_no_op():
     channel = TelegramChannel(runtime=MagicMock(), bot_token="TOKEN", allowed_chat_id="111")
-    channel.stop()  # darf nicht werfen
+    channel.stop()  # darf nicht werfen (kein Application, kein Loop)
