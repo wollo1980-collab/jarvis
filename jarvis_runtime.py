@@ -1,5 +1,5 @@
 """
-Jarvis-Runtime (ADR-024/025/026/027) - koordinierender, künftig
+Jarvis-Runtime (ADR-024/025/026/027/028) - koordinierender, künftig
 dauerhaft laufender Einstiegspunkt für mehrere gleichzeitige Kanäle.
 main.py und telegram_main.py bleiben unverändert und eigenständig
 (Koexistenz statt Ablösung, ADR-024) - diese Runtime ersetzt sie nicht.
@@ -15,13 +15,22 @@ Enthält:
 - Single-Instance-Schutz (ADR-026) - verhindert gleichzeitigen Betrieb
   mehrerer Jarvis-Prozesse gegen dasselbe memory_dir.
 - ConsoleDummyChannel - erster, minimaler Kanal (ADR-025), kein
-  Produktivkanal.
+  Produktivkanal. Wird nur gestartet, wenn ein Konsolenfenster vorhanden
+  ist (sys.stdin is not None) - beim Jarvis-Eigenstart (ADR-028, über
+  pythonw.exe) fehlt das absichtlich, siehe main().
 - Optionaler zweiter Kanal, TelegramChannel (telegram_channel.py,
   ADR-027) - wird nur gestartet, wenn die bekannten Umgebungsvariablen
   gesetzt UND python-telegram-bot installiert ist (verzögerter Import,
   keine Pflichtabhängigkeit für diese Datei).
+- Jarvis-Eigenstart (ADR-028): registriert/entfernt sich selbst als
+  Windows-Autostart-Eintrag über die Commands `enable_/
+  disable_jarvis_autostart` (commands/monitor.py) - reine
+  Command-Erweiterung, keine Runtime-Architekturänderung. Einzige
+  Auswirkung hier: main()/setup_logging() prüfen einmal, ob ein
+  Konsolenfenster vorhanden ist, und starten ConsoleDummyChannel bzw.
+  den Konsolen-Log-Handler nur dann.
 
-Bewusst NICHT enthalten: UI, Tray, Wake-Word, Autostart, abstraktes
+Bewusst NICHT enthalten: UI, Tray, Wake-Word, abstraktes
 Channel-Interface (kein Verhaltenswert bei zwei strukturell
 verschiedenen Kanälen, ADR-027), echte Nebenläufigkeits-Absicherung in
 Memory (nicht nötig, da die Queue serialisiert).
@@ -31,6 +40,7 @@ from __future__ import annotations
 import logging
 import os
 import queue
+import sys
 import threading
 from datetime import date
 from typing import Callable, Optional
@@ -221,10 +231,17 @@ class ConsoleDummyChannel:
 
 def setup_logging(config: Config) -> None:
     log_file = config.log_dir / f"{date.today().isoformat()}-runtime.log"
+    handlers: list[logging.Handler] = [logging.FileHandler(log_file, encoding="utf-8")]
+    if sys.stderr is not None:
+        # Kein Konsolenfenster (z. B. Autostart ueber pythonw.exe,
+        # ADR-028) -> sys.stderr ist None, StreamHandler() wuerde beim
+        # ersten Log-Aufruf abstuerzen. FileHandler bleibt in jedem Fall
+        # aktiv, kein Log geht verloren.
+        handlers.append(logging.StreamHandler())
     logging.basicConfig(
         level=logging.DEBUG if config.debug else logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-        handlers=[logging.FileHandler(log_file, encoding="utf-8"), logging.StreamHandler()],
+        handlers=handlers,
     )
 
 
@@ -282,7 +299,8 @@ def main() -> None:
         lock.acquire()
     except InstanceAlreadyRunningError as e:
         logger.error("Start abgebrochen: %s", e)
-        print(f"Jarvis-Runtime konnte nicht gestartet werden: {e}")
+        if sys.stdout is not None:
+            print(f"Jarvis-Runtime konnte nicht gestartet werden: {e}")
         return
 
     try:
@@ -291,9 +309,21 @@ def main() -> None:
 
         telegram = _start_telegram_channel(runtime)
 
-        channel = ConsoleDummyChannel(runtime)
         try:
-            channel.run()
+            if sys.stdin is not None:
+                ConsoleDummyChannel(runtime).run()
+            else:
+                # Kein Konsolenfenster (z. B. Autostart ueber pythonw.exe,
+                # ADR-028) - ConsoleDummyChannel selbst bleibt unveraendert,
+                # wird hier aber gar nicht erst gestartet: input() haette
+                # ohne verfuegbares stdin sofort mit einer Exception
+                # abgebrochen. Haelt den Prozess stattdessen ueber den
+                # bereits laufenden Worker-Thread am Leben, bis der Prozess
+                # von aussen beendet wird (kein Konsolen-Exit-Wort moeglich).
+                logger.info(
+                    "Kein Konsolenfenster vorhanden - ConsoleDummyChannel wird uebersprungen."
+                )
+                runtime._worker.join()
         finally:
             if telegram is not None:
                 telegram_channel_obj, telegram_thread = telegram

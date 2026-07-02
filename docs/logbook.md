@@ -1,5 +1,69 @@
 # Logbook
 
+## 2026-07-02 - Jarvis-Eigenstart implementiert (ADR-028)
+
+**Kontext:** Nach Commit von Runtime v2 (`7f9ccb8`, ADR-027) wurde der
+Architekturvorschlag fuer Jarvis-Eigenstart erarbeitet - der letzte in
+Handbook Kap. 13 vorgesehene Infrastrukturbaustein zwischen v0.7 und
+v0.8. Zwei Zwischenfragen praezisierten den Vorschlag vor der ADR:
+
+1. "Soll Runtime beim Autostart wirklich noch den ConsoleDummyChannel
+   starten, oder ist es sauberer, ihn im Autostart-Modus gar nicht erst
+   zu starten?" - Antwort: ja, sauberer - `sys.stdin is None` ist bei
+   `pythonw.exe`-Start dokumentiert `None`, eine explizite, zentrale
+   Pruefung in `main()` ist kleiner und praeziser als ein defensives
+   `try`/`except` in `ConsoleDummyChannel` selbst (das unveraendert
+   bleibt). Dabei zusaetzlich gefunden: dasselbe Problem traf auch
+   `setup_logging()`s `StreamHandler` (schreibt nach `sys.stderr`,
+   ebenfalls `None` bei `pythonw.exe`) - dieselbe Pruefung deckt beides ab.
+
+**ADR-028 geschrieben und committed** (`f5c0a06`).
+
+**Umsetzung (exakt nach ADR-028, kein separater Implementierungsplan
+noetig):**
+- `commands/monitor.py`: `EnableJarvisAutostartCommand`/
+  `DisableJarvisAutostartCommand` (Sicherheitsstufe 2) - fester
+  HKCU-Run-Key-Eintragsname `"Jarvis"`, Wiederverwendung von
+  `_RUN_KEY_PATH`/`winreg`-Mechanik aus ADR-022. Ziel `pythonw.exe`
+  (Fallback auf `sys.executable`, Antwort weist explizit darauf hin).
+  `enable_jarvis_autostart` idempotent, `disable_jarvis_autostart`
+  loescht ohne Pfad-Abgleich (Selbstbedienung statt Reparatur-Automatik,
+  wie in ADR-028 begruendet).
+- `jarvis_runtime.py`: `setup_logging()` laesst den Konsolen-
+  `StreamHandler` weg, wenn `sys.stderr is None` (`FileHandler` bleibt
+  immer aktiv). `main()` startet `ConsoleDummyChannel` nur, wenn
+  `sys.stdin is not None` - sonst haelt sich der Prozess ueber
+  `runtime._worker.join()` am Leben, bis er von aussen beendet wird.
+  `ConsoleDummyChannel` selbst unveraendert.
+- Reale Pruefung auf dieser Maschine: `pythonw.exe` wird im venv korrekt
+  gefunden, Registry-Wert korrekt zusammengesetzt (`"...\.venv\Scripts\
+  pythonw.exe" "...\jarvis_runtime.py"`).
+
+**Tests:** 16 neue Tests - 14 fuer die beiden Commands (Windows-Guard,
+Registry-Schreiben, `pythonw.exe`-Fallback, Idempotenz, Schreibfehler,
+Sicherheitsstufe, Registrierung, Abgrenzung zu `disable_/
+enable_autostart_entry`) in `tests/test_commands_monitor.py`, 2 fuer die
+`setup_logging()`-Weiche in `tests/test_jarvis_runtime.py` (mit
+gemocktem `logging.basicConfig`, um globalen Root-Logger-Zustand nicht
+anzufassen). 280/280 gesamt gruen (264 vorher + 16 neu).
+
+**Doku:** README (neue Sektion "Jarvis-Eigenstart (ADR-028)" nach
+"Single-Instance-Schutz", Struktur-Baum ergaenzt), `docs/CHANGELOG.md`,
+dieses Logbook, `docs/PROJECT_STATE.md` aktualisiert.
+
+`git diff --stat` vor dem Commit gegen `core/*`, `executor/executor.py`,
+`memory/*`, `telegram_channel.py`, `telegram_main.py`, `main.py`
+geprueft - leer, wie in ADR-028 vorgegeben. Geaenderte Dateien:
+`commands/monitor.py`, `jarvis_runtime.py`, `tests/test_commands_monitor.py`,
+`tests/test_jarvis_runtime.py`, `README.md`, `docs/CHANGELOG.md`,
+`docs/logbook.md`, `docs/PROJECT_STATE.md`.
+
+Kein Tag gesetzt. Damit ist der letzte in Handbook Kap. 13 vorgesehene
+Infrastrukturbaustein zwischen v0.7 und v0.8 (Jarvis-Runtime + Jarvis-
+Eigenstart) abgeschlossen - naechster Schritt laut Handbook waere v0.8
+"Multi-KI", noch nicht begonnen. Tray, eigenes UI, Wake-Word und
+Runtime v3 bleiben weiterhin eigene, spaetere Entscheidungen.
+
 ## 2026-07-02 - Runtime v2 implementiert: TelegramChannel (ADR-027)
 
 **Kontext:** Nach Commit des Single-Instance-Schutzes (`987ed0b`, ADR-026)

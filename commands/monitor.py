@@ -47,6 +47,16 @@ Bestaetigung eine frisch gescannte Vorschau zu zeigen - execute()
 verlaesst sich nie auf das preview()-Ergebnis, sondern scannt beim
 tatsaechlichen Loeschen erneut. Beschraenkt auf %TEMP%, nur Dateien
 (nie Ordner), Pfad-Eindaemmung gegen Ziele ausserhalb von %TEMP%.
+
+enable_jarvis_autostart/disable_jarvis_autostart (Jarvis-Eigenstart,
+ADR-028): registrieren/entfernen Jarvis selbst (jarvis_runtime.py) als
+Windows-Autostart-Eintrag - eigener, fester HKCU-Run-Key-Name "Jarvis",
+kein Bezug zu disable_/enable_autostart_entry (die verwalten FREMDE,
+bereits existierende Eintraege; hier wird ein eigener Eintrag erzeugt/
+geloescht). Sicherheitsstufe 2. Ziel ist pythonw.exe (kein
+Konsolenfenster - ein versehentliches Schliessen wuerde sonst den
+gesamten Runtime-Prozess inkl. Telegram-Kanal beenden), mit Fallback
+auf sys.executable, falls pythonw.exe nicht gefunden wird.
 """
 from __future__ import annotations
 
@@ -54,6 +64,7 @@ import logging
 import os
 import platform
 import subprocess
+import sys
 import time
 import xml.etree.ElementTree as ET
 from collections import Counter
@@ -62,6 +73,7 @@ from typing import TYPE_CHECKING, Optional
 
 import psutil
 
+from core.config import BASE_DIR
 from core.models import Plan, Result, Status
 
 try:
@@ -602,6 +614,99 @@ def _candidate_list_text(matches: list[dict]) -> str:
     return ", ".join(f"{m['quelle']}: {m['name']}" for m in matches)
 
 
+# Fester Eintragsname fuer den Jarvis-eigenen Autostart (ADR-028) - taucht
+# dadurch auch in analyze_pc/system_status' Autostart-Uebersicht auf, da
+# diese den HKCU-Run-Key ohnehin generisch auslesen.
+_JARVIS_AUTOSTART_NAME = "Jarvis"
+
+
+def _pythonw_executable() -> Path:
+    """Liefert pythonw.exe (kein Konsolenfenster) neben dem aktuell
+    laufenden Interpreter, falls vorhanden - sonst Fallback auf
+    sys.executable (python.exe, sichtbares Fenster). ADR-028: ein
+    versehentlich geschlossenes Konsolenfenster wuerde sonst den
+    gesamten Runtime-Prozess inkl. Telegram-Kanal beenden."""
+    candidate = Path(sys.executable).with_name("pythonw.exe")
+    return candidate if candidate.exists() else Path(sys.executable)
+
+
+def _jarvis_autostart_value() -> tuple[str, bool]:
+    """Liefert (Registry-Wert, pythonw_gefunden) fuer den Jarvis-eigenen
+    Autostart-Eintrag (ADR-028)."""
+    python_path = _pythonw_executable()
+    runtime_path = BASE_DIR / "jarvis_runtime.py"
+    return f'"{python_path}" "{runtime_path}"', python_path.name == "pythonw.exe"
+
+
+class EnableJarvisAutostartCommand:
+    name = "enable_jarvis_autostart"
+    description = (
+        "Registriert Jarvis (jarvis_runtime.py) als Windows-Autostart-"
+        "Eintrag (HKCU Run-Key, fester Name 'Jarvis') - startet ab der "
+        "naechsten Windows-Anmeldung automatisch. Sicherheitsstufe 2, "
+        "Bestätigung erforderlich. Erneutes Ausführen aktualisiert einen "
+        "bestehenden Eintrag (z. B. nach einem Projekt-Umzug)."
+    )
+    requires_confirmation = True
+
+    def execute(self, plan: Plan) -> Result:
+        if platform.system() != "Windows" or winreg is None:
+            return Result(
+                status=Status.FAILED,
+                message="Autostart-Verwaltung ist aktuell nur unter Windows verfügbar.",
+            )
+
+        value, used_pythonw = _jarvis_autostart_value()
+        try:
+            with winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER, _RUN_KEY_PATH, 0, winreg.KEY_SET_VALUE
+            ) as run_key:
+                winreg.SetValueEx(run_key, _JARVIS_AUTOSTART_NAME, 0, winreg.REG_SZ, value)
+        except OSError as e:
+            return Result(
+                status=Status.FAILED, message=f"Jarvis-Eigenstart konnte nicht aktiviert werden: {e}"
+            )
+
+        message = "Jarvis-Eigenstart wurde aktiviert - startet ab der nächsten Windows-Anmeldung automatisch."
+        if not used_pythonw:
+            message += (
+                " Hinweis: pythonw.exe wurde nicht gefunden, Jarvis startet deshalb mit "
+                "sichtbarem Konsolenfenster."
+            )
+        return Result(status=Status.SUCCESS, message=message)
+
+
+class DisableJarvisAutostartCommand:
+    name = "disable_jarvis_autostart"
+    description = (
+        "Entfernt den Jarvis-eigenen Windows-Autostart-Eintrag (HKCU "
+        "Run-Key, fester Name 'Jarvis') wieder. Sicherheitsstufe 2, "
+        "Bestätigung erforderlich."
+    )
+    requires_confirmation = True
+
+    def execute(self, plan: Plan) -> Result:
+        if platform.system() != "Windows" or winreg is None:
+            return Result(
+                status=Status.FAILED,
+                message="Autostart-Verwaltung ist aktuell nur unter Windows verfügbar.",
+            )
+
+        try:
+            with winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER, _RUN_KEY_PATH, 0, winreg.KEY_SET_VALUE
+            ) as run_key:
+                winreg.DeleteValue(run_key, _JARVIS_AUTOSTART_NAME)
+        except FileNotFoundError:
+            return Result(status=Status.FAILED, message="Jarvis-Eigenstart ist aktuell nicht aktiviert.")
+        except OSError as e:
+            return Result(
+                status=Status.FAILED, message=f"Jarvis-Eigenstart konnte nicht deaktiviert werden: {e}"
+            )
+
+        return Result(status=Status.SUCCESS, message="Jarvis-Eigenstart wurde deaktiviert.")
+
+
 class DisableAutostartEntryCommand:
     name = "disable_autostart_entry"
     description = (
@@ -896,4 +1001,6 @@ COMMANDS = [
     EnableAutostartEntryCommand(),
     AnalyzeTempFilesCommand(),
     CleanTempFilesCommand(),
+    EnableJarvisAutostartCommand(),
+    DisableJarvisAutostartCommand(),
 ]

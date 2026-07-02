@@ -1,5 +1,48 @@
 # Changelog
 
+## Jarvis-Eigenstart (ADR-028, 02.07.2026)
+
+Windows-Autostart für Jarvis - registriert/entfernt `jarvis_runtime.py`
+als HKCU-Run-Key-Eintrag. Reine Command-Erweiterung, keine
+Runtime-Architekturänderung.
+
+### Neu
+- `commands/monitor.py`: `EnableJarvisAutostartCommand`
+  (`enable_jarvis_autostart`) / `DisableJarvisAutostartCommand`
+  (`disable_jarvis_autostart`), Sicherheitsstufe 2. Fester
+  HKCU-Run-Key-Eintragsname `"Jarvis"` - erscheint dadurch auch in
+  `analyze_pc`/`system_status`s Autostart-Übersicht. Kein Bezug zu
+  `disable_/enable_autostart_entry` (ADR-022) - jene verwalten fremde,
+  bereits existierende Einträge; hier wird ein eigener Eintrag erzeugt/
+  gelöscht.
+- Ziel ist `pythonw.exe` (kein Konsolenfenster), mit Fallback auf
+  `sys.executable`, falls `pythonw.exe` nicht gefunden wird (Antwort
+  weist explizit darauf hin). Grund: ein versehentlich geschlossenes
+  Konsolenfenster würde sonst den gesamten Runtime-Prozess inkl.
+  Telegram-Kanal beenden.
+- `enable_jarvis_autostart` ist idempotent (aktualisiert einen
+  bestehenden Eintrag, z. B. nach einem Projekt-Umzug);
+  `disable_jarvis_autostart` löscht ohne Pfad-Abgleich.
+- `jarvis_runtime.py`: `setup_logging()`/`main()` prüfen einmal zentral,
+  ob ein Konsolenfenster vorhanden ist (`sys.stdin`/`sys.stderr is None`
+  - dokumentiertes Verhalten bei `pythonw.exe`-Start): fehlt es, wird
+  `ConsoleDummyChannel` gar nicht erst gestartet (Prozess bleibt über
+  den laufenden Worker-Thread am Leben) und der Konsolen-`StreamHandler`
+  im Logging übersprungen (`FileHandler` bleibt aktiv). `ConsoleDummyChannel`
+  selbst bleibt unverändert.
+- 16 neue Tests (14 in `tests/test_commands_monitor.py`, 2 in
+  `tests/test_jarvis_runtime.py` für die `setup_logging()`-Weiche) - 280
+  Tests gesamt, alle grün.
+
+### Bewusst nicht enthalten
+Tray-Icon/Benachrichtigung beim Start, eigenes UI, Wake-Word,
+Deinstallations-/Update-Handling, automatische Erkennung/Reparatur
+veralteter Registry-Pfade, HKLM/systemweiter Autostart, Windows-Dienst-
+Variante, Windows-Aufgabenplanung, Channel-Interface, Runtime v3.
+
+### Siehe auch
+`docs/adr/ADR-028.md`.
+
 ## Runtime v2 - TelegramChannel (ADR-027, 02.07.2026)
 
 Zweiter, echter Runtime-Kanal neben `ConsoleDummyChannel` - Telegram

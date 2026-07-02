@@ -4,10 +4,12 @@ gemockt (FakeAI, gleiches Muster wie tests/test_integration.py), kein
 echter API-Key/Netzwerk nötig."""
 from __future__ import annotations
 
+import logging
 import threading
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import jarvis_runtime
 from core.config import Config
 from core.models import Plan
 from jarvis_runtime import ConsoleDummyChannel, JarvisRuntime, _RuntimeSpeech
@@ -363,3 +365,51 @@ def test_console_dummy_channel_ignores_empty_input(monkeypatch):
     channel.run()
 
     runtime.submit.assert_not_called()
+
+
+# --- setup_logging: Konsolen-Handler nur bei vorhandener Konsole (ADR-028) --
+# logging.basicConfig() selbst wird gemockt statt den echten Root-Logger zu
+# mutieren - vermeidet globalen Testzustand/Seiteneffekte auf andere Tests.
+
+
+def test_setup_logging_adds_stream_handler_when_stderr_available(tmp_path, monkeypatch):
+    monkeypatch.setattr(jarvis_runtime.sys, "stderr", MagicMock())
+    captured = {}
+    monkeypatch.setattr(
+        jarvis_runtime.logging, "basicConfig", lambda **kwargs: captured.update(kwargs)
+    )
+    config = _make_config(tmp_path)
+
+    jarvis_runtime.setup_logging(config)
+
+    handlers = captured["handlers"]
+    try:
+        assert len(handlers) == 2
+        assert isinstance(handlers[0], logging.FileHandler)
+        assert isinstance(handlers[1], logging.StreamHandler)
+        assert not isinstance(handlers[1], logging.FileHandler)
+    finally:
+        for h in handlers:
+            h.close()
+
+
+def test_setup_logging_skips_stream_handler_when_stderr_is_none(tmp_path, monkeypatch):
+    """ADR-028: pythonw.exe (Jarvis-Eigenstart ohne Konsolenfenster) setzt
+    sys.stderr auf None - ein StreamHandler wuerde beim ersten Log-Aufruf
+    abstuerzen. Der FileHandler bleibt in jedem Fall aktiv."""
+    monkeypatch.setattr(jarvis_runtime.sys, "stderr", None)
+    captured = {}
+    monkeypatch.setattr(
+        jarvis_runtime.logging, "basicConfig", lambda **kwargs: captured.update(kwargs)
+    )
+    config = _make_config(tmp_path)
+
+    jarvis_runtime.setup_logging(config)
+
+    handlers = captured["handlers"]
+    try:
+        assert len(handlers) == 1
+        assert isinstance(handlers[0], logging.FileHandler)
+    finally:
+        for h in handlers:
+            h.close()

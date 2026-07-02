@@ -15,7 +15,9 @@ from commands.monitor import (
     AnalyzeTempFilesCommand,
     CleanTempFilesCommand,
     DisableAutostartEntryCommand,
+    DisableJarvisAutostartCommand,
     EnableAutostartEntryCommand,
+    EnableJarvisAutostartCommand,
     SystemStatusCommand,
 )
 from core.models import Plan, Status
@@ -816,6 +818,164 @@ def test_enable_registered_in_registry():
     from commands import REGISTRY
 
     assert "enable_autostart_entry" in REGISTRY
+
+
+# --- enable_jarvis_autostart / disable_jarvis_autostart (ADR-028) ----------
+
+
+def test_enable_jarvis_autostart_fails_clearly_on_non_windows(monkeypatch):
+    monkeypatch.setattr(monitor_commands.platform, "system", lambda: "Linux")
+    cmd = EnableJarvisAutostartCommand()
+
+    result = cmd.execute(Plan(intent="enable_jarvis_autostart"))
+
+    assert result.status == Status.FAILED
+
+
+def test_enable_jarvis_autostart_writes_fixed_registry_entry(monkeypatch, tmp_path):
+    hkcu_run: dict = {}
+    _install_fake_winreg(monkeypatch, hkcu_run=hkcu_run)
+    monkeypatch.setattr(monitor_commands.platform, "system", lambda: "Windows")
+    pythonw = tmp_path / "pythonw.exe"
+    pythonw.touch()
+    monkeypatch.setattr(monitor_commands.sys, "executable", str(tmp_path / "python.exe"))
+    cmd = EnableJarvisAutostartCommand()
+
+    result = cmd.execute(Plan(intent="enable_jarvis_autostart"))
+
+    assert result.status == Status.SUCCESS
+    value = hkcu_run[monitor_commands._JARVIS_AUTOSTART_NAME]
+    assert str(pythonw) in value
+    assert "jarvis_runtime.py" in value
+    assert "pythonw.exe wurde nicht gefunden" not in result.message
+
+
+def test_enable_jarvis_autostart_falls_back_to_python_exe_if_pythonw_missing(monkeypatch, tmp_path):
+    hkcu_run: dict = {}
+    _install_fake_winreg(monkeypatch, hkcu_run=hkcu_run)
+    monkeypatch.setattr(monitor_commands.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(monitor_commands.sys, "executable", str(tmp_path / "python.exe"))
+    # Kein pythonw.exe im selben Ordner angelegt - Fallback greift.
+    cmd = EnableJarvisAutostartCommand()
+
+    result = cmd.execute(Plan(intent="enable_jarvis_autostart"))
+
+    assert result.status == Status.SUCCESS
+    value = hkcu_run[monitor_commands._JARVIS_AUTOSTART_NAME]
+    assert "python.exe" in value
+    assert "pythonw.exe" not in value
+    assert "pythonw.exe wurde nicht gefunden" in result.message
+
+
+def test_enable_jarvis_autostart_is_idempotent(monkeypatch, tmp_path):
+    hkcu_run = {monitor_commands._JARVIS_AUTOSTART_NAME: "alter Pfad"}
+    _install_fake_winreg(monkeypatch, hkcu_run=hkcu_run)
+    monkeypatch.setattr(monitor_commands.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(monitor_commands.sys, "executable", str(tmp_path / "python.exe"))
+    cmd = EnableJarvisAutostartCommand()
+
+    result = cmd.execute(Plan(intent="enable_jarvis_autostart"))
+
+    assert result.status == Status.SUCCESS
+    assert hkcu_run[monitor_commands._JARVIS_AUTOSTART_NAME] != "alter Pfad"
+
+
+def test_enable_jarvis_autostart_write_failure_reported(monkeypatch, tmp_path):
+    _install_fake_winreg(monkeypatch, hkcu_run={})
+    monkeypatch.setattr(monitor_commands.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(monitor_commands.sys, "executable", str(tmp_path / "python.exe"))
+    monkeypatch.setattr(
+        monitor_commands.winreg, "SetValueEx", MagicMock(side_effect=OSError("Registry-Fehler"))
+    )
+    cmd = EnableJarvisAutostartCommand()
+
+    result = cmd.execute(Plan(intent="enable_jarvis_autostart"))
+
+    assert result.status == Status.FAILED
+
+
+def test_enable_jarvis_autostart_requires_confirmation_stufe2_not_stufe3():
+    cmd = EnableJarvisAutostartCommand()
+    assert cmd.requires_confirmation is True
+    assert getattr(cmd, "confirmation_phrase", None) is None
+
+
+def test_enable_jarvis_autostart_registered_in_registry():
+    from commands import REGISTRY
+
+    assert "enable_jarvis_autostart" in REGISTRY
+
+
+def test_disable_jarvis_autostart_fails_clearly_on_non_windows(monkeypatch):
+    monkeypatch.setattr(monitor_commands.platform, "system", lambda: "Linux")
+    cmd = DisableJarvisAutostartCommand()
+
+    result = cmd.execute(Plan(intent="disable_jarvis_autostart"))
+
+    assert result.status == Status.FAILED
+
+
+def test_disable_jarvis_autostart_removes_entry(monkeypatch):
+    hkcu_run = {monitor_commands._JARVIS_AUTOSTART_NAME: '"pythonw.exe" "jarvis_runtime.py"'}
+    _install_fake_winreg(monkeypatch, hkcu_run=hkcu_run)
+    monkeypatch.setattr(monitor_commands.platform, "system", lambda: "Windows")
+    cmd = DisableJarvisAutostartCommand()
+
+    result = cmd.execute(Plan(intent="disable_jarvis_autostart"))
+
+    assert result.status == Status.SUCCESS
+    assert monitor_commands._JARVIS_AUTOSTART_NAME not in hkcu_run
+
+
+def test_disable_jarvis_autostart_not_enabled_fails_clearly(monkeypatch):
+    _install_fake_winreg(monkeypatch, hkcu_run={})
+    monkeypatch.setattr(monitor_commands.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(
+        monitor_commands.winreg, "DeleteValue", MagicMock(side_effect=FileNotFoundError())
+    )
+    cmd = DisableJarvisAutostartCommand()
+
+    result = cmd.execute(Plan(intent="disable_jarvis_autostart"))
+
+    assert result.status == Status.FAILED
+    assert "nicht aktiviert" in result.message
+
+
+def test_disable_jarvis_autostart_write_failure_reported(monkeypatch):
+    hkcu_run = {monitor_commands._JARVIS_AUTOSTART_NAME: "irgendein Pfad"}
+    _install_fake_winreg(monkeypatch, hkcu_run=hkcu_run)
+    monkeypatch.setattr(monitor_commands.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(
+        monitor_commands.winreg, "DeleteValue", MagicMock(side_effect=OSError("Registry-Fehler"))
+    )
+    cmd = DisableJarvisAutostartCommand()
+
+    result = cmd.execute(Plan(intent="disable_jarvis_autostart"))
+
+    assert result.status == Status.FAILED
+
+
+def test_disable_jarvis_autostart_requires_confirmation_stufe2_not_stufe3():
+    cmd = DisableJarvisAutostartCommand()
+    assert cmd.requires_confirmation is True
+    assert getattr(cmd, "confirmation_phrase", None) is None
+
+
+def test_disable_jarvis_autostart_registered_in_registry():
+    from commands import REGISTRY
+
+    assert "disable_jarvis_autostart" in REGISTRY
+
+
+def test_jarvis_autostart_commands_are_distinct_from_generic_autostart_commands():
+    """Regressionsschutz (ADR-028): enable_/disable_jarvis_autostart sind
+    eigene Commands mit eigener Semantik (eigenen Eintrag erzeugen/
+    löschen), keine Wiederverwendung von disable_/enable_autostart_entry
+    (verwalten fremde, bereits existierende Einträge)."""
+    from commands import REGISTRY
+
+    assert REGISTRY["enable_jarvis_autostart"] is not REGISTRY["enable_autostart_entry"]
+    assert REGISTRY["disable_jarvis_autostart"] is not REGISTRY["disable_autostart_entry"]
 
 
 # --- Phase-1-Anpassung: _jarvis_disabled darf nicht als Autostart-Eintrag ---

@@ -35,7 +35,7 @@ jarvis/
 │   ├── __init__.py         # Registry + minimaler Dispatch
 │   ├── system.py             # open_program, shutdown_pc
 │   ├── memory.py               # remember_fact, forget_fact
-│   ├── monitor.py               # system_status (ADR-011), analyze_pc (ADR-020), analyze_event_log (ADR-021), disable_/enable_autostart_entry (ADR-022), analyze_/clean_temp_files (ADR-023)
+│   ├── monitor.py               # system_status (ADR-011), analyze_pc (ADR-020), analyze_event_log (ADR-021), disable_/enable_autostart_entry (ADR-022), analyze_/clean_temp_files (ADR-023), enable_/disable_jarvis_autostart (ADR-028)
 │   ├── installer.py               # install_program (winget, ADR-012)
 │   ├── excel.py                     # read_excel (openpyxl, ADR-014)
 │   └── reports.py                     # analyze_report (ADR-015), calculate_kpi (ADR-016)
@@ -58,7 +58,7 @@ jarvis/
 ├── CHANGELOG.md                        # Verweis auf docs/CHANGELOG.md
 ├── main.py                                 # verdrahtet die Pipeline (Konsole)
 ├── telegram_main.py                          # separater Einstiegspunkt (Telegram, ADR-018)
-├── jarvis_runtime.py                           # koordinierender Runtime-Einstiegspunkt (ADR-024/025/026/027)
+├── jarvis_runtime.py                           # koordinierender Runtime-Einstiegspunkt (ADR-024/025/026/027/028)
 └── telegram_channel.py                           # zweiter Runtime-Kanal - Telegram über die Runtime (ADR-027)
 ```
 
@@ -556,6 +556,40 @@ Zeitstempel der aktiven Instanz), bevor irgendein Command ausgeführt
 wird. Verwaiste Lock-Dateien (Prozess abgestürzt, oder die PID wurde von
 Windows für einen anderen Prozess wiederverwendet) werden beim nächsten
 Start automatisch erkannt und entfernt - kein manuelles Aufräumen nötig.
+
+## Jarvis-Eigenstart (ADR-028)
+
+`enable_jarvis_autostart`/`disable_jarvis_autostart` (Sicherheitsstufe 2,
+`commands/monitor.py`) registrieren/entfernen `jarvis_runtime.py` als
+Windows-Autostart-Eintrag - über jeden Kanal auslösbar (Konsole,
+Telegram über `telegram_main.py` oder über die Runtime selbst).
+
+- Fester HKCU-Run-Key-Eintrag `"Jarvis"` - erscheint dadurch auch in
+  `analyze_pc`/`system_status`s Autostart-Übersicht. Kein Bezug zu
+  `disable_/enable_autostart_entry` (die verwalten fremde, bereits
+  existierende Einträge; hier wird ein eigener Eintrag erzeugt/gelöscht).
+- Ziel ist `pythonw.exe` (kein Konsolenfenster) - mit Fallback auf
+  `sys.executable`, falls `pythonw.exe` nicht gefunden wird (Antwort
+  weist explizit darauf hin). Grund: ein versehentlich geschlossenes
+  Konsolenfenster würde sonst den gesamten Runtime-Prozess inkl.
+  Telegram-Kanal beenden.
+- `enable_jarvis_autostart` ist idempotent - erneutes Ausführen
+  aktualisiert einen bestehenden Eintrag (z. B. nach einem
+  Projekt-Umzug). `disable_jarvis_autostart` löscht ohne Pfad-Abgleich.
+- `jarvis_runtime.py::main()`/`setup_logging()` prüfen einmal zentral,
+  ob ein Konsolenfenster vorhanden ist (`sys.stdin`/`sys.stderr is None`
+  - dokumentiertes Verhalten bei `pythonw.exe`): fehlt es, wird
+  `ConsoleDummyChannel` gar nicht erst gestartet (der Prozess bleibt
+  stattdessen über den laufenden Worker-Thread am Leben) und der
+  Konsolen-Log-Handler übersprungen (`FileHandler` bleibt aktiv).
+  `ConsoleDummyChannel` selbst bleibt dabei unverändert.
+- Interagiert automatisch korrekt mit dem Single-Instance-Schutz - keine
+  Anpassung nötig.
+
+**Bewusst nicht enthalten:** Tray-Icon/Benachrichtigung beim Start,
+eigenes UI, Wake-Word, Deinstallations-/Update-Handling, automatische
+Erkennung/Reparatur veralteter Registry-Pfade, HKLM/systemweiter
+Autostart, Windows-Dienst-Variante.
 
 ## Pipeline
 
