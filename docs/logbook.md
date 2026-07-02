@@ -1,5 +1,61 @@
 # Logbook
 
+## 2026-07-02 - Architekturrichtung Jarvis-Runtime festgelegt (Jarvis-Eigenstart verschoben)
+
+**Kontext:** Nach Abschluss von v0.7 (Handbook v3.6, Tag `v0.7`) wurde ein
+technischer Vorschlag fuer den bereits im Handbook vorgesehenen
+"Jarvis-Eigenstart"-Baustein erarbeitet (HKCU Run-Key, Sicherheitsstufe 2,
+zwei symmetrische Intents `enable_jarvis_autostart`/
+`disable_jarvis_autostart`, `sys.executable`+`BASE_DIR`-Pfadermittlung,
+Ziel urspruenglich `main.py`). Wolfgang stoppte vor der Umsetzung: Jarvis
+soll langfristig ein eigenes UI im Stil von Film-Jarvis bekommen (UI, Tray,
+Wake Word, Telegram und Core sollen koordiniert zusammenspielen) - der
+Windows-Autostart sollte deshalb nicht fest auf den Konsolenmodus (`main.py`)
+gebaut werden.
+
+**Architekturvorschlag erarbeitet** (rein konzeptionell, kein Code): Kap. 7
+(Kern-Architektur, `Voice -> Brain -> Planner -> Tool Manager -> Executor ->
+Tools`) ist bereits kanal-agnostisch - `main.py`/`telegram_main.py` sind
+schon heute zwei duenne Einstiegspunkte, die denselben Core-Stack einmalig
+verdrahten, nur mit je einem Kanal. ADR-018 verhindert bewusst
+gleichzeitigen Betrieb (kein Locking auf `memory_data/`) - das ist der
+eigentliche Ausloeser fuer eine koordinierende Runtime, nicht UI/Tray/
+Wake-Word allein. Kap. 30 (Plugin-Vision, Praezisierung v3.3) liefert das
+Leitprinzip: Architektur erst bauen, wenn der echte Bedarf (mehrere
+gleichzeitige Kanaele) da ist, nicht vorab.
+
+**Product-Owner-Entscheidungen (vollstaendig uebernommen):**
+1. Neuer, kuenftiger Runtime-Einstiegspunkt **`jarvis_runtime.py`** (Name
+   festgelegt, noch NICHT implementiert) - koordiniert spaeter mehrere
+   gleichzeitige Kanaele ueber einen einmalig instanziierten Core-Stack.
+2. **Koexistenz statt Abloesung** (explizite Korrektur/Praezisierung):
+   `main.py` bleibt dauerhaft Konsolen-/Entwicklungsmodus.
+   `telegram_main.py` bleibt dauerhaft eigenstaendiger, einfacher
+   Telegram-Einstiegspunkt - wird NICHT entfernt, NICHT als obsolet
+   markiert. Die Runtime kann Telegram spaeter zusaetzlich als Kanal
+   einbinden, ohne `telegram_main.py` zu ersetzen. Begruendung: "Funktionierende
+   einfache Einstiegspunkte bleiben erhalten. Die Runtime erweitert die
+   Architektur, ersetzt sie aber nicht sofort."
+3. Jarvis-Eigenstart-**Mechanik** (Sicherheitsstufe 2, zwei Intents,
+   Pfadermittlung) bleibt inhaltlich gueltig, zielt aber kuenftig auf
+   `jarvis_runtime.py` statt `main.py`. **Implementierung explizit
+   verschoben**, bis die Runtime existiert - kein Autostart jetzt.
+
+**Offen fuer die kuenftige Runtime-Umsetzung, hier nur festgehalten, nicht
+entschieden:** Nebenlaeufigkeits-/Locking-Problem bei `memory_data/` (ADR-018
+umgeht es nur durch "ein Kanal zur Zeit" - empfohlen, nicht entschieden:
+einfache serialisierte Warteschlange statt echter Concurrency-Sicherheit);
+ob die Runtime Telegram ueber den bestehenden `TelegramSpeech`-Adapter
+wiederverwendet oder eigenstaendig neu anbindet.
+
+**Dokumentation (Kap.-19-Mechanismus):** Vollstaendig in
+`docs/PROJECT_STATE.md` (neuer Abschnitt "Architekturrichtung:
+Jarvis-Runtime") festgehalten - ab sofort massgeblich, wird bei der
+naechsten Konsolidierung (nach Runtime-Umsetzung oder spaetestens v0.8)
+foermlich ins Handbook uebernommen. **Kein Code, keine ADR, keine
+Handbook-Aenderung, keine Runtime-Implementierung, kein Autostart jetzt.**
+Tests unveraendert (keine Code-Datei beruehrt).
+
 ## 2026-07-02 - v0.7 getaggt (Abschluss)
 
 Nach der Konsolidierung (Handbook v3.6, Commit `a7eb86d`) hat Wolfgang als

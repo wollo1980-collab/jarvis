@@ -22,7 +22,21 @@ Tests: `225 / 225` grün.
 Aus v0.6/v0.5/v0.4 weiterhin gültig: Telegram-Fernzugriff (ADR-018), Excel-Lesen/Tabellen-Auswertung/KPI (ADR-014/015/016), Kurz-/Langzeitgedächtnis (ADR-009), PC-Grundsteuerung (ADR-011/012) - siehe Handbook Kap. 13/27 für den vollständigen Roadmap-Stand.
 
 ## Next Planned Version
-`v0.7` ist vollständig abgeschlossen (Handbook v3.6, Tag `v0.7`). `v0.8 "Multi-KI"` (Handbook Kap. 13: "Claude + GPT + Copilot orchestrieren") ist der nächste geplante Baustein - noch nicht begonnen, kein technischer Vorschlag erstellt.
+`v0.7` ist vollständig abgeschlossen (Handbook v3.6, Tag `v0.7`). `v0.8 "Multi-KI"` (Handbook Kap. 13: "Claude + GPT + Copilot orchestrieren") ist der nächste geplante Baustein - noch nicht begonnen, kein technischer Vorschlag erstellt. Vor v0.8 steht architektonisch der Jarvis-Eigenstart-Baustein, dessen Implementierung jedoch auf die Runtime-Architektur wartet (siehe unten) - noch kein Code, keine Umsetzung.
+
+## Architekturrichtung: Jarvis-Runtime (Kap. 19 - wartet auf künftige Konsolidierung)
+Product-Owner-Entscheidung 2026-07-02 (rein architektonisch, kein Code, keine ADR, keine Handbook-Änderung jetzt): Da das Handbook laut Kap. 2 nur zwischen zwei Hauptversionen geändert wird und v3.6 gerade erst konsolidiert wurde, wird diese Entscheidung hier vollständig festgehalten (ab sofort maßgeblich, Kap. 19) und erst bei der nächsten Konsolidierung (nach Abschluss des Runtime-Bausteins oder spätestens v0.8) formal ins Handbook übernommen.
+
+**Auslöser:** Wolfgang möchte langfristig ein eigenes UI im Stil von Film-Jarvis (UI, Tray, Wake Word, Telegram, Core sollen koordiniert zusammenspielen). Der Windows-Autostart soll deshalb nicht fest auf `main.py` (Konsolenmodus) gebaut werden, da das die spätere UI-Architektur vorwegnehmen würde.
+
+**Entscheidung:**
+- Neuer, künftiger Runtime-Einstiegspunkt **`jarvis_runtime.py`** (Name festgelegt, noch nicht implementiert) - koordiniert später mehrere gleichzeitige Kanäle (UI, Tray, Wake-Word, Telegram) über einen einmalig instanziierten Core-Stack (Config/AIEngine/Planner/ToolManager/Executor/Memory). Kein Ersatz der bestehenden Kern-Architektur (Handbook Kap. 7) - reine Koordinationsschicht darüber.
+- **Koexistenz statt Ablösung:** `main.py` bleibt dauerhaft der lokale Konsolen-/Entwicklungsmodus. `telegram_main.py` bleibt dauerhaft ein eigenständiger, einfacher Telegram-Einstiegspunkt - wird **nicht** entfernt oder als obsolet markiert. Die künftige Runtime kann Telegram später zusätzlich als einen ihrer Kanäle einbinden (Koexistenz mit `telegram_main.py`, keine Ablösung).
+- **Jarvis-Eigenstart-Implementierung verschoben:** Die im vorherigen technischen Vorschlag ausgearbeitete Mechanik (HKCU Run-Key, Sicherheitsstufe 2, zwei symmetrische Intents `enable_jarvis_autostart`/`disable_jarvis_autostart`, `sys.executable`+`BASE_DIR`-Pfadermittlung, Pfad-Quoting) bleibt inhaltlich gültig, zielt aber künftig auf `jarvis_runtime.py` statt `main.py`. Implementierung wartet auf die Existenz der Runtime - kein Autostart jetzt.
+- **Größtes offenes Architekturrisiko für die künftige Runtime-Umsetzung:** `memory_data/`-Dateien haben kein Locking - ADR-018 umgeht das nur durch "ein Kanal zur Zeit" (kein gleichzeitiger Betrieb Konsole/Telegram). Mehrere gleichzeitige Kanäle unter der Runtime brauchen eine Lösung dafür - empfohlen (nicht entschieden): einfache serialisierte Warteschlange statt echter Nebenläufigkeits-Sicherheit in Memory/Executor.
+- **`telegram_main.py`/Runtime-Verhältnis:** offen, ob die Runtime Telegram über den bestehenden `TelegramSpeech`-Adapter wiederverwendet oder eigenständig neu anbindet - Entscheidung erst bei tatsächlicher Runtime-Umsetzung.
+
+**ADR-Bedarf:** Keine ADR jetzt (reine Architekturrichtung, kein Code). Bei tatsächlicher Umsetzung vermutlich zwei ADRs: eine für die Runtime selbst, eine für den Jarvis-Eigenstart-Command mit Ziel Runtime.
 
 ## Tests
 Letzter Check am 2026-07-02: `pytest tests -v` mit zusätzlichem `PYTHONPATH`.
@@ -41,6 +55,8 @@ Keiner aktuell.
 - `.git_broken_5/` (Reste eines frühen, abgebrochenen git-init-Versuchs) liegt noch im Arbeitsordner, per `.gitignore` ausgeschlossen - bewusst nicht gelöscht (keine destruktive Aktion ohne Rückfrage).
 
 ### Feature-TODOs (nächste Roadmap-Bausteine, NICHT jetzt umsetzen)
+- Jarvis-Runtime (`jarvis_runtime.py`) und darauf aufbauender Jarvis-Eigenstart - siehe Abschnitt "Architekturrichtung: Jarvis-Runtime" oben. Kein Code, keine Umsetzung.
+
 Vollständige, aktuelle Liste jetzt im Handbook (Kap. 13 Roadmap, Kap. 29 Backlog) - hier nur technische Detail-Notizen, die (noch) keinen eigenen Handbook-Backlog-Eintrag brauchen:
 - Dritter KI-Verwender: falls ein weiteres Modul KI-Zugriff braucht, `configure()`-Duplizierung (`reports.py`/`monitor.py`) zu einer gemeinsamen Abstraktion zusammenführen prüfen (Wolfgangs Entscheidung bei ADR-020).
 - Den `preview()`-Hook (ADR-023) für weitere schreibende PC-Admin-Commands (Dienste, Treiber) nutzen, sobald diese umgesetzt werden.
