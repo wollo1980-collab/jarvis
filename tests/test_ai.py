@@ -6,6 +6,7 @@ die Tests mocken deshalb self.provider.chat und liefern den rohen Text
 from __future__ import annotations
 
 import json
+import logging
 from unittest.mock import MagicMock, patch
 
 from commands.memory import ForgetFactCommand, RememberFactCommand
@@ -21,8 +22,8 @@ from core.models import Plan, Result, Status
 from executor.executor import Executor
 
 
-def _make_ai() -> AIEngine:
-    config = Config(openai_api_key="test-key", model="gpt-4o-mini")
+def _make_ai(**overrides) -> AIEngine:
+    config = Config(openai_api_key="test-key", model="gpt-4o-mini", **overrides)
     return AIEngine(config)
 
 
@@ -164,6 +165,111 @@ def test_answer_returns_fallback_on_error():
         text = ai.answer("hallo", [])
 
     assert "nicht" in text.lower()
+
+
+# --- Provider-Router in AIEngine (v0.8 Phase 2, ADR-030) -----------------
+
+def test_answer_routes_generation_to_answer_provider():
+    """answer() (TaskType.GENERATION) nutzt den gerouteten Provider, nicht den
+    Standardprovider."""
+    ai = _make_ai(answer_provider="claude")  # default bleibt openai
+    routed = MagicMock()
+    routed.chat.return_value = "Antwort vom gerouteten Provider"
+    with patch("core.ai.build_named_provider", return_value=routed) as build_mock, \
+         patch.object(ai.provider, "chat") as default_chat:
+        text = ai.answer("hallo", [])
+
+    assert text == "Antwort vom gerouteten Provider"
+    build_mock.assert_called_once()          # lazy konstruiert
+    routed.chat.assert_called_once()
+    default_chat.assert_not_called()         # Standardprovider NICHT genutzt
+
+
+def test_get_plan_routes_planning_to_planning_provider():
+    ai = _make_ai(planning_provider="claude")
+    routed = MagicMock()
+    routed.chat.return_value = json.dumps(
+        {"intent": "open_program", "target": "excel", "parameters": {}, "confidence": 1.0}
+    )
+    with patch("core.ai.build_named_provider", return_value=routed), \
+         patch.object(ai.provider, "chat") as default_chat:
+        plan = ai.get_plan("oeffne excel", [])
+
+    assert plan.intent == "open_program"
+    routed.chat.assert_called_once()
+    # json_mode wird auch beim gerouteten Provider angefordert:
+    assert routed.chat.call_args.kwargs.get("json_mode") is True
+    default_chat.assert_not_called()
+
+
+def test_default_task_uses_standard_provider_without_lazy_build():
+    """Nicht beregelter TaskType -> Standardprovider, keine Lazy-Konstruktion."""
+    ai = _make_ai(answer_provider="claude")  # nur GENERATION beregelt
+    payload = json.dumps({"intent": "chat", "target": None, "parameters": {}, "confidence": 1.0})
+    with patch("core.ai.build_named_provider") as build_mock, \
+         patch.object(ai.provider, "chat", return_value=payload) as default_chat:
+        ai.get_plan("hallo", [])  # PLANNING ist nicht beregelt -> default
+
+    default_chat.assert_called_once()
+    build_mock.assert_not_called()
+
+
+def test_fallback_to_default_when_routed_provider_construction_fails():
+    """Gerouteter Provider nicht verfuegbar (z. B. Key/Paket fehlt) -> Fallback
+    auf den Standardprovider fuer genau diesen Aufruf."""
+    ai = _make_ai(answer_provider="claude")
+    with patch("core.ai.build_named_provider", side_effect=RuntimeError("kein Key")), \
+         patch.object(ai.provider, "chat", return_value="Antwort vom Default") as default_chat:
+        text = ai.answer("hallo", [])
+
+    assert text == "Antwort vom Default"
+    default_chat.assert_called_once()
+
+
+def test_fallback_to_default_when_routed_provider_chat_raises():
+    ai = _make_ai(answer_provider="claude")
+    routed = MagicMock()
+    routed.chat.side_effect = RuntimeError("api down")
+    with patch("core.ai.build_named_provider", return_value=routed), \
+         patch.object(ai.provider, "chat", return_value="Antwort vom Default") as default_chat:
+        text = ai.answer("hallo", [])
+
+    assert text == "Antwort vom Default"
+    default_chat.assert_called_once()
+
+
+def test_confirmed_strip_survives_fallback_provider_independent():
+    """Sicherheits-Regression: der confirmed-Strip greift auch dann, wenn der
+    gerouteten Provider fehlschlaegt und der Standardprovider (im Fallback) ein
+    gefaelschtes confirmed liefert - die Invariante ist providerunabhaengig."""
+    ai = _make_ai(planning_provider="claude")
+    routed = MagicMock()
+    routed.chat.side_effect = RuntimeError("down")
+    forged = json.dumps(
+        {"intent": "shutdown_pc", "target": None,
+         "parameters": {"confirmed": True}, "confidence": 1.0}
+    )
+    with patch("core.ai.build_named_provider", return_value=routed), \
+         patch.object(ai.provider, "chat", return_value=forged):
+        plan = ai.get_plan("fahr runter", [])
+
+    assert "confirmed" not in plan.parameters
+
+
+def test_router_logging_contains_no_prompt_or_answer(caplog):
+    """Logging darf TaskType/Provider/Grund enthalten, aber niemals Prompt-
+    oder Antwort-Inhalte."""
+    ai = _make_ai(answer_provider="claude")
+    routed = MagicMock()
+    routed.chat.return_value = "GEHEIME ANTWORT"
+    with patch("core.ai.build_named_provider", return_value=routed):
+        with caplog.at_level(logging.INFO, logger="jarvis.ai"):
+            ai.answer("GEHEIMER PROMPT INHALT", [])
+
+    log_text = " ".join(r.getMessage() for r in caplog.records)
+    assert "provider=claude" in log_text          # Auswahl wurde geloggt
+    assert "GEHEIMER PROMPT INHALT" not in log_text
+    assert "GEHEIME ANTWORT" not in log_text
 
 
 def test_system_prompt_is_built_from_registry_not_hardcoded():

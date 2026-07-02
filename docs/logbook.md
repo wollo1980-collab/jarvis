@@ -1,5 +1,52 @@
 # Logbook
 
+## 2026-07-02 - v0.8 Multi-KI, Phase 2: Minimaler Provider-Router (Umsetzung nach ADR-030)
+
+**Kontext:** Zweiter v0.8-Baustein. Nach Phase 1 (ein Provider pro Lauf) soll
+Jarvis pro Aufgabentyp einen Provider verwenden koennen - deterministisch,
+ohne zweite KI, ohne zusaetzlichen LLM-Call. Architektur in ADR-030
+festgehalten (committet `f35f0f7`).
+
+**Umgesetzt (nach ADR-030):**
+- `core/providers.py`: `TaskType` (PLANNING/GENERATION) + `ProviderRouter`
+  (deterministische Weiche `TaskType -> Provider-Name`, plus Auswahlgrund
+  `regel`/`default`) + `build_router(config)`. `build_provider` in
+  `build_named_provider(name, config)` refaktoriert (konstruiert per Name);
+  `build_provider(config)` delegiert weiter auf `ai_provider`.
+- `core/ai.py`: `AIEngine` haelt Provider-Cache + Router. `get_plan` ->
+  PLANNING, `answer` -> GENERATION (interner `_chat`-Helfer). Standardprovider
+  eager (Anker), Nicht-Default lazy. `_chat` faellt bei nicht verfuegbarem/
+  werfendem gerouteten Provider **nur fuer diesen Aufruf** auf den
+  Standardprovider zurueck (WARNING). Fallback umschliesst nur `chat()` -
+  JSON-Parsing, confirmed-Strip und die bestehenden get_plan/answer-Fallbacks
+  bleiben unveraendert. `self.provider` bleibt der oeffentliche Default-/
+  Fallback-Provider (Phase-1-Tests unveraendert gruen).
+- `core/config.py` + `config.example.json`: `planning_provider`,
+  `answer_provider` (leer -> `ai_provider`, rueckwaertskompatibel).
+
+**Bewusste Grenzen (Design-Entscheidungen, decken sich mit ADR-030):**
+- Routing-Signal ist ausschliesslich der intern gesetzte `TaskType` - **kein**
+  Routing nach Intent (ist Ergebnis von get_plan) oder Sicherheitsstufe (erst
+  im Executor bekannt). Nie von Modell-Output beeinflusst -> keine neue
+  Trust-Boundary-Flaeche.
+- `answer()` bedient Konversation UND Analyse (monitor/reports) ueber denselben
+  `GENERATION`-Typ; eine feinere `ANALYSIS`-Trennung bliebe Phase 3.
+- Router ist eine Nachschlagetabelle, **kein** Orchestrator (bewertet/lernt
+  nichts, nichts parallel).
+
+**Tests:** Router-Unit-Tests (Auswahl + Grund, `build_router`, Rueckwaerts-
+kompatibilitaet) in `tests/test_providers.py`; AIEngine-Routing/Fallback in
+`tests/test_ai.py` (Planning/Generation zum gerouteten Provider, Fallback bei
+Konstruktions- und bei `chat()`-Fehler, confirmed-Strip greift auch nach
+Fallback, Logging ohne Prompt-/Antwort-Inhalte). **306/306 gruen** (venv,
+beschreibbares `--basetemp`; Sandbox blockiert sonst den System-Temp der
+`tmp_path`-Fixture, kein Testdefekt).
+
+**Bewusst NICHT (spaetere Phasen):** LLM-Routing, Intent-/Sicherheitsstufen-
+Routing, `ANALYSIS`-Trennung, Laufzeit-Override, Ollama/lokale Modelle, MCP,
+RAG, Multi-Agent, paralleles Ausfuehren, Streaming, Handbook-Uebernahme (erst
+Konsolidierung nach v0.8).
+
 ## 2026-07-02 - v0.8 Multi-KI, Phase 1: technisch abgeschlossen (Product-Owner-Abschluss)
 
 **Status:** Phase 1 ist **technisch abgeschlossen**. Der volle Stand wurde

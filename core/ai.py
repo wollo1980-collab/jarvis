@@ -19,7 +19,7 @@ import logging
 from commands import REGISTRY
 from core.config import Config
 from core.models import Message, Plan
-from core.providers import build_provider
+from core.providers import TaskType, build_named_provider, build_provider, build_router
 
 logger = logging.getLogger("jarvis.ai")
 
@@ -124,10 +124,59 @@ def build_chat_system_prompt(long_term_summary: str = "") -> str:
 class AIEngine:
     def __init__(self, config: Config):
         self.config = config
-        # Backend gemaess config.ai_provider (ADR-029). Der Provider kapselt
-        # NUR den rohen Modellaufruf; alle sicherheits- und formatkritische
-        # Logik (confirmed-Strip, JSON-Parsing, Fallbacks) bleibt hier.
+        # Standardprovider (config.ai_provider) - eager als Anker/Fallback des
+        # Routers; schlaegt seine Initialisierung fehl, ist das ein harter,
+        # frueher Fehler (ADR-030). self.provider bleibt oeffentlich der
+        # Default-/Fallback-Provider. Er kapselt NUR den rohen Modellaufruf;
+        # confirmed-Strip, JSON-Parsing und Fallbacks bleiben hier in AIEngine.
         self.provider = build_provider(config)
+        self._default_name = config.ai_provider
+        # Aufgabenabhaengige Auswahl (ADR-030), deterministisch, ohne LLM-Call.
+        self._router = build_router(config)
+        # Provider-Cache; Nicht-Default-Provider werden erst bei Bedarf lazy
+        # konstruiert (OpenAI-only-Setups brauchen 'anthropic' weiterhin nicht).
+        self._providers = {self._default_name: self.provider}
+
+    def _provider_for_name(self, name: str):
+        """Lazy-Konstruktion eines Nicht-Default-Providers (mit Cache). Kann
+        RuntimeError werfen (Paket/Key fehlt, unbekannter Name) - der Aufrufer
+        (_chat) faengt das ab und faellt auf den Standardprovider zurueck."""
+        provider = self._providers.get(name)
+        if provider is None:
+            provider = build_named_provider(name, self.config)
+            self._providers[name] = provider
+        return provider
+
+    def _chat(
+        self,
+        task: TaskType,
+        system: str,
+        messages: list[Message],
+        *,
+        json_mode: bool = False,
+    ) -> str:
+        """Waehlt per Router den Provider fuer diesen Aufruf und ruft dessen
+        chat() auf. Ist ein gerouteter Nicht-Default-Provider nicht verfuegbar
+        oder wirft er, wird AUSSCHLIESSLICH fuer diesen Aufruf auf den
+        Standardprovider zurueckgefallen (WARNING). Der Fallback umschliesst
+        nur den rohen chat()-Aufruf - JSON-Parsing und confirmed-Strip in
+        get_plan/answer bleiben unberuehrt (ADR-030). Logging enthaelt nur
+        TaskType/Provider/Grund, niemals Prompt-, Antwort- oder Key-Inhalte."""
+        name, reason = self._router.select(task)
+        if name != self._default_name:
+            try:
+                provider = self._provider_for_name(name)
+                text = provider.chat(system, messages, json_mode=json_mode)
+                logger.info("Router: task=%s -> provider=%s (%s)", task.value, name, reason)
+                return text
+            except Exception as e:
+                logger.warning(
+                    "Router: provider=%s nicht verfuegbar (%s) -> Fallback auf %s (task=%s)",
+                    name, type(e).__name__, self._default_name, task.value,
+                )
+                return self.provider.chat(system, messages, json_mode=json_mode)
+        logger.info("Router: task=%s -> provider=%s (%s)", task.value, name, reason)
+        return self.provider.chat(system, messages, json_mode=json_mode)
 
     def get_plan(self, user_input: str, history: list[Message]) -> Plan:
         """Nimmt Nutzereingabe + Konversationshistorie entgegen und gibt
@@ -147,7 +196,7 @@ class AIEngine:
         messages.append(Message(role="user", content=user_input))
 
         try:
-            raw = self.provider.chat(build_system_prompt(), messages, json_mode=True)
+            raw = self._chat(TaskType.PLANNING, build_system_prompt(), messages, json_mode=True)
             data = json.loads(raw)
             parameters = data.get("parameters", {}) or {}
             # Sicherheit (Trust Boundary): parameters stammt 1:1 aus dem
@@ -191,8 +240,8 @@ class AIEngine:
         messages.append(Message(role="user", content=user_input))
 
         try:
-            return self.provider.chat(
-                build_chat_system_prompt(long_term_summary), messages
+            return self._chat(
+                TaskType.GENERATION, build_chat_system_prompt(long_term_summary), messages
             )
         except Exception as e:
             logger.error("Chat-Antwort fehlgeschlagen: %s", e)

@@ -27,6 +27,12 @@ class Config:
     anthropic_api_key: str = ""
     claude_model: str = "claude-sonnet-5"
 
+    # Provider-Router (v0.8 Phase 2, ADR-030): aufgabenabhaengige Auswahl,
+    # deterministisch. Leer -> Rueckfall auf ai_provider (rueckwaertskompatibel:
+    # ohne diese Felder verhaelt sich alles wie in Phase 1).
+    planning_provider: str = ""   # get_plan() / TaskType.PLANNING
+    answer_provider: str = ""     # answer()   / TaskType.GENERATION
+
     # Sprache / Stimme
     voice: str = "default"
     volume: float = 0.8
@@ -95,6 +101,8 @@ class Config:
             ai_provider=data.get("ai_provider", cls.ai_provider),
             anthropic_api_key=anthropic_key,
             claude_model=data.get("claude_model", cls.claude_model),
+            planning_provider=data.get("planning_provider", cls.planning_provider),
+            answer_provider=data.get("answer_provider", cls.answer_provider),
             voice=data.get("voice", cls.voice),
             volume=data.get("volume", cls.volume),
             hotword=data.get("hotword", cls.hotword),

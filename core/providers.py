@@ -19,6 +19,7 @@ robuste Parsing/Fallback bleibt in AIEngine.
 from __future__ import annotations
 
 import logging
+from enum import Enum
 from typing import Protocol
 
 from core.config import Config
@@ -111,10 +112,12 @@ class ClaudeProvider:
         return "".join(block.text for block in response.content if block.type == "text").strip()
 
 
-def build_provider(config: Config) -> LLMProvider:
-    """Waehlt den Provider anhand von config.ai_provider (explizit, kein
-    Auto-Routing). Unbekannter Wert -> klarer Fehler."""
-    if config.ai_provider == "openai":
+def build_named_provider(name: str, config: Config) -> LLMProvider:
+    """Konstruiert EINEN Provider anhand seines Namens (explizit, kein
+    Auto-Routing). Genutzt von build_provider (Standardprovider) und - fuer die
+    aufgabenabhaengige Auswahl in Phase 2 (ADR-030) - vom Router-getriebenen
+    Lazy-Pfad in AIEngine. Unbekannter Name -> klarer Fehler."""
+    if name == "openai":
         return OpenAIProvider(
             config.openai_api_key,
             config.model,
@@ -122,7 +125,7 @@ def build_provider(config: Config) -> LLMProvider:
             temperature=config.temperature,
             max_tokens=config.max_tokens,
         )
-    if config.ai_provider == "claude":
+    if name == "claude":
         return ClaudeProvider(
             config.anthropic_api_key,
             config.claude_model,
@@ -130,5 +133,52 @@ def build_provider(config: Config) -> LLMProvider:
             max_tokens=config.max_tokens,
         )
     raise RuntimeError(
-        f"Unbekannter ai_provider: {config.ai_provider!r} (erwartet 'openai' oder 'claude')."
+        f"Unbekannter Provider: {name!r} (erwartet 'openai' oder 'claude')."
     )
+
+
+def build_provider(config: Config) -> LLMProvider:
+    """Standardprovider gemaess config.ai_provider (ADR-029). Bleibt in Phase 2
+    der Anker/Fallback des Routers (ADR-030)."""
+    return build_named_provider(config.ai_provider, config)
+
+
+class TaskType(str, Enum):
+    """Aufgabentyp einer LLM-Nutzung in AIEngine - das EINZIGE, rein interne
+    und vertrauenswuerdige Routing-Signal in Phase 2 (ADR-030). Bewusst nur
+    zwei Werte; kein Routing nach Intent (ist Ergebnis von get_plan) oder
+    Sicherheitsstufe (erst im Executor bekannt)."""
+
+    PLANNING = "planning"      # get_plan(): Intent-Erkennung, braucht JSON
+    GENERATION = "generation"  # answer(): Textausgabe
+
+
+class ProviderRouter:
+    """Deterministische Weiche TaskType -> Provider-Name (ADR-030).
+
+    Kein Orchestrator: reine Nachschlagetabelle ohne Bewertung, ohne LLM-Call,
+    nie von Modell-Output beeinflusst. Legt nur den Grundstein fuer spaetere,
+    feinere Aufgaben-Entscheidungen. select() liefert zusaetzlich den
+    Auswahlgrund ('regel' bei expliziter Config-Regel, sonst 'default') fuer
+    das Logging."""
+
+    def __init__(self, default_name: str, rules: dict[TaskType, str]):
+        self._default = default_name
+        self._rules = rules
+
+    def select(self, task: TaskType) -> tuple[str, str]:
+        if task in self._rules:
+            return self._rules[task], "regel"
+        return self._default, "default"
+
+
+def build_router(config: Config) -> ProviderRouter:
+    """Baut den Router aus der Config. Fehlende Felder -> Rueckfall auf
+    ai_provider (Rueckwaertskompatibilitaet: ohne planning_provider/
+    answer_provider verhaelt sich alles wie in Phase 1)."""
+    rules: dict[TaskType, str] = {}
+    if config.planning_provider:
+        rules[TaskType.PLANNING] = config.planning_provider
+    if config.answer_provider:
+        rules[TaskType.GENERATION] = config.answer_provider
+    return ProviderRouter(config.ai_provider, rules)

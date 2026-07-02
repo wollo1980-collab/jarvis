@@ -17,7 +17,11 @@ from core.models import Message
 from core.providers import (
     ClaudeProvider,
     OpenAIProvider,
+    ProviderRouter,
+    TaskType,
+    build_named_provider,
     build_provider,
+    build_router,
 )
 
 
@@ -145,5 +149,41 @@ def test_build_provider_claude(monkeypatch):
 
 def test_build_provider_unknown_raises():
     config = Config(ai_provider="gemini")
-    with pytest.raises(RuntimeError, match="Unbekannter ai_provider"):
+    with pytest.raises(RuntimeError, match="Unbekannter Provider"):
         build_provider(config)
+
+
+def test_build_named_provider_unknown_raises():
+    with pytest.raises(RuntimeError, match="Unbekannter Provider"):
+        build_named_provider("gemini", Config())
+
+
+# --- ProviderRouter (v0.8 Phase 2, ADR-030) ------------------------------
+
+def test_router_uses_default_when_no_rule():
+    r = ProviderRouter("openai", {})
+    assert r.select(TaskType.PLANNING) == ("openai", "default")
+    assert r.select(TaskType.GENERATION) == ("openai", "default")
+
+
+def test_router_rule_wins_and_reports_reason():
+    r = ProviderRouter("openai", {TaskType.GENERATION: "claude"})
+    assert r.select(TaskType.GENERATION) == ("claude", "regel")
+    # Nicht beregelter TaskType faellt weiter auf den Default:
+    assert r.select(TaskType.PLANNING) == ("openai", "default")
+
+
+def test_build_router_from_config_fields():
+    cfg = Config(ai_provider="openai", answer_provider="claude")
+    r = build_router(cfg)
+    assert r.select(TaskType.GENERATION) == ("claude", "regel")
+    assert r.select(TaskType.PLANNING) == ("openai", "default")
+
+
+def test_build_router_without_fields_is_backward_compatible():
+    """Ohne planning_provider/answer_provider routet jeder TaskType auf
+    ai_provider - exakt das Phase-1-Verhalten."""
+    cfg = Config(ai_provider="claude")
+    r = build_router(cfg)
+    assert r.select(TaskType.PLANNING) == ("claude", "default")
+    assert r.select(TaskType.GENERATION) == ("claude", "default")

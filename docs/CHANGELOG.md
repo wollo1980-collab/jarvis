@@ -1,5 +1,51 @@
 # Changelog
 
+## v0.8 Multi-KI, Phase 2: Minimaler deterministischer Provider-Router (02.07.2026)
+
+Zweiter Schritt von v0.8 „Multi-KI" (ADR-030): Jarvis kann jetzt **pro
+Aufgabentyp** einen Provider verwenden - deterministisch, ohne dass eine
+weitere KI die Wahl trifft und ohne zusätzlichen LLM-Aufruf. Der Router ist
+ausdrücklich **nur der Grundstein** für spätere, feinere Routing-
+Entscheidungen, **noch kein intelligenter Orchestrator**.
+
+### Neu
+- `core/providers.py`: `TaskType` (`PLANNING` = `get_plan()`, `GENERATION` =
+  `answer()`) und `ProviderRouter` (deterministische Weiche `TaskType →
+  Provider-Name`, liefert zusätzlich den Auswahlgrund `regel`/`default`).
+  `build_router(config)` baut die Regeln; `build_named_provider(name, config)`
+  konstruiert einen Provider per Name (Refactoring aus `build_provider`).
+- `core/config.py`: neue optionale Felder `planning_provider` und
+  `answer_provider`. Leer → Rückfall auf `ai_provider`. `config.example.json`
+  dokumentiert beide.
+- Tests: Router-Auswahl + Auswahlgrund, `build_router` aus Config,
+  Rückwärtskompatibilität, AIEngine-Routing (Planning/Generation zum
+  gerouteten Provider), Fallback bei fehlender Provider-Konstruktion und bei
+  `chat()`-Fehler, `confirmed`-Strip greift auch nach Fallback
+  (providerunabhängig), Logging enthält keine Prompt-/Antwort-Inhalte.
+
+### Geändert
+- `core/ai.py`: `AIEngine` hält einen Provider-Cache + den Router. `get_plan`
+  routet als `PLANNING`, `answer` als `GENERATION`. Der Standardprovider
+  (`ai_provider`) wird eager als Anker konstruiert; Nicht-Default-Provider
+  bleiben lazy. Ist ein gerouteter Provider nicht verfügbar oder wirft sein
+  `chat()`, wird **nur für diesen Aufruf** auf den Standardprovider
+  zurückgefallen (WARNING). Der Fallback umschließt nur den rohen
+  `chat()`-Aufruf; JSON-Parsing, der `confirmed`-Strip und die bestehenden
+  Fallbacks bleiben unverändert zentral in `AIEngine`.
+
+### Nicht geändert
+- Öffentliche `AIEngine`-Schnittstelle (`get_plan`/`answer`) byte-identisch →
+  keine Änderung an `main.py`, `telegram_main.py`, `jarvis_runtime.py`,
+  `core/planner.py`, `executor/*`, `commands/*`, `memory/*`,
+  `requirements.txt`. Ohne die neuen Config-Felder verhält sich alles wie in
+  Phase 1. 306 Tests grün.
+
+### Logging
+- INFO: `TaskType`, gewählter Provider, Auswahlgrund (`regel`/`default`).
+- WARNING: Providerfehler (nur Fehlerklasse) + Fallback auf Standardprovider.
+- Ausdrücklich **ohne** Prompts, Antworten, API-Keys oder personenbezogene
+  Inhalte.
+
 ## v0.8 Multi-KI, Phase 1: Provider-Abstraktion + Claude als zweiter Provider (02.07.2026)
 
 Erster Schritt von v0.8 „Multi-KI" (ADR-029): Jarvis kann jetzt **explizit**
