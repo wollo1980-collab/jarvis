@@ -148,10 +148,21 @@ class AIEngine:
             )
             raw = response.choices[0].message.content.strip()
             data = json.loads(raw)
+            parameters = data.get("parameters", {}) or {}
+            # Sicherheit (Trust Boundary): parameters stammt 1:1 aus dem
+            # Modell-JSON. Der Executor entscheidet anhand von
+            # parameters["confirmed"], ob eine Sicherheitsstufe-2/3-
+            # Bestaetigung bereits erfolgt ist - dieses Feld darf NIE aus
+            # Modell-Output stammen (sonst koennte eine praeparierte Antwort
+            # die Bestaetigung ueberspringen). Einzige legitime Quelle ist der
+            # Executor nach echter Rueckfrage - deshalb hier am Rand entfernen.
+            if not isinstance(parameters, dict):
+                parameters = {}
+            parameters.pop("confirmed", None)
             return Plan(
                 intent=data.get("intent", "chat"),
                 target=data.get("target"),
-                parameters=data.get("parameters", {}) or {},
+                parameters=parameters,
                 raw_input=user_input,
                 confidence=float(data.get("confidence", 1.0)),
             )

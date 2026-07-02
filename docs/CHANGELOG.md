@@ -1,5 +1,33 @@
 # Changelog
 
+## Sicherheits-Fix: Modell kann Bestätigung nicht mehr fälschen (02.07.2026)
+
+`AIEngine.get_plan()` übernahm `parameters` 1:1 aus dem Modell-JSON. Ein LLM
+hätte theoretisch `parameters.confirmed=true` liefern können - der Executor
+hätte dann die Bestätigung für Sicherheitsstufe-2/3-Commands übersprungen
+(Trust-Boundary-Verletzung, widerspricht Safety First).
+
+### Behoben
+- `core/ai.py`: `get_plan()` entfernt das Feld `confirmed` aus den vom
+  Modell gelieferten `parameters` (Minimal-Fix am Trust Boundary). Einzige
+  legitime Quelle für `confirmed` bleibt der Executor nach echter Rückfrage.
+  Nicht-Dict-`parameters` werden defensiv auf `{}` normalisiert.
+- Kein Eingriff in Plan-Datenmodell, Executor oder Commands (per `git diff`
+  verifiziert).
+- Drei Tests (`tests/test_ai.py`): gefälschtes `confirmed` wird entfernt,
+  normale `parameters` bleiben erhalten, Ende-zu-Ende (gefälschtes
+  `confirmed` kann die Executor-Bestätigung nicht umgehen, echte Bestätigung
+  funktioniert weiter). 285 Tests grün.
+
+### Einordnung
+- Praktische Ausnutzbarkeit war in der aktuellen Konfiguration niedrig
+  (lokale Konsole: nur Wolfgangs eigene Eingabe; Telegram: Stufe 2/3 ohnehin
+  per Whitelist gesperrt) - der Fix ist Defense-in-Depth und schließt das
+  Risiko, bevor künftig untrusted Content in `get_plan` fließt (v0.8, RAG,
+  externe Inhalte).
+- Keine ADR (Minimal-Fix am Rand, keine Architekturänderung). Die größere
+  Variante (dediziertes `Plan.confirmed`-Feld) wurde bewusst nicht gewählt.
+
 ## Sicherheits-Fix: Bot-Token nicht mehr im Log (02.07.2026)
 
 `python-telegram-bot` ließ `httpx` den Request-URL inkl. Bot-Token im Pfad

@@ -1,5 +1,41 @@
 # Logbook
 
+## 2026-07-02 - Sicherheits-Fix: Modell kann Bestaetigung nicht mehr faelschen (confirmed-Flag)
+
+**Kontext:** Sicherheitsanalyse (auf Anforderung) der Ausfuehrungskette
+Planner -> get_plan -> Plan -> Executor -> Command. Befund: `get_plan`
+(`core/ai.py`) uebernahm `parameters` ungefiltert aus dem Modell-JSON; der
+Executor (`executor.py:114`) und `shutdown_pc` (`system.py:95`) entscheiden
+anhand von `parameters["confirmed"]`, ob eine Stufe-2/3-Bestaetigung schon
+erfolgt ist. Ein vom Modell geliefertes `confirmed=true` (z. B. per
+Prompt-Injection) haette die Bestaetigung - inkl. Stufe-3-Phrase -
+uebersprungen. Bewertung: echter Trust-Boundary-Defekt, aktuell niedrig
+ausnutzbar (lokal nur Wolfgangs eigene Eingabe; Telegram per Whitelist
+gesperrt), aber gegen Safety First - Fix jetzt (billig, Roadmap macht es
+real, sobald untrusted Content in get_plan fliesst).
+
+**Product-Owner-Entscheidung:** Variante 1 - Minimal-Fix am Trust Boundary.
+
+**Umgesetzt:** `core/ai.py` - `get_plan()` entfernt `confirmed` aus den
+Modell-`parameters` (`parameters.pop("confirmed", None)`), defensiv nach
+einer isinstance-dict-Normalisierung. Einzige legitime `confirmed`-Quelle
+bleibt der Executor nach echter Rueckfrage. KEINE Aenderung an Plan-Modell,
+Executor oder Commands (per `git diff` verifiziert - `core/models.py`,
+`executor/*`, `commands/*` unberuehrt).
+
+**Tests:** 3 neue in `tests/test_ai.py`: (1) gefaelschtes `confirmed` wird
+entfernt, andere Parameter bleiben; (2) normale `parameters` bleiben
+unveraendert; (3) Ende-zu-Ende - gefaelschtes `confirmed` kann die
+Executor-Bestaetigung nicht umgehen, echte Bestaetigung (`listen="ja"`)
+funktioniert weiter. 285/285 gruen.
+
+**Bewusst offen/entschieden:** Die `confirmed`-Auswertung in `system.py:95`
+bleibt als echte zweite Schicht bestehen (liest jetzt nur noch einen nie
+faelschbaren Wert). Variante 2 (dediziertes `Plan.confirmed`-Feld,
+strukturelle Trennung) wurde bewusst nicht gewaehlt. Keine ADR. Die separat
+analysierte Runtime-Bestaetigung fuer lokale Kanaele bleibt eigener,
+offener Baustein.
+
 ## 2026-07-02 - Sicherheits-Fix: Bot-Token nicht mehr im Log
 
 **Kontext:** Beim manuellen Runtime-Test (`python jarvis_runtime.py`) fiel im
