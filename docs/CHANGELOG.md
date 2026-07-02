@@ -1,5 +1,40 @@
 # Changelog
 
+## v0.7.0 - PC-Analyse, Phase 1 (ADR-020, 02.07.2026)
+
+Erster v0.7-Baustein ("PC-Admin", Handbook Kap. 13/17).
+
+### Neu
+- `commands/monitor.py::AnalyzePcCommand` (Intent `analyze_pc`,
+  Sicherheitsstufe 0, keine Bestätigung nötig): erstellt einen
+  PC-Gesundheitsbericht aus Festplattenbelegung, Top-5-Prozessen nach
+  CPU/RAM, mehrfach laufenden Prozessen und Autostart-Programmen
+  (Registry Run-Keys HKCU+HKLM sowie Startup-Ordner). Python sammelt
+  und strukturiert alle Daten deterministisch, die KI
+  (`AIEngine.answer()`) formuliert nur den Bericht und interpretiert
+  Auffälligkeiten - kein Nachrechnen. Pflicht-Disclaimer wie bei
+  `analyze_report`/`calculate_kpi`.
+- Eigenes, zu `commands/reports.py` bewusst dupliziertes
+  `configure(ai_engine)`-Muster in `commands/monitor.py` (ADR-015) -
+  keine gemeinsame Abstraktion, solange nur zwei Module KI-Zugriff
+  brauchen. `main.py` verdrahtet zusätzlich `monitor_commands.configure(ai)`.
+- `winreg`-Import mit `try/except ImportError` abgesichert - klare
+  Fehlermeldung statt Absturz auf Nicht-Windows-Systemen.
+- 12 neue Tests (`tests/test_commands_monitor.py`) - 164 Tests gesamt,
+  alle grün.
+
+### Bewusst nicht enthalten (Phase 1)
+- Windows-Ereignisprotokoll (eigener Kap.-17-Punkt, separat zu
+  priorisieren).
+- Optimierung/Bereinigung, Registry-Änderungen, Dienste-Verwaltung,
+  Treiber-Aktualisierung.
+- Keine Änderung an `core/ai.py`, `core/planner.py`,
+  `core/tool_manager.py`, `executor/executor.py` oder anderen
+  `commands/*.py`-Dateien.
+
+### Siehe auch
+- ADR-020 (docs/adr/ADR-020.md)
+
 ## v0.6 - Handy: Telegram-Fernzugriff (abgeschlossen, getaggt, 02.07.2026)
 
 Manueller Smoke-Test (Handbook Kap. 14/15/28) mit echtem Bot-Token/Chat

@@ -1,5 +1,77 @@
 # Logbook
 
+## 2026-07-02 - PC-Analyse implementiert, v0.7 Phase 1 (ADR-020)
+
+**Kontext:** Nach Handbook v3.5 war "PC-Admin" (Kap. 13) der naechste
+Roadmap-Baustein. Kap. 17 buendelt dafuer sechs bis sieben eigenstaendige
+Faehigkeiten - zu gross fuer einen ersten Schritt. Wolfgang hat
+"System-Analyse/Ueberwachung erweitern" priorisiert und den Scope auf
+drei rein lesende Faehigkeiten praezisiert: Festplattenbelegung,
+laufende Prozesse (Top-CPU/Top-RAM), Autostart-Programme (nur
+anzeigen) - gemeinsame erste Umsetzung der "System-Analyst-Vision"
+(Kap. 17).
+
+**Product-Owner-Entscheidungen (vollstaendig uebernommen):**
+1. KI-narrativ wie bei KPI - Python sammelt/strukturiert deterministisch,
+   KI formuliert nur den Bericht.
+2. Kein neuer gemeinsamer AI-Baustein - `monitor.py` dupliziert das
+   `configure()`-Muster aus `reports.py` (ADR-015), Abstraktion erst bei
+   einem dritten Verwender pruefen.
+3. Doppelte-Prozesse-Erkennung in Phase 1 (nur Hinweis, keine
+   Fehlerbewertung).
+4. Autostart aus beiden Quellen: Registry Run-Keys UND Startup-Ordner.
+5. Top 5 Prozesse je Kategorie (CPU, RAM).
+6. Intent-Name `analyze_pc`.
+
+**Umsetzung:** `commands/monitor.py::AnalyzePcCommand` (Sicherheitsstufe
+0). Festplatten ueber `psutil.disk_partitions()`/`disk_usage()`.
+Prozesse ueber zwei `psutil.process_iter()`-Durchlaeufe mit
+`_PROCESS_SAMPLE_INTERVAL` (0,5s) Pause (gleiches Muster wie
+`system_status`, ADR-011) - daraus Top 5 CPU, Top 5 RAM,
+mehrfach laufende Prozesse (`collections.Counter`). Autostart aus
+Registry (`HKCU`+`HKLM` ueber `winreg`, Python-Standardbibliothek,
+keine neue Abhaengigkeit) und Startup-Ordner (Benutzer + Alle
+Benutzer) - jede der vier Quellen einzeln abgesichert, ein
+Fehlschlag liefert nur einen Fehlertext, kein Totalausfall. KI
+bekommt die fertige Tabelle als Text mit der Anweisung, nur zu
+formulieren, nichts nachzurechnen - derselbe Pflicht-Disclaimer wie
+bei `analyze_report`/`calculate_kpi` (als eigene Konstante
+dupliziert, kein Zugriff auf `commands.reports`-interne Namen).
+
+**`configure()`-Muster bewusst dupliziert** statt einer gemeinsamen
+Abstraktion mit `reports.py` (Wolfgangs Entscheidung 2) - `main.py`
+verdrahtet zusaetzlich `monitor_commands.configure(ai)`.
+
+**Zirkelimport von Anfang an vermieden:** gleicher `TYPE_CHECKING`-Trick
+wie bei ADR-015, diesmal proaktiv angewendet statt erneut entdeckt -
+verifiziert mit `from core.ai import AIEngine` als allererste Zeile
+eines frischen Prozesses.
+
+**Plattformpruefung:** `winreg` existiert nur unter Windows - Import
+per `try/except ImportError` abgesichert, `execute()` liefert eine
+klare Fehlermeldung statt Absturz auf Nicht-Windows-Systemen.
+
+**Keine Aenderung an** `core/ai.py`, `core/planner.py`,
+`core/tool_manager.py`, `executor/executor.py` oder anderen
+`commands/*.py`-Dateien - per `git diff --stat` verifiziert (leer).
+
+**Tests:** 12 neue Tests (`tests/test_commands_monitor.py`) -
+Plattformpruefung, Festplatten, Top-Prozesse CPU/RAM, doppelte
+Prozesse, defekter Einzelprozess wird uebersprungen statt den ganzen
+Befehl scheitern zu lassen, Registry beide Hives, Registry-Teilausfall,
+Startup-Ordner, KI bekommt strukturierten Text + Disclaimer,
+Fehlermeldung bei fehlender Konfiguration, keine Bestaetigung noetig,
+Registry-Eintrag. 164 Tests gesamt, alle gruen.
+
+**Bewusst nicht umgesetzt (Phase 1):** Windows-Ereignisprotokoll,
+Optimierung/Bereinigung, Registry-Aenderungen, Dienste, Treiber.
+
+**Naechster Schritt:** v0.7 Phase 2 NICHT begonnen - naechste
+Priorisierung liegt beim Product Owner.
+
+**Siehe auch:** ADR-020 (docs/adr/ADR-020.md), README.md Abschnitt
+"PC-Analyse (v0.7 Phase 1, ADR-020)", CHANGELOG (v0.7.0).
+
 ## 2026-07-02 - v0.6 abgeschlossen und getaggt, Handbook v3.5 (ADR-019)
 
 **Kontext:** Wolfgang hat als Product Owner nach ausdrücklicher Prüfung

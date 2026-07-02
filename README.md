@@ -34,7 +34,7 @@ jarvis/
 │   ├── __init__.py         # Registry + minimaler Dispatch
 │   ├── system.py             # open_program, shutdown_pc
 │   ├── memory.py               # remember_fact, forget_fact
-│   ├── monitor.py               # system_status (CPU/RAM, ADR-011)
+│   ├── monitor.py               # system_status (ADR-011), analyze_pc (ADR-020)
 │   ├── installer.py               # install_program (winget, ADR-012)
 │   ├── excel.py                     # read_excel (openpyxl, ADR-014)
 │   └── reports.py                     # analyze_report (ADR-015), calculate_kpi (ADR-016)
@@ -313,6 +313,33 @@ anderen Chat-IDs werden ignoriert.
 Siehe ADR-018 für die vollständige Begründung (u. a. warum die
 Beschränkungen bewusst nur in `telegram_main.py` liegen, nicht in
 `core/ai.py`/`Planner`/`Executor`/`ToolManager`).
+
+## PC-Analyse (v0.7 Phase 1, ADR-020)
+
+Erster v0.7-Baustein ("PC-Admin", Handbook Kap. 13/17): Jarvis erstellt
+einen PC-Gesundheitsbericht - Festplattenbelegung, Top-5-Prozesse nach
+CPU und nach RAM, mehrfach laufende Prozesse, Autostart-Programme
+(Registry Run-Keys + Startup-Ordner). Sicherheitsstufe 0 - reines Lesen,
+keine Bestätigung nötig, kein Schreibzugriff.
+
+```
+Du: Analysiere meinen PC
+Jarvis: Deine SSD (C:) ist zu 87 % belegt. Chrome verbraucht mit 45 % CPU
+am meisten, Discord läuft doppelt. Autostart enthält 12 Einträge ...
+
+Analyse auf Basis der gelieferten Daten. Bitte vor Entscheidungen prüfen.
+```
+
+**Python sammelt und strukturiert alle Daten deterministisch** (wie bei
+`calculate_kpi`, ADR-016) - die KI (`AIEngine.answer()`) formuliert nur
+den Bericht und benennt Auffälligkeiten, sie berechnet nichts selbst.
+Zweiter Command mit direktem KI-Zugriff (`configure()`-Injection wie bei
+`analyze_report`, ADR-015 - bewusst als eigenes, dupliziertes
+Muster in `commands/monitor.py`, keine gemeinsame Abstraktion).
+
+**Bewusst nicht enthalten (Phase 1):** Windows-Ereignisprotokoll,
+Optimierung/Bereinigung, Registry-Änderungen, Dienste-Verwaltung,
+Treiber-Aktualisierung. Siehe ADR-020.
 
 ## Pipeline
 

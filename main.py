@@ -15,6 +15,7 @@ import logging
 from datetime import date
 
 import commands.memory as memory_commands
+import commands.monitor as monitor_commands
 import commands.reports as reports_commands
 from core.ai import AIEngine
 from core.config import Config
@@ -64,6 +65,11 @@ def main() -> None:
     # erster Command direkt die KI auf - dieselbe AIEngine-Instanz wird
     # hier injiziert (Registry instanziiert Commands vor diesem Punkt).
     reports_commands.configure(ai)
+
+    # PC-Analyse (v0.7 Phase 1, ADR-020): analyze_pc ruft ebenfalls
+    # direkt die KI auf - eigenes, zu reports_commands bewusst
+    # dupliziertes configure()-Muster (siehe ADR-020).
+    monitor_commands.configure(ai)
 
     logger.info("Jarvis v0.4 gestartet.")
     speech.say("Jarvis ist bereit.")
