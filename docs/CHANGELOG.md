@@ -1,5 +1,52 @@
 # Changelog
 
+## Single-Instance-Schutz (ADR-026, 02.07.2026)
+
+Eigenständiger Infrastruktur-Baustein, unabhängig von Kanälen/UI/
+Autostart: verhindert, dass mehrere Jarvis-Prozesse gleichzeitig
+dasselbe `memory_dir` verwenden (`JsonMemoryStore` hat kein Locking) -
+Voraussetzung für einen künftigen Runtime-Ausbau, in ADR-025 als
+ungelöstes Risiko benannt.
+
+### Neu
+- `core/single_instance.py`: `SingleInstanceLock` - Schutz **pro
+  `memory_dir`**, nicht global pro Projekt. Lock-Datei `jarvis.lock`
+  innerhalb von `memory_dir` mit PID, Einstiegspunkt-Name und
+  Zeitstempel (JSON).
+- Atomare Erzeugung über `os.open(O_CREAT|O_EXCL)` als eigentliche
+  Exklusivitäts-Garantie (Betriebssystem-Ebene, race-sicher).
+- Zusätzliche Härtung (Product-Owner-Entscheidung): das Datei-Handle
+  bleibt für die gesamte Laufzeit offen und wird per `msvcrt.locking()`
+  gesperrt - Windows gibt Handle und Sperre bei einem Absturz
+  automatisch frei, ohne eigenen Aufräum-Code.
+- Verwaiste-Lock-Erkennung vor jedem Erwerb: `psutil.pid_exists()` plus
+  Abgleich des tatsächlich laufenden Prozesses (`cmdline()`) gegen den
+  gespeicherten Einstiegspunkt-Dateinamen (exakter Dateiname, kein
+  Substring - schützt gegen PID-Wiederverwendung durch Windows).
+  Verwaiste Lock-Dateien werden automatisch entfernt (Selbstheilung,
+  kein manuelles Eingreifen nötig).
+- `main.py`, `telegram_main.py`, `jarvis_runtime.py` erwerben den Lock
+  als allererste Aktion in `main()`, vor jeglicher Core-Stack-
+  Instanziierung; bei aktivem Lock bricht der Start sofort mit klarer
+  Fehlermeldung (PID/Einstiegspunkt/Zeitstempel) ab, kein Command wird
+  ausgeführt. Sauberes Beenden gibt den Lock über `try`/`finally`
+  explizit frei.
+- 13 neue Tests (`tests/test_single_instance.py`) - 249 Tests gesamt,
+  alle grün. Darunter ein Regressionstest für einen während der
+  Implementierung gefundenen Bug: `msvcrt.locking()` verweigert das
+  Lesen der Lock-Datei über ein frisches Handle (`PermissionError`),
+  auch innerhalb desselben Prozesses - eine frühere Fassung
+  interpretierte diesen Lesefehler fälschlich als "verwaist" und hätte
+  eine aktive Lock-Datei gelöscht.
+
+### Bewusst nicht enthalten
+Telegram-Kanal in der Runtime, abstraktes Channel-Interface, Windows-
+Autostart, UI, Tray, Wake-Word, Runtime v2 allgemein - eigene, spätere
+Entscheidungen (siehe ADR-024/025).
+
+### Siehe auch
+`docs/adr/ADR-026.md`.
+
 ## Jarvis-Runtime v1 (ADR-025, 02.07.2026)
 
 Eigenständiger Infrastruktur-/Runtime-Baustein zwischen v0.7 und v0.8

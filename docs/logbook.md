@@ -1,5 +1,92 @@
 # Logbook
 
+## 2026-07-02 - Single-Instance-Schutz implementiert (ADR-026)
+
+**Kontext:** Nach Abschluss und Commit von Runtime v1 (`95e5af9`) hat
+Wolfgang zunaechst eine Bewertung angefordert, ob der Infrastruktur-/
+Runtime-Baustein bereits ausreicht, damit Jarvis-Eigenstart darauf
+aufbauen kann. Ergebnis: Runtime v1 beweist nur das Geruest (Queue/
+Worker/Shutdown), der einzige Kanal (`ConsoleDummyChannel`) blockiert
+aber auf `input()` und ist fuer einen unbeaufsichtigten Autostart nicht
+nutzbar - ausserdem ist das Fehlen eines Schutzes vor gleichzeitigem
+Betrieb mehrerer Einstiegspunkte gegen dasselbe `memory_dir` ein
+eigenstaendiges, von Kanaelen/UI/Autostart unabhaengiges Risiko (bereits
+in ADR-025 als offen benannt). Wolfgang entschied: Runtime v2 (Telegram-
+Kanal, Channel-Interface, Autostart) explizit vertagt - naechster
+Schritt ist ausschliesslich der Single-Instance-Schutz.
+
+**Technischer Vorschlag bewertet und freigegeben** (9 Punkte: welche
+Einstiegspunkte, welche Technik, KISS/Windows-Eignung, Scope pro
+memory_dir vs. global, Verhalten bei aktiver/abgestuerzter Instanz,
+Fehlerfaelle, Tests, ADR-Bedarf). Product-Owner-Entscheidung: Schutz pro
+`memory_dir`, Lock-Datei mit PID/Einstiegspunkt/Zeitstempel,
+Verwaist-Erkennung mit Selbstheilung, PID-Wiederverwendung
+beruecksichtigen, Zweitstart fail-fast, alle drei Einstiegspunkte
+(`main.py`/`telegram_main.py`/`jarvis_runtime.py`) geschuetzt. Zusaetzlich:
+offenes Datei-Handle waehrend der Laufzeit halten, fuer mehr Robustheit
+als eine reine Marker-Datei.
+
+**ADR-026 geschrieben** (`docs/adr/ADR-026.md`).
+
+**Umsetzung:**
+- Neue Datei `core/single_instance.py`: `SingleInstanceLock` (Schutz pro
+  `memory_dir`), `InstanceAlreadyRunningError`. Lock-Datei `jarvis.lock`
+  im jeweiligen `memory_dir`, atomar erzeugt (`os.open(O_CREAT|O_EXCL)`),
+  Inhalt PID/Einstiegspunkt/Zeitstempel als JSON. Zusaetzlich
+  `msvcrt.locking()` auf dem offen gehaltenen Handle - Windows gibt es
+  beim Absturz automatisch frei. Vor jedem Erwerb: Verwaist-Pruefung
+  ueber `psutil.pid_exists()` + exakten Dateiname-Abgleich der
+  tatsaechlichen Prozess-Cmdline (PID-Wiederverwendungsschutz) -
+  verwaiste Lock-Dateien werden automatisch entfernt.
+- `main.py`, `telegram_main.py`, `jarvis_runtime.py` erwerben den Lock
+  als allererste Aktion in `main()`, geben ihn per `try`/`finally` beim
+  Beenden frei. Bei aktivem Lock: sofortiger, kontrollierter Abbruch mit
+  Fehlermeldung (PID/Einstiegspunkt/Zeitstempel), kein Command wird
+  ausgefuehrt. `core/config.py`, `core/ai.py`, `core/planner.py`,
+  `core/speech.py`, `core/tool_manager.py`, `core/models.py`,
+  `commands/*`, `executor/*`, `memory/*` unveraendert.
+
+**Waehrend der Implementierung gefundener und behobener Bug:** Ein
+frueher Testlauf zeigte `PermissionError` beim Lesen der Lock-Datei
+ueber ein frisches Handle, waehrend das eigene, sperrende Handle noch
+offen war - `msvcrt.locking()` verweigert das Lesen ueber JEDES andere
+Handle, auch innerhalb desselben Prozesses. Die urspruengliche
+`_clear_if_stale()`-Implementierung interpretierte diesen Lesefehler
+faelschlich als "Datei verwaist/kaputt" und haette eine aktiv gesperrte
+Lock-Datei geloescht - ein sicherheitsrelevanter Fehler, der den
+Single-Instance-Schutz ausgehebelt haette. Korrektur: `PermissionError`
+wird jetzt als eigener Fall behandelt ("aktiv gesperrt, NICHT verwaist"),
+getrennt von echter Korruption (`OSError`/`json.JSONDecodeError` ohne
+Permission-Ursache). Durch einen dedizierten Regressionstest abgesichert
+(`test_actively_held_lock_survives_a_second_acquire_attempt`), der ohne
+psutil-Mock einen echten zweiten Erwerbsversuch gegen ein bereits
+aktives, echtes Lock durchfuehrt.
+
+**Tests:** 13 neue Tests (`tests/test_single_instance.py`) - Lock-Erwerb
+mit korrektem Inhalt, saubere Freigabe, Context-Manager, Isolation
+verschiedener `memory_dir`s, Blockade bei echter aktiver Instanz (inkl.
+des og. Regressionstests), Selbstheilung bei totem PID, PID-
+Wiederverwendung, Substring-Kollision `"main.py"` in
+`"telegram_main.py"` explizit als eigener Testfall, `AccessDenied`,
+kaputte JSON-Datei, erneuter Erwerb nach sauberer Freigabe. 249/249
+gesamt gruen (236 vorher + 13 neu).
+
+**Doku:** README (neue Sektion "Single-Instance-Schutz (ADR-026)" nach
+"Jarvis-Runtime v1", Struktur-Baum ergaenzt), `docs/CHANGELOG.md`, dieses
+Logbook, `docs/PROJECT_STATE.md` aktualisiert.
+
+`git diff --stat` vor dem Commit gegen `core/config.py`, `core/ai.py`,
+`core/planner.py`, `core/speech.py`, `core/tool_manager.py`,
+`core/models.py`, `commands/*`, `executor/*`, `memory/*` geprueft - leer,
+wie vorgegeben. Geaenderte Dateien: `core/single_instance.py` (neu),
+`tests/test_single_instance.py` (neu), `docs/adr/ADR-026.md` (neu),
+`main.py`, `telegram_main.py`, `jarvis_runtime.py`, `README.md`,
+`docs/CHANGELOG.md`, `docs/logbook.md`, `docs/PROJECT_STATE.md`.
+
+Kein Tag gesetzt. Runtime v2 (Telegram-Kanal, Channel-Interface,
+Autostart), UI, Tray, Wake-Word bleiben weiterhin eigene, spaetere
+Entscheidungen.
+
 ## 2026-07-02 - Jarvis-Runtime v1 implementiert (ADR-025)
 
 **Kontext:** Nach Freigabe des Implementierungsplans fuer Runtime v1

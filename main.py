@@ -21,6 +21,7 @@ from core.ai import AIEngine
 from core.config import Config
 from core.models import Message
 from core.planner import Planner
+from core.single_instance import InstanceAlreadyRunningError, SingleInstanceLock
 from core.speech import SpeechEngine
 from executor.executor import Executor
 from memory.long_term import LongTermMemory
@@ -46,65 +47,80 @@ def main() -> None:
     setup_logging(config)
     logger = logging.getLogger("jarvis.main")
 
-    speech = SpeechEngine(config)
-    ai = AIEngine(config)
-    planner = Planner(ai)
-    executor = Executor(speech, ai)
-    memory = JsonMemoryStore(config.memory_dir, config.max_history_entries)
+    # Single-Instance-Schutz (ADR-026): allererste Aktion, vor jedem
+    # Core-Stack-Aufbau - main.py, telegram_main.py und jarvis_runtime.py
+    # teilen sich ohne besondere Konfiguration dasselbe memory_dir, das
+    # keinerlei Locking hat.
+    lock = SingleInstanceLock(config.memory_dir, entry_point="main.py")
+    try:
+        lock.acquire()
+    except InstanceAlreadyRunningError as e:
+        logger.error("Start abgebrochen: %s", e)
+        print(f"Jarvis konnte nicht gestartet werden: {e}")
+        return
 
-    # Langzeitgedächtnis (v0.4, ADR-009): eigener Store neben dem
-    # Gesprächsverlauf, siehe memory/long_term.py. configure() macht
-    # dieselbe Instanz auch für remember_fact/forget_fact verfügbar
-    # (Commands werden bereits beim Modul-Import instanziiert, bevor
-    # config.memory_dir bekannt ist - deshalb dieser Umweg statt
-    # Konstruktor-Injection).
-    long_term = LongTermMemory(config.memory_dir)
-    memory_commands.configure(config.memory_dir)
+    try:
+        speech = SpeechEngine(config)
+        ai = AIEngine(config)
+        planner = Planner(ai)
+        executor = Executor(speech, ai)
+        memory = JsonMemoryStore(config.memory_dir, config.max_history_entries)
 
-    # Tabellen-Auswertung (v0.5, ADR-015): analyze_report ruft als
-    # erster Command direkt die KI auf - dieselbe AIEngine-Instanz wird
-    # hier injiziert (Registry instanziiert Commands vor diesem Punkt).
-    reports_commands.configure(ai)
+        # Langzeitgedächtnis (v0.4, ADR-009): eigener Store neben dem
+        # Gesprächsverlauf, siehe memory/long_term.py. configure() macht
+        # dieselbe Instanz auch für remember_fact/forget_fact verfügbar
+        # (Commands werden bereits beim Modul-Import instanziiert, bevor
+        # config.memory_dir bekannt ist - deshalb dieser Umweg statt
+        # Konstruktor-Injection).
+        long_term = LongTermMemory(config.memory_dir)
+        memory_commands.configure(config.memory_dir)
 
-    # PC-Analyse (v0.7 Phase 1, ADR-020): analyze_pc ruft ebenfalls
-    # direkt die KI auf - eigenes, zu reports_commands bewusst
-    # dupliziertes configure()-Muster (siehe ADR-020).
-    monitor_commands.configure(ai)
+        # Tabellen-Auswertung (v0.5, ADR-015): analyze_report ruft als
+        # erster Command direkt die KI auf - dieselbe AIEngine-Instanz wird
+        # hier injiziert (Registry instanziiert Commands vor diesem Punkt).
+        reports_commands.configure(ai)
 
-    logger.info("Jarvis v0.4 gestartet.")
-    speech.say("Jarvis ist bereit.")
+        # PC-Analyse (v0.7 Phase 1, ADR-020): analyze_pc ruft ebenfalls
+        # direkt die KI auf - eigenes, zu reports_commands bewusst
+        # dupliziertes configure()-Muster (siehe ADR-020).
+        monitor_commands.configure(ai)
 
-    while True:
-        user_input = speech.listen()
-        # Abschiedsworte werden VOR dem Planner abgefangen - sie duerfen
-        # niemals erst an die KI/den Executor gehen (siehe Logbook
-        # 2026-07-01: "Ende" wurde faelschlich als shutdown_pc erkannt).
-        if user_input.lower().strip() in EXIT_WORDS:
-            break
+        logger.info("Jarvis v0.4 gestartet.")
+        speech.say("Jarvis ist bereit.")
 
-        logger.info("User: %s", user_input)
-        history = memory.get_history(limit=20)
+        while True:
+            user_input = speech.listen()
+            # Abschiedsworte werden VOR dem Planner abgefangen - sie duerfen
+            # niemals erst an die KI/den Executor gehen (siehe Logbook
+            # 2026-07-01: "Ende" wurde faelschlich als shutdown_pc erkannt).
+            if user_input.lower().strip() in EXIT_WORDS:
+                break
 
-        steps = planner.plan(user_input, history)
-        for step in steps:
-            logger.info(
-                "Plan: intent=%s target=%s confidence=%.2f",
-                step.intent,
-                step.target,
-                step.confidence,
-            )
+            logger.info("User: %s", user_input)
+            history = memory.get_history(limit=20)
 
-        long_term_summary = long_term.summary_text()
-        report = executor.run(steps, history, long_term_summary)
-        response_text = "\n".join(report.summary_lines()) or "Alles klar."
+            steps = planner.plan(user_input, history)
+            for step in steps:
+                logger.info(
+                    "Plan: intent=%s target=%s confidence=%.2f",
+                    step.intent,
+                    step.target,
+                    step.confidence,
+                )
 
-        speech.say(response_text)
+            long_term_summary = long_term.summary_text()
+            report = executor.run(steps, history, long_term_summary)
+            response_text = "\n".join(report.summary_lines()) or "Alles klar."
 
-        memory.append_history(Message(role="user", content=user_input))
-        memory.append_history(Message(role="assistant", content=response_text))
+            speech.say(response_text)
 
-        if not report.all_ok:
-            logger.warning("Nicht alle Schritte erfolgreich.")
+            memory.append_history(Message(role="user", content=user_input))
+            memory.append_history(Message(role="assistant", content=response_text))
+
+            if not report.all_ok:
+                logger.warning("Nicht alle Schritte erfolgreich.")
+    finally:
+        lock.release()
 
 
 if __name__ == "__main__":

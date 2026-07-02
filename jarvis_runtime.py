@@ -35,6 +35,7 @@ from core.ai import AIEngine
 from core.config import Config
 from core.models import Message
 from core.planner import Planner
+from core.single_instance import InstanceAlreadyRunningError, SingleInstanceLock
 from executor.executor import Executor
 from memory.long_term import LongTermMemory
 from memory.store import JsonMemoryStore
@@ -191,14 +192,29 @@ def main() -> None:
     config = Config.load()
     setup_logging(config)
 
-    runtime = JarvisRuntime(config)
-    runtime.start()
-
-    channel = ConsoleDummyChannel(runtime)
+    # Single-Instance-Schutz (ADR-026): allererste Aktion, vor jedem
+    # Core-Stack-Aufbau - main.py, telegram_main.py und jarvis_runtime.py
+    # teilen sich ohne besondere Konfiguration dasselbe memory_dir, das
+    # keinerlei Locking hat.
+    lock = SingleInstanceLock(config.memory_dir, entry_point="jarvis_runtime.py")
     try:
-        channel.run()
+        lock.acquire()
+    except InstanceAlreadyRunningError as e:
+        logger.error("Start abgebrochen: %s", e)
+        print(f"Jarvis-Runtime konnte nicht gestartet werden: {e}")
+        return
+
+    try:
+        runtime = JarvisRuntime(config)
+        runtime.start()
+
+        channel = ConsoleDummyChannel(runtime)
+        try:
+            channel.run()
+        finally:
+            runtime.stop()
     finally:
-        runtime.stop()
+        lock.release()
 
 
 if __name__ == "__main__":

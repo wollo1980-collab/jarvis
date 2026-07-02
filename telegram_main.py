@@ -47,6 +47,7 @@ from core.ai import AIEngine
 from core.config import Config
 from core.models import Message, Plan
 from core.planner import Planner
+from core.single_instance import InstanceAlreadyRunningError, SingleInstanceLock
 from executor.executor import Executor
 from memory.long_term import LongTermMemory
 from memory.store import JsonMemoryStore
@@ -179,24 +180,37 @@ def main() -> None:
     setup_logging(config)
     logger_main = logging.getLogger("jarvis.telegram.main")
 
+    # Single-Instance-Schutz (ADR-026): allererste Aktion, vor jedem
+    # Core-Stack-Aufbau - main.py, telegram_main.py und jarvis_runtime.py
+    # teilen sich ohne besondere Konfiguration dasselbe memory_dir, das
+    # keinerlei Locking hat.
+    lock = SingleInstanceLock(config.memory_dir, entry_point="telegram_main.py")
     try:
-        bot_token = os.environ[BOT_TOKEN_ENV]
-        allowed_chat_id = os.environ[ALLOWED_CHAT_ID_ENV]
-    except KeyError as e:
-        raise SystemExit(
-            f"Umgebungsvariable {e.args[0]} fehlt - {BOT_TOKEN_ENV} und "
-            f"{ALLOWED_CHAT_ID_ENV} müssen gesetzt sein (siehe README "
-            "Abschnitt 'Telegram-Fernzugriff')."
-        )
+        lock.acquire()
+    except InstanceAlreadyRunningError as e:
+        raise SystemExit(f"Jarvis konnte nicht gestartet werden: {e}")
 
-    bridge = JarvisBridge(config, allowed_chat_id)
+    try:
+        try:
+            bot_token = os.environ[BOT_TOKEN_ENV]
+            allowed_chat_id = os.environ[ALLOWED_CHAT_ID_ENV]
+        except KeyError as e:
+            raise SystemExit(
+                f"Umgebungsvariable {e.args[0]} fehlt - {BOT_TOKEN_ENV} und "
+                f"{ALLOWED_CHAT_ID_ENV} müssen gesetzt sein (siehe README "
+                "Abschnitt 'Telegram-Fernzugriff')."
+            )
 
-    application = Application.builder().token(bot_token).build()
-    application.bot_data["bridge"] = bridge
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _on_message))
+        bridge = JarvisBridge(config, allowed_chat_id)
 
-    logger_main.info("Telegram-Bot gestartet (Long-Polling, Phase 1).")
-    application.run_polling()
+        application = Application.builder().token(bot_token).build()
+        application.bot_data["bridge"] = bridge
+        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _on_message))
+
+        logger_main.info("Telegram-Bot gestartet (Long-Polling, Phase 1).")
+        application.run_polling()
+    finally:
+        lock.release()
 
 
 if __name__ == "__main__":

@@ -29,7 +29,8 @@ jarvis/
 │   ├── ai.py             # AI Layer - Intent-Erkennung (get_plan) + Chat-Antworten (answer)
 │   ├── planner.py        # zerlegt Eingabe in 1..n Schritte
 │   ├── tool_manager.py    # löst Intent -> Command auf
-│   └── speech.py           # Speech-Schnittstelle (Konsole + optional Piper TTS)
+│   ├── speech.py           # Speech-Schnittstelle (Konsole + optional Piper TTS)
+│   └── single_instance.py   # Single-Instance-Schutz pro memory_dir (ADR-026)
 ├── commands/
 │   ├── __init__.py         # Registry + minimaler Dispatch
 │   ├── system.py             # open_program, shutdown_pc
@@ -42,7 +43,7 @@ jarvis/
 │   └── executor.py             # führt Schritte aus, Bestätigung (inkl. optionalem preview()-Hook, ADR-023), ✓/✗/?-Report
 ├── memory/
 │   └── store.py                  # JsonMemoryStore (preferences/history/context)
-├── memory_data/                     # preferences.json, history.json, context.json
+├── memory_data/                     # preferences.json, history.json, context.json, jarvis.lock (ADR-026)
 ├── logs/                               # YYYY-MM-DD.log
 ├── tests/                               # pytest, alles gemockt, kein echter API-Key nötig
 ├── docs/
@@ -491,6 +492,29 @@ sicher abgelehnt statt eine Bestätigung zu erfinden.
 **Bewusst nicht enthalten (v1):** UI, Tray, Wake-Word,
 Telegram-Integration in die Runtime, Windows-Autostart, abstraktes
 Channel-Interface (erst beim zweiten echten Kanal). Siehe ADR-024/025.
+
+## Single-Instance-Schutz (ADR-026)
+
+`main.py`, `telegram_main.py` und `jarvis_runtime.py` zeigen ohne
+besondere Konfiguration auf dasselbe `memory_dir` - `JsonMemoryStore`
+hat kein Locking. Jeder der drei Einstiegspunkte erwirbt deshalb als
+allererste Aktion in `main()` einen `SingleInstanceLock`
+(`core/single_instance.py`) und gibt ihn beim Beenden wieder frei.
+
+Der Lock lebt als Datei `jarvis.lock` innerhalb von `memory_dir` (Schutz
+pro `memory_dir`, nicht global) und enthält PID, Einstiegspunkt-Name und
+Zeitstempel. Die eigentliche Exklusivität kommt von einer atomaren
+Dateierzeugung (`os.open(O_CREAT|O_EXCL)`); zusätzlich hält der Prozess
+das Datei-Handle für seine gesamte Laufzeit offen und sperrt es per
+`msvcrt.locking()` - Windows gibt Handle und Sperre beim Absturz
+automatisch frei.
+
+Startet ein zweiter Prozess, während bereits eine aktive Instanz läuft,
+bricht er sofort mit einer klaren Fehlermeldung ab (PID/Einstiegspunkt/
+Zeitstempel der aktiven Instanz), bevor irgendein Command ausgeführt
+wird. Verwaiste Lock-Dateien (Prozess abgestürzt, oder die PID wurde von
+Windows für einen anderen Prozess wiederverwendet) werden beim nächsten
+Start automatisch erkannt und entfernt - kein manuelles Aufräumen nötig.
 
 ## Pipeline
 
