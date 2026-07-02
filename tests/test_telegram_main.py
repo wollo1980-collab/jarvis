@@ -3,8 +3,10 @@ Bot-Token, kein Netzwerk, keine echte python-telegram-bot-Application -
 nur die Sicherheits-/Filterlogik und JarvisBridge werden getestet."""
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
+import telegram_main
 from core.config import Config
 from core.models import Message, Plan
 from telegram_main import (
@@ -15,6 +17,22 @@ from telegram_main import (
     is_authorized,
     rejection_reason,
 )
+
+
+def test_dampen_http_loggers_protects_token_by_setting_warning():
+    """Sicherheit: httpx/httpcore loggen sonst den Telegram-Request-URL
+    inkl. Bot-Token auf INFO - _dampen_http_loggers() hebt sie auf WARNING,
+    damit der Token nie in Logdatei/Konsole landet."""
+    loggers = [logging.getLogger("httpx"), logging.getLogger("httpcore")]
+    orig = [lg.level for lg in loggers]
+    try:
+        for lg in loggers:
+            lg.setLevel(logging.INFO)
+        telegram_main._dampen_http_loggers()
+        assert all(lg.level == logging.WARNING for lg in loggers)
+    finally:
+        for lg, lvl in zip(loggers, orig):
+            lg.setLevel(lvl)
 
 
 class FakeAI:

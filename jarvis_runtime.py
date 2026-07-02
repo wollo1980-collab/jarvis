@@ -243,6 +243,18 @@ def setup_logging(config: Config) -> None:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
         handlers=handlers,
     )
+    _dampen_http_loggers()
+
+
+def _dampen_http_loggers() -> None:
+    """Sicherheit: python-telegram-bot laesst httpx/httpcore den Request-URL
+    protokollieren - inkl. Bot-Token im Pfad
+    (https://api.telegram.org/bot<TOKEN>/...). Diese Logger auf WARNING heben,
+    damit der Token nie in Logdatei/Konsole landet - bewusst auch im
+    Debug-Modus (ein Secret gehoert unter keinen Umstaenden ins Log). WARNING
+    zeigt echte HTTP-Fehler weiterhin an."""
+    for noisy in ("httpx", "httpcore"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
 
 
 # Dieselben Umgebungsvariablen wie telegram_main.py (ADR-018) - Werte

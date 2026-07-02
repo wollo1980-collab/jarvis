@@ -413,3 +413,19 @@ def test_setup_logging_skips_stream_handler_when_stderr_is_none(tmp_path, monkey
     finally:
         for h in handlers:
             h.close()
+
+
+def test_dampen_http_loggers_protects_token_by_setting_warning():
+    """Sicherheit: httpx/httpcore loggen sonst den Telegram-Request-URL
+    inkl. Bot-Token auf INFO - _dampen_http_loggers() hebt sie auf WARNING,
+    damit der Token nie in Logdatei/Konsole landet."""
+    loggers = [logging.getLogger("httpx"), logging.getLogger("httpcore")]
+    orig = [lg.level for lg in loggers]
+    try:
+        for lg in loggers:
+            lg.setLevel(logging.INFO)
+        jarvis_runtime._dampen_http_loggers()
+        assert all(lg.level == logging.WARNING for lg in loggers)
+    finally:
+        for lg, lvl in zip(loggers, orig):
+            lg.setLevel(lvl)

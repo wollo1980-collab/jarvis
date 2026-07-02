@@ -1,5 +1,49 @@
 # Logbook
 
+## 2026-07-02 - Sicherheits-Fix: Bot-Token nicht mehr im Log
+
+**Kontext:** Beim manuellen Runtime-Test (`python jarvis_runtime.py`) fiel im
+Log auf, dass `httpx` jeden Telegram-Request-URL auf INFO protokolliert -
+inkl. Bot-Token im Pfad (`api.telegram.org/bot<TOKEN>/...`). Da
+`setup_logging()` den Root-Logger via `basicConfig` auf INFO setzt, landete
+der Token im Klartext in Logdatei UND Konsole. (Derselbe Testlauf bestaetigte
+zudem, dass Stufe-2-Commands wie `enable_jarvis_autostart` ueber die
+fail-closed Runtime-Kanaele nicht bestaetigbar sind - eigene, noch offene
+Design-Entscheidung, siehe unten.)
+
+**Behoben (nur die zwei Telegram-relevanten Einstiegspunkte):**
+- `jarvis_runtime.py` und `telegram_main.py`: neue Helper-Funktion
+  `_dampen_http_loggers()`, aufgerufen am Ende von `setup_logging()` - hebt
+  `httpx` und `httpcore` auf `WARNING`, bewusst auch im Debug-Modus (ein
+  Secret gehoert nie ins Log). `WARNING` zeigt echte HTTP-Fehler weiterhin.
+- `main.py` unveraendert (kein Secret im URL - OpenAI-Key liegt im Header).
+- Je ein Sicherheitstest in `tests/test_jarvis_runtime.py` und
+  `tests/test_telegram_main.py` (httpx/httpcore auf WARNING nach
+  setup_logging, Logger-Level sauber gesichert/wiederhergestellt). 282/282
+  gruen.
+- `git diff`: nur `jarvis_runtime.py`, `telegram_main.py` und die zwei
+  Testdateien - `core/*`, `executor/*`, `commands/*`, `memory/*`, `main.py`,
+  `telegram_channel.py` unberuehrt.
+
+**Bereinigt (Betrieb, ausserhalb Git):** Die zwei Logdateien mit sichtbarem
+Token geloescht (`logs/2026-07-02-runtime.log` mit 60, `logs/2026-07-02-telegram.log`
+mit 46 Token-Vorkommen). `logs/` ist gitignored und war nie in Git - der Token
+war also nie committed. Die zwei `main.py`-Konsolenlogs waren token-frei und
+blieben erhalten. Empfehlung an Wolfgang: den bereits exponierten Token beim
+@BotFather rotieren.
+
+**Noch offen (bewusst NICHT in diesem Fix):** Haertung des aktuell aus
+KI-Output faelschbaren `confirmed`-Flags (core/ai.py -> executor.py) sowie eine
+saubere Runtime-Bestaetigung fuer lokale Kanaele - separate Bausteine mit
+eigener Freigabe (Analyse liegt vor). Fuer produktive Stufe-2/3-Aktionen bleibt
+`main.py` der funktionierende lokale Pfad; Remote-Bestaetigung (Telegram) bleibt
+per Kap. 10 gesperrt.
+
+**Vorheriger Schritt am selben Tag** (bereits committed, `af83614`):
+TelegramChannel-Shutdown thread-/eventloop-konform gemacht (stop() plant
+stop_running() via loop.call_soon_threadsafe ein) - behob den
+`RuntimeError: no running event loop` beim Beenden der Runtime.
+
 ## 2026-07-02 - Konsolidierung auf Handbook v3.7 (Infrastruktur-/Runtime-Baustein)
 
 **Kontext:** Der gesamte Infrastruktur-/Runtime-Baustein zwischen v0.7 und

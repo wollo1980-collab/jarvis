@@ -1,5 +1,35 @@
 # Changelog
 
+## Sicherheits-Fix: Bot-Token nicht mehr im Log (02.07.2026)
+
+`python-telegram-bot` ließ `httpx` den Request-URL inkl. Bot-Token im Pfad
+(`api.telegram.org/bot<TOKEN>/…`) auf INFO loggen. Da `setup_logging()` den
+Root-Logger via `basicConfig` auf INFO setzt, landete der Token im Klartext
+in Logdatei und Konsole.
+
+### Behoben
+- `jarvis_runtime.py` und `telegram_main.py`: neue Helper-Funktion
+  `_dampen_http_loggers()`, aufgerufen am Ende von `setup_logging()` - hebt
+  die Logger `httpx` und `httpcore` auf `WARNING`, bewusst auch im
+  Debug-Modus (ein Secret gehört unter keinen Umständen ins Log). `WARNING`
+  zeigt echte HTTP-Fehler weiterhin.
+- `main.py` unverändert - dort landet kein Secret im URL (OpenAI-Key liegt
+  im Header, nicht im Pfad).
+- Zwei Sicherheitstests (`tests/test_jarvis_runtime.py`,
+  `tests/test_telegram_main.py`): `httpx`/`httpcore` stehen nach
+  `setup_logging()` auf `WARNING`. 282 Tests gesamt, alle grün.
+
+### Bereinigt (Betrieb, außerhalb Git)
+- Bestehende Logdateien mit sichtbarem Token gelöscht
+  (`logs/2026-07-02-runtime.log`, `logs/2026-07-02-telegram.log`). `logs/`
+  ist gitignored - der Token war nie committed. Der bereits exponierte Token
+  ist unabhängig davon beim @BotFather zu rotieren.
+
+### Bewusst nicht Teil dieses Fixes
+- Härtung des fälschbaren `confirmed`-Flags und eine Runtime-Bestätigung für
+  lokale Kanäle bleiben eigene, noch offene Bausteine (Analyse dokumentiert,
+  Entscheidung ausstehend).
+
 ## Handbook v3.7 - Konsolidierung des Infrastruktur-/Runtime-Bausteins (ADR-024 bis ADR-028, 02.07.2026)
 
 Kein Code-Release - reine Dokumentations-/Governance-Aktualisierung nach
