@@ -24,19 +24,21 @@ Aus v0.6/v0.5/v0.4 weiterhin gültig: Telegram-Fernzugriff (ADR-018), Excel-Lese
 ## Next Planned Version
 `v0.7` ist vollständig abgeschlossen (Handbook v3.6, Tag `v0.7`). `v0.8 "Multi-KI"` (Handbook Kap. 13: "Claude + GPT + Copilot orchestrieren") ist der nächste geplante Baustein - noch nicht begonnen, kein technischer Vorschlag erstellt. Vor v0.8 steht architektonisch der Jarvis-Eigenstart-Baustein, dessen Implementierung jedoch auf die Runtime-Architektur wartet (siehe unten) - noch kein Code, keine Umsetzung.
 
-## Architekturrichtung: Jarvis-Runtime (Kap. 19 - wartet auf künftige Konsolidierung)
-Product-Owner-Entscheidung 2026-07-02 (rein architektonisch, kein Code, keine ADR, keine Handbook-Änderung jetzt): Da das Handbook laut Kap. 2 nur zwischen zwei Hauptversionen geändert wird und v3.6 gerade erst konsolidiert wurde, wird diese Entscheidung hier vollständig festgehalten (ab sofort maßgeblich, Kap. 19) und erst bei der nächsten Konsolidierung (nach Abschluss des Runtime-Bausteins oder spätestens v0.8) formal ins Handbook übernommen.
+## Architekturrichtung: Jarvis-Runtime (ADR-024, wartet auf künftige Konsolidierung)
+Architekturentscheidung dokumentiert in **ADR-024** (kein Code, keine Implementierung - `jarvis_runtime.py` existiert weiterhin nicht als Datei). Da das Handbook laut Kap. 2 nur zwischen zwei Hauptversionen geändert wird und v3.6 gerade erst konsolidiert wurde, gilt ADR-024 ab sofort maßgeblich (Kap. 19) und wird erst bei der nächsten Konsolidierung (nach Abschluss des Runtime-Bausteins oder spätestens v0.8) formal ins Handbook übernommen.
 
-**Auslöser:** Wolfgang möchte langfristig ein eigenes UI im Stil von Film-Jarvis (UI, Tray, Wake Word, Telegram, Core sollen koordiniert zusammenspielen). Der Windows-Autostart soll deshalb nicht fest auf `main.py` (Konsolenmodus) gebaut werden, da das die spätere UI-Architektur vorwegnehmen würde.
+**Auslöser:** Wolfgang möchte langfristig ein eigenes UI im Stil von Film-Jarvis (UI, Tray, Wake Word, Telegram, Core sollen koordiniert zusammenspielen). Der Windows-Autostart soll deshalb nicht fest auf `main.py` (Konsolenmodus) gebaut werden.
 
-**Entscheidung:**
-- Neuer, künftiger Runtime-Einstiegspunkt **`jarvis_runtime.py`** (Name festgelegt, noch nicht implementiert) - koordiniert später mehrere gleichzeitige Kanäle (UI, Tray, Wake-Word, Telegram) über einen einmalig instanziierten Core-Stack (Config/AIEngine/Planner/ToolManager/Executor/Memory). Kein Ersatz der bestehenden Kern-Architektur (Handbook Kap. 7) - reine Koordinationsschicht darüber.
-- **Koexistenz statt Ablösung:** `main.py` bleibt dauerhaft der lokale Konsolen-/Entwicklungsmodus. `telegram_main.py` bleibt dauerhaft ein eigenständiger, einfacher Telegram-Einstiegspunkt - wird **nicht** entfernt oder als obsolet markiert. Die künftige Runtime kann Telegram später zusätzlich als einen ihrer Kanäle einbinden (Koexistenz mit `telegram_main.py`, keine Ablösung).
-- **Jarvis-Eigenstart-Implementierung verschoben:** Die im vorherigen technischen Vorschlag ausgearbeitete Mechanik (HKCU Run-Key, Sicherheitsstufe 2, zwei symmetrische Intents `enable_jarvis_autostart`/`disable_jarvis_autostart`, `sys.executable`+`BASE_DIR`-Pfadermittlung, Pfad-Quoting) bleibt inhaltlich gültig, zielt aber künftig auf `jarvis_runtime.py` statt `main.py`. Implementierung wartet auf die Existenz der Runtime - kein Autostart jetzt.
-- **Größtes offenes Architekturrisiko für die künftige Runtime-Umsetzung:** `memory_data/`-Dateien haben kein Locking - ADR-018 umgeht das nur durch "ein Kanal zur Zeit" (kein gleichzeitiger Betrieb Konsole/Telegram). Mehrere gleichzeitige Kanäle unter der Runtime brauchen eine Lösung dafür - empfohlen (nicht entschieden): einfache serialisierte Warteschlange statt echter Nebenläufigkeits-Sicherheit in Memory/Executor.
-- **`telegram_main.py`/Runtime-Verhältnis:** offen, ob die Runtime Telegram über den bestehenden `TelegramSpeech`-Adapter wiederverwendet oder eigenständig neu anbindet - Entscheidung erst bei tatsächlicher Runtime-Umsetzung.
+**Entscheidung (ADR-024):**
+- Neuer, künftiger Runtime-Einstiegspunkt **`jarvis_runtime.py`** (noch nicht implementiert) - koordiniert später mehrere gleichzeitige Kanäle über einen einmalig instanziierten Core-Stack. Kein Ersatz der bestehenden Kern-Architektur (Handbook Kap. 7) - reine Koordinationsschicht darüber.
+- **Koexistenz statt Ablösung:** `main.py` bleibt dauerhaft Konsolen-/Entwicklungsmodus, `telegram_main.py` bleibt dauerhaft eigenständig - wird nicht entfernt/obsolet markiert.
+- **Nebenläufigkeitsmodell festgelegt:** einfache `queue.Queue` mit einem Worker-Thread, bewusst **kein** `asyncio` (KISS, Product-Owner-Entscheidung). Löst das Locking-Problem bei `memory_data/` durch serialisierte Verarbeitung, ohne `JsonMemoryStore`/`Executor` anzufassen.
+- **Erster Runtime-Kanal:** kein UI/Tray/Wake-Word - ein minimaler Konsolen-/Dummy-/Status-Kanal soll zuerst nur das Runtime-Gerüst und die serielle Verarbeitung beweisen.
+- **Telegram explizit nicht Bestandteil von ADR-024** - eine spätere Runtime-Integration bleibt optional, separate Entscheidung.
+- **Jarvis-Eigenstart-Implementierung** bleibt wie zuvor verschoben, Ziel weiterhin `jarvis_runtime.py` statt `main.py`.
+- **Wake-Word-Backlog-Korrektur:** Handbook Kap. 29 nennt fälschlich noch "v0.4" als Prüfzeitpunkt für Wake-Word (Porcupine) - Korrektur bei nächster Konsolidierung fällig, jetzt nur vermerkt (siehe ADR-024).
 
-**ADR-Bedarf:** Keine ADR jetzt (reine Architekturrichtung, kein Code). Bei tatsächlicher Umsetzung vermutlich zwei ADRs: eine für die Runtime selbst, eine für den Jarvis-Eigenstart-Command mit Ziel Runtime.
+Details, Begründung und Alternativen: `docs/adr/ADR-024.md`.
 
 ## Tests
 Letzter Check am 2026-07-02: `pytest tests -v` mit zusätzlichem `PYTHONPATH`.
@@ -67,7 +69,7 @@ Vollständige, aktuelle Liste jetzt im Handbook (Kap. 13 Roadmap, Kap. 29 Backlo
 Im Code wurden keine `TODO`-/`FIXME`-Marker gefunden.
 
 ## Latest ADR
-`ADR-023 - Temp-/Festplatten-Bereinigung (v0.7 Phase 4) - optionaler preview()-Hook im Executor, immer frischer Scan`
+`ADR-024 - Jarvis-Runtime als koordinierender Einstiegspunkt (Architekturentscheidung, keine Implementierung)`
 
 ## Latest Architecture Change
 `executor/executor.py` bekommt einen optionalen `preview(plan) -> Optional[str]`-Hook - die erste Änderung an dieser Datei in der gesamten v0.7-Entwicklung. Commands ohne `preview()` verhalten sich exakt wie zuvor (rückwärtskompatibel, per Regressionstests verifiziert). `CleanTempFilesCommand` nutzt den Hook, verlässt sich aber nie auf das Vorschau-Ergebnis - `execute()` scannt beim tatsächlichen Löschen immer erneut. Details: ADR-023.

@@ -1,5 +1,54 @@
 # Logbook
 
+## 2026-07-02 - ADR-024: Jarvis-Runtime als koordinierender Einstiegspunkt (Architekturentscheidung)
+
+**Kontext:** Aufbauend auf der zuvor festgehaltenen Architekturrichtung
+(Jarvis-Runtime, Koexistenz mit `main.py`/`telegram_main.py`) wurde ein
+detaillierter technischer Vorschlag fuer ADR-024 erarbeitet und von
+Wolfgang mit fuenf konkretisierenden Entscheidungen freigegeben.
+
+**Product-Owner-Entscheidungen (vollstaendig uebernommen, siehe ADR-024):**
+1. **Nebenlaeufigkeitsmodell:** einfache `queue.Queue` mit einem einzelnen
+   Worker-Thread fuer den ersten Runtime-Schritt - bewusst KEIN `asyncio`.
+   Begruendung: KISS, verstaendlich, gut testbar, keine unnoetige Magie
+   (Handbook-Leitmotiv). Loest das Nebenlaeufigkeits-/Locking-Problem bei
+   `memory_data/` durch serialisierte Verarbeitung, ohne `JsonMemoryStore`/
+   `Executor` anzufassen.
+2. **Telegram:** ausdruecklich NICHT Bestandteil von ADR-024.
+   `telegram_main.py` bleibt eigenstaendig. Eine spaetere
+   Runtime-Integration bleibt optional, separate kuenftige Entscheidung.
+3. **Erster Runtime-Kanal:** kein UI, kein Tray, kein Wake-Word. Ein
+   minimaler Konsolen-/Dummy-/Status-Kanal soll spaeter zuerst nur das
+   Runtime-Geruest (Core-Stack-Instanziierung + Queue + Worker-Thread +
+   sauberer Shutdown) und die serielle Verarbeitung beweisen - kein
+   Produktivkanal.
+4. **Roadmap/Governance:** Runtime bleibt eigenstaendiger Infrastruktur-/
+   Runtime-Baustein zwischen v0.7 und v0.8. `v0.8 "Multi-KI"` wird
+   weiterhin nicht begonnen.
+5. **Wake-Word-Hinweis:** Handbook Kap. 29 (Backlog) nennt fuer
+   "Wake-Word (Porcupine)" noch den ueberholten Pruefzeitpunkt "v0.4" -
+   als Korrekturbedarf in ADR-024 dokumentiert, Korrektur erst bei der
+   naechsten Handbook-Konsolidierung, NICHT jetzt im Handbook geaendert.
+
+**ADR-024 geschrieben** (`docs/adr/ADR-024.md`) - haelt alle obigen
+Entscheidungen sowie die bereits zuvor freigegebenen Grundsatzpunkte
+(Zweck/Abgrenzung zu `main.py`/`telegram_main.py`, Core-Stack-
+Instanziierung, Shutdown-Grundsatz, Bezug zu Jarvis-Eigenstart) formal
+fest. Ausdruecklich **keine Implementierung**: `jarvis_runtime.py` wird
+durch diese ADR nicht angelegt, keine Aenderung an `main.py`,
+`telegram_main.py`, `core/*`, `commands/*`, `executor/*`.
+
+**Dokumentation aktualisiert:** `docs/PROJECT_STATE.md` - Abschnitt
+"Architekturrichtung: Jarvis-Runtime" auf ADR-024 verweisend praezisiert
+(Nebenlaeufigkeitsmodell, erster Kanal, Telegram-Ausschluss,
+Wake-Word-Hinweis ergaenzt), `Latest ADR` auf ADR-024 aktualisiert.
+`Latest Architecture Change` bewusst weiterhin bei ADR-023 belassen -
+ADR-024 aendert noch keine tatsaechlich laufende Architektur, nur eine
+kuenftige.
+
+**Kein Code, keine Runtime-Datei, kein Autostart, kein UI, kein
+Telegram-Umbau.** Tests unveraendert (keine Code-Datei beruehrt).
+
 ## 2026-07-02 - Architekturrichtung Jarvis-Runtime festgelegt (Jarvis-Eigenstart verschoben)
 
 **Kontext:** Nach Abschluss von v0.7 (Handbook v3.6, Tag `v0.7`) wurde ein
