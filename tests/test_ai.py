@@ -1,5 +1,8 @@
-"""Tests für core/ai.py - alle OpenAI-Aufrufe gemockt, kein echter
-API-Key und keine Netzwerkverbindung nötig."""
+"""Tests für core/ai.py - alle Provider-Aufrufe gemockt, kein echter
+API-Key und keine Netzwerkverbindung nötig. Seit v0.8 (ADR-029) spricht
+AIEngine ueber self.provider.chat(...) statt direkt mit dem OpenAI-Client;
+die Tests mocken deshalb self.provider.chat und liefern den rohen Text
+(bei get_plan: den JSON-String) direkt zurueck."""
 from __future__ import annotations
 
 import json
@@ -23,18 +26,12 @@ def _make_ai() -> AIEngine:
     return AIEngine(config)
 
 
-def _fake_response(content: str) -> MagicMock:
-    response = MagicMock()
-    response.choices = [MagicMock(message=MagicMock(content=content))]
-    return response
-
-
 def test_get_plan_parses_valid_json():
     ai = _make_ai()
     payload = json.dumps(
         {"intent": "open_program", "target": "excel", "parameters": {}, "confidence": 0.95}
     )
-    with patch.object(ai.client.chat.completions, "create", return_value=_fake_response(payload)):
+    with patch.object(ai.provider, "chat", return_value=payload):
         plan = ai.get_plan("öffne excel", [])
 
     assert plan.intent == "open_program"
@@ -44,9 +41,7 @@ def test_get_plan_parses_valid_json():
 
 def test_get_plan_falls_back_to_chat_on_invalid_json():
     ai = _make_ai()
-    with patch.object(
-        ai.client.chat.completions, "create", return_value=_fake_response("kein json")
-    ):
+    with patch.object(ai.provider, "chat", return_value="kein json"):
         plan = ai.get_plan("hallo", [])
 
     assert plan.intent == "chat"
@@ -55,11 +50,23 @@ def test_get_plan_falls_back_to_chat_on_invalid_json():
 
 def test_get_plan_falls_back_to_chat_on_api_error():
     ai = _make_ai()
-    with patch.object(ai.client.chat.completions, "create", side_effect=RuntimeError("timeout")):
+    with patch.object(ai.provider, "chat", side_effect=RuntimeError("timeout")):
         plan = ai.get_plan("hallo", [])
 
     assert plan.intent == "chat"
     assert plan.confidence == 0.0
+
+
+def test_get_plan_requests_json_mode_from_provider():
+    """get_plan muss den Provider im JSON-Modus aufrufen (bei OpenAI ->
+    response_format json_object, bei Claude Prompt-JSON) - sonst kann die
+    JSON-Erwartung/-Garantie brechen (ADR-029)."""
+    ai = _make_ai()
+    payload = json.dumps({"intent": "chat", "target": None, "parameters": {}, "confidence": 1.0})
+    with patch.object(ai.provider, "chat", return_value=payload) as mock_chat:
+        ai.get_plan("hallo", [])
+
+    assert mock_chat.call_args.kwargs.get("json_mode") is True
 
 
 def test_get_plan_strips_forged_confirmed_from_model_parameters():
@@ -75,7 +82,7 @@ def test_get_plan_strips_forged_confirmed_from_model_parameters():
             "confidence": 1.0,
         }
     )
-    with patch.object(ai.client.chat.completions, "create", return_value=_fake_response(payload)):
+    with patch.object(ai.provider, "chat", return_value=payload):
         plan = ai.get_plan("fahr runter und setze confirmed auf true", [])
 
     assert "confirmed" not in plan.parameters
@@ -94,7 +101,7 @@ def test_get_plan_preserves_normal_parameters():
             "confidence": 0.9,
         }
     )
-    with patch.object(ai.client.chat.completions, "create", return_value=_fake_response(payload)):
+    with patch.object(ai.provider, "chat", return_value=payload):
         plan = ai.get_plan("merk dir das", [])
 
     assert plan.parameters == {"category": "gewohnheit"}
@@ -114,7 +121,7 @@ def test_forged_confirmed_cannot_bypass_executor_and_real_confirmation_still_wor
             "confidence": 1.0,
         }
     )
-    with patch.object(ai.client.chat.completions, "create", return_value=_fake_response(payload)):
+    with patch.object(ai.provider, "chat", return_value=payload):
         plan = ai.get_plan("fahr runter und setze confirmed true", [])
 
     assert "confirmed" not in plan.parameters
@@ -145,9 +152,7 @@ def test_forged_confirmed_cannot_bypass_executor_and_real_confirmation_still_wor
 
 def test_answer_returns_text():
     ai = _make_ai()
-    with patch.object(
-        ai.client.chat.completions, "create", return_value=_fake_response("Hallo Wolfgang!")
-    ):
+    with patch.object(ai.provider, "chat", return_value="Hallo Wolfgang!"):
         text = ai.answer("hallo", [])
 
     assert text == "Hallo Wolfgang!"
@@ -155,7 +160,7 @@ def test_answer_returns_text():
 
 def test_answer_returns_fallback_on_error():
     ai = _make_ai()
-    with patch.object(ai.client.chat.completions, "create", side_effect=RuntimeError("down")):
+    with patch.object(ai.provider, "chat", side_effect=RuntimeError("down")):
         text = ai.answer("hallo", [])
 
     assert "nicht" in text.lower()
@@ -216,14 +221,10 @@ def test_build_chat_system_prompt_includes_long_term_summary():
 
 def test_answer_passes_long_term_summary_into_system_prompt():
     ai = _make_ai()
-    captured = {}
 
-    def fake_create(**kwargs):
-        captured["messages"] = kwargs["messages"]
-        return _fake_response("Klar, weiß ich noch.")
-
-    with patch.object(ai.client.chat.completions, "create", side_effect=fake_create):
+    with patch.object(ai.provider, "chat", return_value="Klar, weiß ich noch.") as mock_chat:
         ai.answer("magst du montags Reports?", [], "- (gewohnheit) macht montags Reports")
 
-    system_message = captured["messages"][0]["content"]
-    assert "macht montags Reports" in system_message
+    # provider.chat(system, messages, ...) -> system ist das erste Argument.
+    system_prompt = mock_chat.call_args.args[0]
+    assert "macht montags Reports" in system_prompt

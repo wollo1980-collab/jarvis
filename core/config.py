@@ -19,6 +19,14 @@ class Config:
     openai_api_key: str = ""
     model: str = "gpt-4o-mini"
 
+    # Multi-KI Provider-Auswahl (v0.8 Phase 1, ADR-029): "openai" | "claude".
+    # Explizite Auswahl per Config, kein Auto-Routing. Claude nutzt einen
+    # eigenen Key (ANTHROPIC_API_KEY, ausschliesslich ueber Env, nie in
+    # config.json/Git) und ein eigenes Modell.
+    ai_provider: str = "openai"
+    anthropic_api_key: str = ""
+    claude_model: str = "claude-sonnet-5"
+
     # Sprache / Stimme
     voice: str = "default"
     volume: float = 0.8
@@ -74,6 +82,9 @@ class Config:
 
         # Env-Variablen überschreiben Datei (API-Keys gehören nicht in config.json)
         api_key = os.environ.get("OPENAI_API_KEY", data.get("openai_api_key", ""))
+        anthropic_key = os.environ.get(
+            "ANTHROPIC_API_KEY", data.get("anthropic_api_key", "")
+        )
         elevenlabs_key = os.environ.get(
             "ELEVENLABS_API_KEY", data.get("elevenlabs_api_key", "")
         )
@@ -81,6 +92,9 @@ class Config:
         cfg = cls(
             openai_api_key=api_key,
             model=data.get("model", cls.model),
+            ai_provider=data.get("ai_provider", cls.ai_provider),
+            anthropic_api_key=anthropic_key,
+            claude_model=data.get("claude_model", cls.claude_model),
             voice=data.get("voice", cls.voice),
             volume=data.get("volume", cls.volume),
             hotword=data.get("hotword", cls.hotword),

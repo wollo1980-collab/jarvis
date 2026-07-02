@@ -3,20 +3,23 @@ AI Layer: kennt keine Systembefehle. Sie erzeugt ausschließlich
 einen Plan (Intent + Target + Parameter) aus der Konversation.
 Ausführung liegt vollständig beim Executor/Commands-Layer.
 
-Verwendet die OpenAI Chat Completions API (messages[]) - für das
-einfache Gesprächsgedächtnis in v0.2 bewusst die einfachere Wahl
-gegenüber der Responses API.
+Seit v0.8 (Multi-KI, ADR-029) spricht AIEngine keinen KI-Anbieter mehr
+direkt an, sondern delegiert den rohen "Nachrichten rein -> Text raus"-
+Aufruf an einen austauschbaren LLMProvider (core/providers.py). Prompt-
+Bau, JSON-Parsing, der sicherheitskritische confirmed-Strip (Trust
+Boundary) und die Fallbacks bleiben providerunabhaengig hier - genau an
+einer Stelle. Die Provider-Auswahl (OpenAI/Claude) erfolgt explizit ueber
+config.ai_provider, kein Auto-Routing.
 """
 from __future__ import annotations
 
 import json
 import logging
 
-from openai import OpenAI
-
 from commands import REGISTRY
 from core.config import Config
 from core.models import Message, Plan
+from core.providers import build_provider
 
 logger = logging.getLogger("jarvis.ai")
 
@@ -121,32 +124,30 @@ def build_chat_system_prompt(long_term_summary: str = "") -> str:
 class AIEngine:
     def __init__(self, config: Config):
         self.config = config
-        self.client = OpenAI(api_key=config.openai_api_key, timeout=config.timeout)
+        # Backend gemaess config.ai_provider (ADR-029). Der Provider kapselt
+        # NUR den rohen Modellaufruf; alle sicherheits- und formatkritische
+        # Logik (confirmed-Strip, JSON-Parsing, Fallbacks) bleibt hier.
+        self.provider = build_provider(config)
 
     def get_plan(self, user_input: str, history: list[Message]) -> Plan:
         """Nimmt Nutzereingabe + Konversationshistorie entgegen und gibt
         einen Plan zurück. Wirft keine Exceptions nach außen - bei
         Fehlern wird auf einen 'chat'-Fallback-Plan zurückgefallen.
 
-        Nutzt response_format={"type": "json_object"} (garantiert nur
-        gültiges JSON) statt eines strict json_schema - ein striktes
-        Schema scheitert bei OpenAI, sobald ein verschachteltes Objekt
-        (hier: "parameters") absichtlich offen/flexibel bleiben soll
-        (additionalProperties müsste auch dort false sein). Siehe
-        docs/logbook.md, Lessons Learned 2026-07-01."""
-        messages = [{"role": "system", "content": build_system_prompt()}]
-        messages += [m.to_openai_format() for m in history]
-        messages.append({"role": "user", "content": user_input})
+        json_mode=True fordert beim OpenAI-Provider
+        response_format={"type": "json_object"} an (garantiert nur gültiges
+        JSON) statt eines strict json_schema - ein striktes Schema scheitert
+        bei OpenAI, sobald ein verschachteltes Objekt (hier: "parameters")
+        absichtlich offen/flexibel bleiben soll (additionalProperties müsste
+        auch dort false sein). Beim Claude-Provider steht die JSON-Forderung
+        im System-Prompt (ADR-029); das Parsing/Fallback unten faengt
+        ungueltige Antworten providerunabhaengig ab. Siehe docs/logbook.md,
+        Lessons Learned 2026-07-01."""
+        messages = list(history)
+        messages.append(Message(role="user", content=user_input))
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.config.model,
-                messages=messages,
-                temperature=self.config.temperature,
-                max_tokens=self.config.max_tokens,
-                response_format={"type": "json_object"},
-            )
-            raw = response.choices[0].message.content.strip()
+            raw = self.provider.chat(build_system_prompt(), messages, json_mode=True)
             data = json.loads(raw)
             parameters = data.get("parameters", {}) or {}
             # Sicherheit (Trust Boundary): parameters stammt 1:1 aus dem
@@ -186,18 +187,13 @@ class AIEngine:
         Falsifizierbarkeit: gilt als zu teuer/unnötig, wenn die
         Latenz/Kosten durch den zweiten API-Call spürbar stören -
         dann erneutes Review (z. B. ein kombinierter Aufruf)."""
-        messages = [{"role": "system", "content": build_chat_system_prompt(long_term_summary)}]
-        messages += [m.to_openai_format() for m in history]
-        messages.append({"role": "user", "content": user_input})
+        messages = list(history)
+        messages.append(Message(role="user", content=user_input))
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.config.model,
-                messages=messages,
-                temperature=self.config.temperature,
-                max_tokens=self.config.max_tokens,
+            return self.provider.chat(
+                build_chat_system_prompt(long_term_summary), messages
             )
-            return response.choices[0].message.content.strip()
         except Exception as e:
             logger.error("Chat-Antwort fehlgeschlagen: %s", e)
             return "Das hat leider nicht geklappt, ich konnte keine Antwort generieren."

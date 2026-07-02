@@ -1,5 +1,49 @@
 # Changelog
 
+## v0.8 Multi-KI, Phase 1: Provider-Abstraktion + Claude als zweiter Provider (02.07.2026)
+
+Erster Schritt von v0.8 „Multi-KI" (ADR-029): Jarvis kann jetzt **explizit**
+(per Config) zwischen OpenAI/GPT und Claude/Anthropic wählen. Kein
+Auto-Routing, kein Orchestrator, keine Laufzeit-Umschaltung - das bleibt
+spätere Phasen (KISS/YAGNI, Product-Owner-Entscheidung).
+
+### Neu
+- `core/providers.py`: Protokoll `LLMProvider` mit einer Methode
+  `chat(system, messages, *, json_mode=False) -> str` plus zwei
+  Implementierungen `OpenAIProvider` (Chat Completions, `response_format`
+  bei `json_mode`) und `ClaudeProvider` (Anthropic Messages, `system=`-
+  Parameter, `thinking` deaktiviert, kein `temperature` - Sonnet 5 lehnt
+  non-default Sampling ab). `build_provider(config)` wählt anhand von
+  `ai_provider`.
+- `core/config.py`: neue Felder `ai_provider` (Default `"openai"`),
+  `claude_model` (Default `"claude-sonnet-5"`) und `anthropic_api_key`,
+  gelesen **ausschließlich** aus `ANTHROPIC_API_KEY` (Env vor `config.json`,
+  nie in Git - gleiches Muster wie `OPENAI_API_KEY`/Telegram, ADR-018).
+- `config.example.json`: `ai_provider` + `claude_model` dokumentiert (kein
+  Key im Beispiel).
+- `requirements.txt`: `anthropic` als **optionaler** Eintrag - OpenAI-only-
+  Setups laufen ohne installiertes `anthropic` weiter (lazy Import).
+- `tests/test_providers.py`: Provider-Unit-Tests (Request-Bau, Text-
+  Extraktion, JSON-Modus, fehlender Key / fehlendes `anthropic` → klarer
+  Fehler, `build_provider`-Auswahl). Anthropic wird über `sys.modules`
+  gemockt, das echte Paket ist nicht installiert.
+
+### Geändert
+- `core/ai.py`: `AIEngine` spricht keinen KI-Anbieter mehr direkt an, sondern
+  delegiert den rohen Modellaufruf an `self.provider`. **Unverändert** bleiben
+  die öffentliche Schnittstelle (`get_plan`/`answer`), Prompt-Bau,
+  JSON-Parsing, Fallbacks und der sicherheitskritische `confirmed`-Strip
+  (Trust Boundary bleibt zentral an einer Stelle, providerunabhängig).
+- `tests/test_ai.py`: Mocking von `client.chat.completions.create` auf
+  `provider.chat` umgestellt; zusätzlicher Test, dass `get_plan` den Provider
+  im `json_mode` aufruft.
+
+### Nicht geändert
+- Keine Änderung an `main.py`, `telegram_main.py`, `jarvis_runtime.py`,
+  `telegram_channel.py`, `core/planner.py`, `executor/*`, `commands/*`,
+  `memory/*` - die Abstraktion ist rein intern (öffentliche AIEngine-
+  Schnittstelle unverändert). 294 Tests grün.
+
 ## Sicherheits-Fix: Modell kann Bestätigung nicht mehr fälschen (02.07.2026)
 
 `AIEngine.get_plan()` übernahm `parameters` 1:1 aus dem Modell-JSON. Ein LLM

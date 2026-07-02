@@ -1,5 +1,51 @@
 # Logbook
 
+## 2026-07-02 - v0.8 Multi-KI, Phase 1: Provider-Abstraktion + Claude (Umsetzung nach ADR-029)
+
+**Kontext:** Start von v0.8 „Multi-KI". Product-Owner-Phasenschnitt: **nicht**
+mit Auto-Routing beginnen, sondern zuerst die Provider-Abstraktion + einen
+zweiten echten Provider (Claude/Anthropic), explizit per Config wählbar. Die
+Architektur ist in ADR-029 festgehalten (committet `5291cd3`).
+
+**Umgesetzt (nach ADR-029):**
+- `core/providers.py` (neu): `LLMProvider`-Protokoll
+  (`chat(system, messages, *, json_mode=False) -> str`) + `OpenAIProvider`
+  + `ClaudeProvider` + `build_provider(config)`. Beide SDKs werden lazy im
+  Konstruktor importiert; `anthropic` ist optional (bleibt nicht installiert),
+  fehlendes Paket oder fehlender Key → früher, klarer `RuntimeError`.
+- `core/ai.py`: `AIEngine` delegiert den rohen Aufruf an `self.provider`
+  (statt `self.client = OpenAI(...)`). Prompt-Bau, JSON-Parsing, Fallbacks und
+  der **`confirmed`-Strip** bleiben zentral in `AIEngine` - genau der Grund,
+  weshalb der Provider ein Backend ist und **keine** zweite Engine-Klasse
+  (Sicherheits-Invariante nur an einer Stelle). Öffentliche Schnittstelle
+  (`get_plan`/`answer`) unverändert → kein Aufrufer angefasst.
+- `core/config.py`: `ai_provider` (Default `openai`), `claude_model`
+  (`claude-sonnet-5`), `anthropic_api_key` aus `ANTHROPIC_API_KEY` (Env-only,
+  ADR-018). `config.example.json`, `requirements.txt` (optionales `anthropic`)
+  ergänzt.
+
+**Claude-Spezifika (Lessons/Entscheidungen):** system als eigener
+`system=`-Parameter (Anthropic-Konvention, nicht als `messages[0]`);
+`thinking={"type":"disabled"}`; **kein** `temperature` (Sonnet 5 lehnt
+non-default Sampling mit 400 ab); JSON-Modus in Phase 1 nur per
+Prompt-Instruktion, kein Structured-Output/Tool-Use - das bestehende
+`json.loads`+Fallback in `get_plan` fängt ungültige Antworten
+providerunabhängig ab.
+
+**Tests:** `tests/test_providers.py` (neu): Request-Bau/Text-Extraktion beider
+Provider, `json_mode`, fehlender Key/fehlendes `anthropic`, `build_provider`-
+Auswahl - `anthropic` per `sys.modules` gemockt. `tests/test_ai.py` von
+`client.chat.completions.create` auf `provider.chat` umgestellt + Test, dass
+`get_plan` `json_mode=True` anfordert. **294/294 grün.**
+
+**Sandbox-Notiz:** Volle Suite nur mit venv-Interpreter
+(`.venv/Scripts/python.exe`) und beschreibbarem `--basetemp` grün - die
+Sandbox blockiert sonst den System-Temp der `tmp_path`-Fixture
+(`WinError 5`); kein Testdefekt.
+
+**Bewusst NICHT (bleibt spätere v0.8-Phasen):** Auto-Routing/Orchestrator,
+Scoring, Multi-Agent, Ollama/lokale Modelle, MCP, RAG, Laufzeit-Umschaltung.
+
 ## 2026-07-02 - Sicherheits-Fix: Modell kann Bestaetigung nicht mehr faelschen (confirmed-Flag)
 
 **Kontext:** Sicherheitsanalyse (auf Anforderung) der Ausfuehrungskette

@@ -76,6 +76,37 @@ export OPENAI_API_KEY="sk-..."   # überschreibt config.json
 python main.py
 ```
 
+## KI-Provider wählen: OpenAI oder Claude (v0.8 Multi-KI, Phase 1, ADR-029)
+
+Jarvis kann **explizit** zwischen zwei KI-Anbietern wählen. Gesteuert wird das
+über ein einziges Config-Feld `ai_provider` in `config.json`:
+
+- `"openai"` (Standard): nutzt `openai_api_key` (aus `OPENAI_API_KEY`) und
+  `model` (Standard `gpt-4o-mini`) - unverändert wie bisher.
+- `"claude"`: nutzt Anthropic mit `claude_model` (Standard `claude-sonnet-5`).
+
+Für Claude sind zwei zusätzliche Schritte nötig:
+
+```bash
+pip install anthropic          # optional - nur für ai_provider="claude"
+export ANTHROPIC_API_KEY="sk-ant-..."   # nur per Env, nie in config.json/Git
+```
+
+`config.json` setzt dann nur die Auswahl (kein Key im File):
+
+```json
+{ "ai_provider": "claude", "claude_model": "claude-sonnet-5" }
+```
+
+Reine OpenAI-Setups brauchen weder das Paket `anthropic` noch den Key - der
+Import erfolgt lazy, nur wenn `ai_provider="claude"`. Fehlt bei
+`ai_provider="claude"` das Paket oder `ANTHROPIC_API_KEY`, bricht Jarvis mit
+einer klaren Fehlermeldung ab (kein stiller Fehlschlag). Es gibt **kein**
+Auto-Routing und keine Laufzeit-Umschaltung - die Auswahl ist bewusst rein
+konfigurativ (spätere v0.8-Phasen, ADR-029). Für den Autostart gilt wie bei
+`OPENAI_API_KEY`: `ANTHROPIC_API_KEY` dauerhaft per `setx` setzen (siehe
+Telegram-Abschnitt).
+
 ## Tests ausführen
 
 ```bash
@@ -83,7 +114,9 @@ pip install -r requirements.txt
 PYTHONPATH=. pytest tests/ -v
 ```
 
-Alle Tests laufen ohne echten API-Key (OpenAI-Client wird gemockt).
+Alle Tests laufen ohne echten API-Key (der jeweilige SDK-Client wird gemockt;
+`anthropic` wird für die Provider-Tests über `sys.modules` simuliert und muss
+nicht installiert sein).
 
 ## Piper TTS einrichten (optional, nur Windows)
 
