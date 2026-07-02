@@ -9,7 +9,7 @@ Zuerst Projektstand, Roadmap, ADRs und offene Aufgaben lesen.
 
 ## Pflicht-Lesereihenfolge
 1. `README.md`
-2. `docs/handbook/JARVIS_MASTER_HANDBOOK_v3_6.docx` (v3.2/v3.3/v3.4/v3.5 bleiben als Archiv, Grundlage fuer v0.4/v0.5/v0.6/v0.7)
+2. `docs/handbook/JARVIS_MASTER_HANDBOOK_v3_7.docx` (v3.2/v3.3/v3.4/v3.5/v3.6 bleiben als Archiv, Grundlage fuer v0.4/v0.5/v0.6/v0.7 sowie den Runtime-Baustein zwischen v0.7 und v0.8)
 3. `docs/PROJECT_STATE.md`
 4. `docs/logbook.md`
 5. `docs/CHANGELOG.md`
@@ -29,7 +29,7 @@ Zuerst Projektstand, Roadmap, ADRs und offene Aufgaben lesen.
 3. Was ist das naechste Ziel laut Handbook?
 4. Welche offenen TODOs existieren?
 5. Welche ADR war die letzte?
-6. Wurde seit der letzten Handbook-Version eine Hauptversion abgeschlossen, fuer die die Konsolidierung (Kap. 19) noch aussteht? Falls ja: Konsolidierungsprozess vor jeder weiteren Arbeit einleiten.
+6. Wurde seit der letzten Handbook-Version eine Hauptversion - oder ein eigenstaendiger, in Kap. 13 benannter Infrastruktur-/Runtime-Baustein ohne eigene vX.Y-Versionsnummer - abgeschlossen, fuer die/den die Konsolidierung (Kap. 19) noch aussteht? Falls ja: Konsolidierungsprozess vor jeder weiteren Arbeit einleiten.
 
 ## Nach jeder Aenderung
 - Tests ausfuehren.

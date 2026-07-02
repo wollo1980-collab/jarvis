@@ -1,5 +1,70 @@
 # Logbook
 
+## 2026-07-02 - Konsolidierung auf Handbook v3.7 (Infrastruktur-/Runtime-Baustein)
+
+**Kontext:** Der gesamte Infrastruktur-/Runtime-Baustein zwischen v0.7 und
+v0.8 war abgeschlossen und committed (Jarvis-Runtime v1 `95e5af9`,
+Single-Instance-Schutz `987ed0b`, Runtime v2/TelegramChannel `7f9ccb8`,
+Jarvis-Eigenstart `3fc13e1`; ADR-024 bis ADR-028). Wolfgang gab den zuvor
+erstellten Konsolidierungsplan frei - mit zwei Anpassungen: (1) KEIN
+verpflichtender Volltext-Diff v3.6->v3.7, stattdessen eine kurze
+Schlusspruefung, dass ausschliesslich die vorgesehenen Kapitel geaendert
+wurden; (2) Kapitel 12 (Projektstruktur) bleibt bewusst unveraendert
+(Scope-Vermeidung fuer die bekannte Veraltung).
+
+**Governance-Grundlage:** Handbook Kap. 2/19 - der Konsolidierungsprozess
+gilt seit v3.7 ausdruecklich auch fuer einen abgeschlossenen, in Kap. 13
+benannten Infrastruktur-/Runtime-Baustein ohne eigene vX.Y-Versionsnummer
+(diese Klarstellung wurde im Rahmen der Konsolidierung selbst ins Handbook
+uebernommen).
+
+**Durchgefuehrt (nur Dokumentation, kein Code, keine neue ADR):**
+1. **Handbook v3.7 erstellt** (`docs/handbook/JARVIS_MASTER_HANDBOOK_v3_7.docx`,
+   v3.2-v3.6 bleiben Archiv): Titelseite auf 3.7; „Aenderungen in v3.7";
+   Kap. 2 (Versionsliste + v3.7-Zeile + Infrastrukturbaustein-Klausel);
+   Kap. 7 neuer Abschnitt „Runtime & Kanaele" (dauerhafte Runtime-
+   Architektur); Kap. 10 Fernzugriff-Prinzip um Runtime-Telegram ergaenzt;
+   Kap. 13 „Jarvis-Runtime & Jarvis-Eigenstart (abgeschlossen)"; Kap. 17
+   System-Analyst-Vision praezisiert; Kap. 19 Konsolidierungsprozess-Klausel;
+   Kap. 27 „Praezisierung v3.7"; Kap. 28 DoD-Abschnitt „Infrastruktur-/
+   Runtime-Baustein - abgeschlossen" (bewusst ohne Git-Tag); Kap. 29 Backlog
+   (Wake-Word-Korrektur + drei neue Zeilen); Kap. 31 auf drei Einstiegs-
+   punkte verallgemeinert. Umsetzung ueber python-docx (Anker per Textsuche,
+   Titelseite auf w:t-Ebene wegen w:br-Umbruechen), verifiziert.
+2. **README aktualisiert**: H1-Titel nicht mehr „v0.4", Verweise auf v3_7,
+   Archiv-Liste um v3.6 ergaenzt.
+3. **AI_START aktualisiert**: Pflicht-Lesereihenfolge auf v3_7, Archiv-Liste,
+   Pflichtfrage 6 um Infrastrukturbausteine erweitert.
+4. **PROJECT_STATE konsolidiert**: die vier temporaeren Abschnitte
+   („Jarvis-Runtime v1 implementiert", „Single-Instance-Schutz
+   implementiert", „Runtime v2 implementiert: TelegramChannel",
+   „Jarvis-Eigenstart implementiert", ADR-024 bis ADR-028) entfernt -
+   Inhalte vollstaendig ins Handbook (Kap. 7/13/27/28/29) uebernommen.
+   Feature-TODOs bereinigt (Roadmap/Backlog jetzt im Handbook). Rollierende
+   Abschnitte (Current Version, Status, Tests, Latest ADR, Latest
+   Architecture Change, Known Limitations, Git) aktualisiert. Quelle-Zeile
+   auf v3_7.
+5. **CHANGELOG ergaenzt**: neuer oberster Eintrag „Handbook v3.7 -
+   Konsolidierung des Infrastruktur-/Runtime-Bausteins".
+6. **logbook ergaenzt**: dieser Eintrag.
+
+**Widersprueche:** Keine neuen Widersprueche gefunden. Die im Plan
+identifizierten Punkte (Kap. 2 Versionsliste, Kap. 19 Prozess-Reichweite,
+Kap. 29 Wake-Word-„v0.4", Kap. 31 „main.py koordiniert", README-H1 „v0.4")
+wurden im Rahmen dieser Konsolidierung aufgeloest. Die bekannte Veraltung
+von Kap. 12 bleibt bewusst offen (Product-Owner-Entscheidung, fuer eine
+spaetere Konsolidierung vorgemerkt).
+
+**Schlusspruefung:** Handbook v3.7 - ausschliesslich die vorgesehenen Kapitel
+(2, 7, 10, 13, 17, 19, 27, 28, 29, 31) sowie Titelseite/Aenderungsliste
+geaendert; Kap. 12 unveraendert (verifiziert). Nur Dokumentationsdateien
+geaendert (Handbook, README, AI_START, PROJECT_STATE, CHANGELOG, logbook) -
+keine funktionalen Projektdateien (`core/*`, `commands/*`, `executor/*`,
+`memory/*`, `main.py`, `telegram_main.py`, `jarvis_runtime.py`,
+`telegram_channel.py`, `tests/*`).
+
+Noch kein Commit - Commit erst nach abschliessendem Product-Owner-Review.
+
 ## 2026-07-02 - Jarvis-Eigenstart implementiert (ADR-028)
 
 **Kontext:** Nach Commit von Runtime v2 (`7f9ccb8`, ADR-027) wurde der

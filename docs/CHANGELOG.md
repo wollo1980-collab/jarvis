@@ -1,5 +1,68 @@
 # Changelog
 
+## Handbook v3.7 - Konsolidierung des Infrastruktur-/Runtime-Bausteins (ADR-024 bis ADR-028, 02.07.2026)
+
+Kein Code-Release - reine Dokumentations-/Governance-Aktualisierung nach
+Abschluss des Infrastruktur-/Runtime-Bausteins zwischen v0.7 und v0.8
+(Jarvis-Runtime v1/v2, Single-Instance-Schutz, Jarvis-Eigenstart). Gemäß
+Handbook Kap. 2/19 löst auch ein abgeschlossener, in Kap. 13 benannter
+Infrastrukturbaustein ohne eigene vX.Y-Versionsnummer eine Konsolidierung
+aus.
+
+### Geändert
+- `docs/handbook/JARVIS_MASTER_HANDBOOK_v3_7.docx` neu (v3.2-v3.6 bleiben
+  als Archiv erhalten): Kap. 2 (Versionsliste korrigiert - v3.6 als
+  Grundlage des Infrastrukturbausteins, neue Zeile v3.7 als Grundlage für
+  v0.8; Klarstellung, dass ein Infrastrukturbaustein die Konsolidierung
+  auslöst). Kap. 7 (Zielarchitektur) - neuer Abschnitt „Runtime & Kanäle"
+  (jarvis_runtime.py, queue.Queue+Worker-Thread, submit()+plan_filter,
+  ConsoleDummyChannel/TelegramChannel, Single-Instance-Schutz, Koexistenz).
+  Kap. 10 (Sicherheitsmodell) - Fernzugriff-Sicherheitsprinzip um den
+  Runtime-Telegram-Kanal ergänzt (Whitelist wiederverwendet statt neu
+  gebaut). Kap. 13 (Roadmap) - „Jarvis-Eigenstart" zu „Jarvis-Runtime &
+  Jarvis-Eigenstart" erweitert und als abgeschlossen markiert. Kap. 17
+  (PC-Steuerung) - System-Analyst-Vision präzisiert (Grundlage jetzt
+  vorhanden). Kap. 19 (Governance) - Konsolidierungsprozess gilt auch für
+  einen abgeschlossenen Infrastrukturbaustein. Kap. 27 um „Präzisierung
+  v3.7" ergänzt. Kap. 28 (Definition of Done) um Abschnitt
+  „Infrastruktur-/Runtime-Baustein - abgeschlossen" ergänzt (bewusst ohne
+  Git-Tag). Kap. 29 (Backlog) - Wake-Word-Prüfzeitpunkt korrigiert, um
+  Channel-Interface / Runtime-UI-Tray-Wake-Word / Eigenstart-Pfadpflege
+  ergänzt. Kap. 31 (Schnittstellenprinzip) auf drei Einstiegspunkte
+  verallgemeinert.
+- `docs/AI_START.md`: Verweis auf `JARVIS_MASTER_HANDBOOK_v3_7.docx`,
+  Archiv-Liste um v3.6 ergänzt, Pflichtfrage 6 um Infrastrukturbausteine
+  erweitert.
+- `README.md`: H1-Titel aktualisiert (nicht mehr „v0.4"), Verweise auf
+  `JARVIS_MASTER_HANDBOOK_v3_7.docx`, Archiv-Liste um v3.6 ergänzt.
+- `docs/PROJECT_STATE.md` konsolidiert und auf den aktuellen Projektstatus
+  zurückgebaut: die vier temporären Abschnitte „Jarvis-Runtime v1
+  implementiert", „Single-Instance-Schutz implementiert", „Runtime v2
+  implementiert: TelegramChannel" und „Jarvis-Eigenstart implementiert"
+  (ADR-024 bis ADR-028) entfernt - Inhalte vollständig ins Handbook
+  (Kap. 7/13/27/28/29) übernommen. Feature-TODOs bereinigt (Roadmap/
+  Backlog leben jetzt im Handbook). Rollierende Abschnitte (Current
+  Version, Status, Test Status, Latest ADR, Latest Architecture Change,
+  Known Limitations, Git) bleiben bestehen.
+
+### Bewusst nicht geändert
+- Kapitel 12 (Projektstruktur) bleibt in v3.7 unverändert - die bekannte
+  Veraltung wird zur Scope-Vermeidung NICHT in dieser Konsolidierung
+  behoben (Product-Owner-Entscheidung), sondern für eine spätere
+  Konsolidierung vorgemerkt.
+- `docs/logbook.md` und `docs/CHANGELOG.md` bleiben permanente, anwachsende
+  historische Aufzeichnungen - werden bei der Konsolidierung nicht geleert.
+
+### Hintergrund
+- Product-Owner-Freigabe der Konsolidierung mit zwei Anpassungen: (1) kein
+  verpflichtender Volltext-Diff v3.6→v3.7, stattdessen eine Schlussprüfung,
+  dass ausschließlich die vorgesehenen Kapitel geändert wurden; (2) Kap. 12
+  bewusst unverändert. Kein Code, keine neue ADR, keine funktionalen
+  Projektänderungen.
+
+### Siehe auch
+- `docs/PROJECT_STATE.md` (konsolidierter, aktueller Stand)
+
 ## Jarvis-Eigenstart (ADR-028, 02.07.2026)
 
 Windows-Autostart für Jarvis - registriert/entfernt `jarvis_runtime.py`
