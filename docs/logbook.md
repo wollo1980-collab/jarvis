@@ -1,5 +1,47 @@
 # Logbook
 
+## 2026-07-03 - Handbook v3.8: Leitbild / DNA verankert (die „Verfassung" von Jarvis)
+
+**Kontext:** Nach der Umsetzung von v0.8 Phase 1/2 verschob sich die Diskussion
+von Features zur *Identität*. In einer mehrstufigen Produkt-/Architektur-
+Diskussion (02.-03.07.2026) wurde die zeitlose DNA von Jarvis erarbeitet und
+vom PO final bestätigt ("Das ist unsere Verfassung"). Dann als EBENE-1-
+Konsolidierung ins Handbook (v3.8) gehoben.
+
+**Kern-Identität (als Haltung, bewusst KEIN Rollen-Substantiv):** „Jarvis steht
+auf der Seite seines Nutzers und ist allein dessen Interesse verpflichtet. Er
+sieht und ordnet aus eigenem Antrieb - und handelt nur, wenn der Mensch es ihm
+aufträgt." Essenz: einem *einzelnen* Menschen die Souveränität über seine
+digitale Welt zurückgeben; der Wert ist die Loyalität, nicht die (austauschbare)
+Intelligenz; "für alle da vs. für einen da".
+
+**Drei Formulierungs-Feinschliffe (PO-getrieben, zeitloser):**
+- „dient ausschließlich dessen Interesse" -> „ist **allein** dessen Interesse
+  **verpflichtet**": bindet den *Adressaten* der Pflicht (nur ihm, keinem
+  Anbieter), nicht den *Umfang* des Handelns; Grenzen/Recht/Missbrauch leben in
+  Leitplanke 1/4, Kap. 10 und den Nicht-Zielen.
+- „die Intelligenz ist gemietet" -> „austauschbar und an kein bestimmtes Modell
+  gebunden" (weg vom heute-gebundenen Geschäftsmodell-Bild).
+- „Gegner ist die Fragmentierung" -> „Jarvis *begegnet* der Fragmentierung …"
+  (neutrale Problembeschreibung statt Kampfmetapher; passt zum SSoT-Register).
+
+**Umgesetzt (erweiterter Umfang, PO-Entscheidung):** Kap. 0 Leitbild + 9
+Produkt-Leitplanken (Mission unverändert); Kap. 1 Vision-Erweiterung; Kap. 7
+Orchestrator-Disambiguierung (Modell- vs. Service-Ebene); Kap. 26 Loyalitäts-
+Differenzierer; Kap. 32 Nicht-Ziele gefüllt (u.a. Multi-User als eigene, spätere
+Produktentscheidung). Frontmatter v3.8 + Kap. 2 Versionszeile.
+
+**Governance-Ausnahme (bewusst, dokumentiert):** Handbook-Änderung mitten in
+v0.8 berührt die Regel „nur zwischen Versionen" (Kap. 2). Zulässig eingeordnet,
+weil reine EBENE-1-/Identitäts-Konsolidierung ohne Auswirkung auf die technische
+Code-Basis; der PO hat die Ausnahme ausdrücklich bestätigt. Der Ausnahmevermerk
+steht im v3.8-Änderungsblock.
+
+**Technik/Verifikation:** neue Datei `JARVIS_MASTER_HANDBOOK_v3_8.docx` (v3.7
+bleibt Historie), python-docx, anker-basierte Einfügung. 450 -> 476 Absätze
+(+26; 27 eingefügt, 1 alter Änderungslisten-Absatz entfernt). Mission, Kap. 10
+und Kap. 12 unverändert verifiziert.
+
 ## 2026-07-02 - v0.8 Multi-KI, Phase 2: Minimaler Provider-Router (Umsetzung nach ADR-030)
 
 **Kontext:** Zweiter v0.8-Baustein. Nach Phase 1 (ein Provider pro Lauf) soll

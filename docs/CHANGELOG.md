@@ -1,5 +1,38 @@
 # Changelog
 
+## Handbook v3.8: Leitbild / DNA verankert – die „Verfassung" von Jarvis (03.07.2026)
+
+Die zeitlose Produktidentität von Jarvis wurde als bewusste EBENE-1-Konsolidierung
+ins Master-Handbook (neue Version v3.8) aufgenommen – ein Fundament oberhalb
+einzelner Features/ADRs. **Kein Code, keine ADR.**
+
+### Neu / geändert im Handbook
+- **Kap. 0 (Projektphilosophie):** neues Leitbild „Wofür Jarvis existiert" –
+  Identität als **Haltung**, bewusst kein Rollen-Substantiv: „Jarvis steht auf
+  der Seite seines Nutzers und ist allein dessen Interesse verpflichtet. Er
+  sieht und ordnet aus eigenem Antrieb – und handelt nur, wenn der Mensch es
+  ihm aufträgt." Dazu 9 **Produkt-Leitplanken (Identität)**. Die bestehende
+  Mission (Ausbildungsplattform) bleibt **unverändert**; das Verhältnis beider
+  Ebenen ist erläutert.
+- **Kap. 1 (Vision):** Erweiterungsnotiz – vom Arbeitsassistenten zur gesamten
+  persönlichen digitalen Welt (ohne die bestehenden Szenarien zu ersetzen).
+- **Kap. 7 (Zielarchitektur):** „Orchestrator" disambiguiert – Modell-
+  Orchestrierung (Provider-Router, ADR-029/030) vs. Service-Orchestrierung.
+- **Kap. 26 (Produktvision):** Loyalitäts-Differenzierer („für alle vs. für
+  einen").
+- **Kap. 32 (Projektgrenzen):** bisher leere „Nicht-Ziele" gefüllt – kein
+  weiterer Chatbot / kein eigenes Sprachmodell, keine Ersetzung angebundener
+  Dienste, **kein Mehrbenutzer-Produkt** (eigene künftige Produktentscheidung),
+  keine autonome Handlung ohne Auftrag.
+
+### Governance
+- Bewusste, im v3.8-Änderungsvermerk **dokumentierte Ausnahme** zur Regel „nur
+  zwischen Versionen" (Kap. 2): reine EBENE-1-/Identitäts-Konsolidierung **ohne**
+  Auswirkung auf die technische Basis der laufenden v0.8-Implementierung.
+- Neue Datei `JARVIS_MASTER_HANDBOOK_v3_8.docx`; v3.7 bleibt als Historie.
+  EBENE 2 (lebendig) und Kap. 12 (Projektstruktur) unverändert (Verifikation:
+  450 → 476 Absätze, nur die geplanten Stellen geändert).
+
 ## v0.8 Multi-KI, Phase 2: Minimaler deterministischer Provider-Router (02.07.2026)
 
 Zweiter Schritt von v0.8 „Multi-KI" (ADR-030): Jarvis kann jetzt **pro
