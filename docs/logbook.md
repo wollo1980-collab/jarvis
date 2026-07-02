@@ -1,5 +1,35 @@
 # Logbook
 
+## 2026-07-02 - v0.8 Multi-KI, Phase 1: technisch abgeschlossen (Product-Owner-Abschluss)
+
+**Status:** Phase 1 ist **technisch abgeschlossen**. Der volle Stand wurde
+noch einmal gegen ADR-029 (alle 7 Entscheidungen + Konsequenzenliste) und
+Handbook v3.7 (Kap. 7 Multi-KI-Vision, Kap. 13 Roadmap) geprueft - Scope
+vollstaendig erfuellt: Provider-Abstraktion (`LLMProvider`) als Backend in
+`AIEngine`, `OpenAIProvider` + `ClaudeProvider`, explizite Auswahl nur per
+`config.ai_provider`, `anthropic` lazy/optional, `confirmed`-Strip zentral.
+Kein Aufrufer ausserhalb `core/ai.py`/`core/providers.py`/`core/config.py`
+angefasst. Tests: 294 gruen + Offline-Rauchtest gegen die reale anthropic-SDK
+(0.116.0) via httpx-MockTransport (Request-Parameter inkl. `thinking`, ohne
+`temperature`; Antwort-Parsing/Text-Extraktion) - alle Checks gruen.
+
+**Bewusst verschoben (kein offener Implementierungsfehler):** Der **Live-
+Claude-Smoke-Test** (echter API-Call mit gesetztem `ANTHROPIC_API_KEY`) ist
+ein manueller Verifikationsschritt und wird ausdruecklich auf einen spaeteren
+Zeitpunkt verschoben. Kein Code-/Architektur-Defekt - der Pfad ist offline bis
+zur SDK-Grenze verifiziert; nur der bezahlte End-zu-End-Call gegen die
+Anthropic-API steht noch aus. Fertiges Skript liegt bereit (Scratchpad,
+`claude_smoke_live.py`), liest den Key ausschliesslich aus der Umgebung.
+
+**venv:** `anthropic` (0.116.0) bleibt im `.venv` installiert. `requirements.txt`
+bleibt unveraendert - `anthropic` dort weiterhin optional/auskommentiert
+(lazy Import), damit OpenAI-only-Setups ohne das Paket lauffaehig bleiben
+(ADR-029).
+
+**Bewusst NICHT Teil von Phase 1 (bleibt spaetere v0.8-Phasen):** Auto-
+Routing/Orchestrator, Scoring/Bewertung, Multi-Agent, lokale Modelle (Ollama),
+MCP, RAG, Laufzeit-Umschaltung des Providers.
+
 ## 2026-07-02 - v0.8 Multi-KI, Phase 1: Provider-Abstraktion + Claude (Umsetzung nach ADR-029)
 
 **Kontext:** Start von v0.8 „Multi-KI". Product-Owner-Phasenschnitt: **nicht**
