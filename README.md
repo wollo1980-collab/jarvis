@@ -305,6 +305,26 @@ Beide Umgebungsvariablen sind Pflicht (nie in `config.json`/Git) - fehlen
 sie, bricht der Start mit einer klaren Fehlermeldung ab. Nachrichten von
 anderen Chat-IDs werden ignoriert.
 
+**Dauerhaft einrichten (Windows, empfohlen):** `export` (Bash) bzw. `$env:`
+(PowerShell) gelten nur für die aktuelle Terminal-Sitzung. Für dauerhaften
+Betrieb - und zwingend für den Jarvis-Eigenstart (siehe unten) - die
+Variablen als Benutzer-Umgebungsvariablen setzen:
+
+```powershell
+setx JARVIS_TELEGRAM_BOT_TOKEN "..."
+setx JARVIS_TELEGRAM_ALLOWED_CHAT_ID "..."
+```
+
+`setx` überlebt Neustart und Windows-Login, wirkt aber erst in **neu
+geöffneten** Terminals/Prozessen (das aktuelle Fenster sieht die Änderung
+nicht - neu öffnen). Wichtig für den Autostart: der beim Windows-Login
+automatisch über `pythonw.exe` gestartete Jarvis-Eigenstart-Prozess sieht
+**nur** dauerhaft gesetzte Variablen - in einem Terminal per `$env:`/
+`export` gesetzte Werte sind dort nicht sichtbar, der Runtime-Telegram-
+Kanal würde ohne `setx` beim Autostart stillschweigend nicht starten.
+`OPENAI_API_KEY` (siehe "Setup") betrifft dasselbe Problem und sollte aus
+demselben Grund ebenfalls per `setx` dauerhaft gesetzt werden.
+
 **Bewusst eingeschränkt (siehe Kap. 10 v3.5 "Fernzugriff-Sicherheitsprinzip"):**
 - Nur `chat`, `remember_fact`, `forget_fact`, `system_status` sind über
   Telegram erreichbar (Sicherheitsstufe 0 und ausgewählte
@@ -515,7 +535,9 @@ python jarvis_runtime.py
 
 Sind die Variablen nicht gesetzt (oder `python-telegram-bot` nicht
 installiert), verhält sich `jarvis_runtime.py` unverändert wie Runtime
-v1 - nur `ConsoleDummyChannel`, kein Fehler.
+v1 - nur `ConsoleDummyChannel`, kein Fehler. Für dauerhaften Betrieb und
+insbesondere für den Autostart müssen die Variablen per `setx` gesetzt
+sein (siehe "Telegram-Fernzugriff → Dauerhaft einrichten").
 
 **Sicherheitslogik wiederverwendet, nicht dupliziert:** `telegram_channel.py`
 importiert `ALLOWED_INTENTS`/`filter_plan`/`rejection_reason`/
@@ -590,6 +612,12 @@ Telegram über `telegram_main.py` oder über die Runtime selbst).
   `ConsoleDummyChannel` selbst bleibt dabei unverändert.
 - Interagiert automatisch korrekt mit dem Single-Instance-Schutz - keine
   Anpassung nötig.
+- **Umgebungsvariablen:** Der beim Login gestartete Prozess sieht nur
+  dauerhaft (per `setx`) gesetzte Benutzer-Variablen, nicht die in einem
+  Terminal per `$env:`/`export` gesetzten. Wer Telegram über die
+  autostartende Runtime nutzen will, muss `JARVIS_TELEGRAM_BOT_TOKEN`/
+  `JARVIS_TELEGRAM_ALLOWED_CHAT_ID` (und `OPENAI_API_KEY`) dauerhaft
+  setzen - siehe "Telegram-Fernzugriff → Dauerhaft einrichten".
 
 **Bewusst nicht enthalten:** Tray-Icon/Benachrichtigung beim Start,
 eigenes UI, Wake-Word, Deinstallations-/Update-Handling, automatische
