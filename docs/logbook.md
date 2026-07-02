@@ -1,5 +1,62 @@
 # Logbook
 
+## 2026-07-02 - v0.6 abgeschlossen und getaggt, Handbook v3.5 (ADR-019)
+
+**Kontext:** Wolfgang hat als Product Owner nach ausdrücklicher Prüfung
+des v0.6-Abschlusses (Handbook-Vergleich, siehe Eintrag "v0.6 – noch
+nicht releasebereit" unten) den manuellen Smoke-Test selbst vorbereitet
+und durchgeführt.
+
+**Manueller Smoke-Test (Handbook Kap. 14/15/28):** Echten Telegram-Bot
+über BotFather angelegt, Bot-Token und eigene Chat-ID ermittelt,
+`telegram_main.py` mit echten Umgebungsvariablen gestartet. Getestet
+und von Wolfgang bestätigt:
+- Bot startet erfolgreich, Verbindung zu Telegram hergestellt
+  (Long-Polling-Log sichtbar).
+- `chat`, `remember_fact`, `forget_fact`, `system_status` funktionieren
+  ueber den echten Bot.
+- Nicht erlaubte Befehle (getestet: `install_program`) werden korrekt
+  mit einer Ablehnungsmeldung abgewiesen, nicht ausgefuehrt.
+- Bot beendet sich sauber per Strg+C (`Application.stop() complete`,
+  kein Traceback).
+- Keine ERROR-Eintraege im Log (`logs/2026-07-02-telegram.log`).
+
+Damit sind die allgemeinen Definition-of-Done-Kriterien (Kap. 28:
+Smoke Test, manueller Test aller Kernfunktionen) fuer v0.6 erstmals
+tatsaechlich erfuellt - vorher gab es nur den automatisierten,
+gemockten Testlauf.
+
+**Release-Schritte (nach Wolfgangs ausdruecklicher Freigabe):**
+1. Komplette Testsuite erneut ausgefuehrt: 152/152 gruen. Arbeitsverzeichnis
+   sauber, keine offenen Feature-Aenderungen.
+2. Tag `v0.6` gesetzt (annotierter Tag auf Commit `3f81e69`).
+3. Handbook auf v3.5 aktualisiert (siehe ADR-019): Kap. 13 (v0.6 als
+   abgeschlossen markiert, Lerninhalte-Spalte auf das tatsaechlich
+   Genutzte korrigiert), Kap. 16 (Telegram-Bot-Status auf "Umgesetzt",
+   neue Praezisierung: Web-Interface/WireGuard VPN sind Alternativen,
+   keine Pflichtbestandteile), Kap. 10 (neues, dauerhaftes
+   Fernzugriff-Sicherheitsprinzip - gilt fuer alle kuenftigen
+   Fernzugriffskanaele, nicht nur Telegram), Kap. 27 (Praezisierung
+   v3.5), Kap. 28 (neuer v0.6-DoD-Abschnitt), Kap. 29 (Backlog um die
+   Generalisierung der Post-Arbeitsmodule ergaenzt - Wolfgangs Hinweis
+   vom Vortag, reine Richtungsdokumentation, keine Architekturaenderung).
+4. Vollstaendiger Text-Diff v3.4 -> v3.5 geprueft - nur die
+   beabsichtigten Aenderungen, keine Kollateralschaeden.
+
+**Bewusst NICHT geaendert:** Kap. 19 (generalisierte PO-Entscheidungs-
+Regel seit v3.4 bleibt gueltig), Kap. 22/30 (keine neuen v0.6-Erkenntnisse
+dafuer).
+
+**Tests:** 152/152 gruen (keine Code-Aenderung in dieser Sitzung).
+
+**Naechster Schritt:** Handbook v3.5 vollstaendig lesen und Projektstand
+gemaess AI_START.md erneut verifizieren, danach gemeinsam mit Wolfgang
+die Planung von v0.7 beginnen (noch nicht begonnen).
+
+**Siehe auch:** ADR-018 (docs/adr/ADR-018.md), ADR-019
+(docs/adr/ADR-019.md), README.md Abschnitt "Telegram-Fernzugriff
+(v0.6, abgeschlossen, ADR-018)", CHANGELOG (v0.6/Handbook v3.5).
+
 ## 2026-07-01 - Product-Owner-Hinweis: Generalisierung Post-Arbeitsmodule (kuenftige Handbook-Version)
 
 **Kontext:** Wolfgang hat nach Abschluss von v0.6 Phase 1 (Telegram)

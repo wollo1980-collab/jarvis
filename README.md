@@ -4,18 +4,19 @@ Refactor + Gesprächsgedächtnis + Planner/Executor + echte
 Chat-Antworten (v0.3), jetzt plus dauerhaftes Langzeitgedächtnis
 (v0.4). Siehe docs/CHANGELOG.md für die volle Historie.
 
-**Maßgebliches Prozess-/Architekturdokument:** `docs/handbook/JARVIS_MASTER_HANDBOOK_v3_4.docx`.
+**Maßgebliches Prozess-/Architekturdokument:** `docs/handbook/JARVIS_MASTER_HANDBOOK_v3_5.docx`.
 Alle Entscheidungen in diesem Projekt (ADRs, Now/Next/Later-Priorisierung,
 Definition of Done, Sicherheitsstufen) richten sich nach diesem Dokument -
-"Immer nach Handbuch". `v3_2.docx`/`v3_3.docx` bleiben als Archiv erhalten
-(Grundlage für v0.4 bzw. v0.5). Ältere Handbook-Versionen liegen ggf. noch
-lose in Downloads (nicht im Projekt), sind aber NICHT maßgeblich.
+"Immer nach Handbuch". `v3_2.docx`/`v3_3.docx`/`v3_4.docx` bleiben als
+Archiv erhalten (Grundlage für v0.4 bzw. v0.5 bzw. v0.6). Ältere
+Handbook-Versionen liegen ggf. noch lose in Downloads (nicht im Projekt),
+sind aber NICHT maßgeblich.
 
 ## AI / Agent Onboarding
 
 Neue KI-Agenten müssen zuerst `docs/AI_START.md` lesen.
 Der aktuelle Projektstand steht in `docs/PROJECT_STATE.md`.
-Das Master-Handbook `docs/handbook/JARVIS_MASTER_HANDBOOK_v3_4.docx`
+Das Master-Handbook `docs/handbook/JARVIS_MASTER_HANDBOOK_v3_5.docx`
 bleibt die verbindliche Quelle.
 
 ## Struktur
@@ -270,11 +271,18 @@ unabhängig vom KI-Text.
 Entscheidung aus dem aktiven v0.5-Scope genommen (liegt auf dem
 Firmenrechner/im Firmenumfeld), siehe `docs/PROJECT_STATE.md`.
 
-## Telegram-Fernzugriff (v0.6 Phase 1, ADR-018)
+## Telegram-Fernzugriff (v0.6, abgeschlossen, ADR-018)
 
-Separater Einstiegspunkt `telegram_main.py` - `main.py`/die Konsole
-bleiben komplett unverändert. Long-Polling über `python-telegram-bot`
-(kein Webhook/FastAPI/ngrok).
+Umgesetzte v0.6-Lösung für "Handy-Anbindung" (Handbook Kap. 16) - manueller
+Smoke-Test bestanden, Product-Owner-bestätigt (02.07.2026). Separater
+Einstiegspunkt `telegram_main.py` - `main.py`/die Konsole bleiben komplett
+unverändert. Long-Polling über `python-telegram-bot` (kein Webhook/
+FastAPI/ngrok).
+
+Web-Interface (FastAPI+ngrok) und WireGuard VPN (Handbook Kap. 16) sind
+alternative Implementierungswege zum selben Ziel, **keine zusätzlichen
+Pflichtbestandteile von v0.6** - unpriorisiert, bis ein konkreter Bedarf
+entsteht. Eigene App bleibt Langzeitziel.
 
 **Einrichtung:**
 
@@ -289,7 +297,7 @@ Beide Umgebungsvariablen sind Pflicht (nie in `config.json`/Git) - fehlen
 sie, bricht der Start mit einer klaren Fehlermeldung ab. Nachrichten von
 anderen Chat-IDs werden ignoriert.
 
-**Phase 1, bewusst eingeschränkt:**
+**Bewusst eingeschränkt (siehe Kap. 10 v3.5 "Fernzugriff-Sicherheitsprinzip"):**
 - Nur `chat`, `remember_fact`, `forget_fact`, `system_status` sind über
   Telegram erreichbar (Sicherheitsstufe 0 und ausgewählte
   Speicher-Interaktionen der Stufe 1).

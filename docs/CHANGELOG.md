@@ -1,5 +1,46 @@
 # Changelog
 
+## v0.6 - Handy: Telegram-Fernzugriff (abgeschlossen, getaggt, 02.07.2026)
+
+Manueller Smoke-Test (Handbook Kap. 14/15/28) mit echtem Bot-Token/Chat
+durchgeführt und vom Product Owner am 02.07.2026 ausdrücklich bestätigt:
+Bot startet, Verbindung zu Telegram, `chat`/`remember_fact`/`forget_fact`/
+`system_status` funktionieren, nicht erlaubte Befehle werden korrekt
+abgelehnt, sauberer Shutdown, keine ERROR-Einträge im Log. Damit sind die
+allgemeinen Definition-of-Done-Kriterien (Kap. 28) erfüllt. Tag `v0.6`
+gesetzt. Handbook auf v3.5 aktualisiert (siehe eigener Abschnitt unten) -
+v0.6 ist damit als Gesamtversion abgeschlossen.
+
+## Handbook v3.5 - v0.6-Abschluss, Fernzugriff-Sicherheitsprinzip (ADR-019, 02.07.2026)
+
+Kein Code-Release - reine Dokumentations-/Governance-Aktualisierung nach
+Abschluss von v0.6 (Tag `v0.6` gesetzt), gemäß der in Kap. 2 festgelegten
+Regel ("Handbook wird nur zwischen zwei Versionen geändert").
+
+### Geändert
+- `docs/handbook/JARVIS_MASTER_HANDBOOK_v3_5.docx` neu (v3.2/v3.3/v3.4
+  bleiben als Archiv erhalten): Kap. 13 (Roadmap) aktualisiert - v0.6 als
+  abgeschlossen markiert, Lerninhalte-Spalte auf das tatsächlich Genutzte
+  (python-telegram-bot/Long-Polling) korrigiert; Kap. 16 (Handy-Anbindung)
+  präzisiert - Telegram-Bot als umgesetzte Lösung, Web-Interface/WireGuard
+  VPN ausdrücklich als Alternativen ohne Pflichtcharakter, Eigene App
+  Langzeitziel; Kap. 10 (Sicherheitsmodell) um ein dauerhaftes
+  Fernzugriff-Sicherheitsprinzip ergänzt (gilt für alle künftigen
+  Fernzugriffskanäle, nicht nur Telegram); Kap. 27 um "Präzisierung v3.5:
+  v0.6 Abschluss" ergänzt; Kap. 28 (Definition of Done) um einen neuen
+  Abschnitt "v0.6 - spezifisch (Telegram-Fernzugriff)" ergänzt (inkl.
+  bestandenem manuellem Smoke-Test); Kap. 29 (Backlog) um die künftige
+  Generalisierung der Post-Arbeitsmodule ergänzt (Product-Owner-Hinweis,
+  keine Architekturänderung).
+- `docs/AI_START.md`, `README.md`, `docs/PROJECT_STATE.md` verweisen
+  jetzt auf `JARVIS_MASTER_HANDBOOK_v3_5.docx`.
+- Vollständiger Text-Diff zwischen v3.4 und v3.5 geprüft - ausschließlich
+  die oben genannten, beabsichtigten Änderungen, keine Kollateralschäden
+  in unveränderten Kapiteln.
+
+### Siehe auch
+- ADR-019 (docs/adr/ADR-019.md)
+
 ## v0.6.0 - Telegram-Fernzugriff, Phase 1 (ADR-018, 01.07.2026)
 
 Erster v0.6-Baustein ("Handy", Handbook Kap. 13/16). Separater
