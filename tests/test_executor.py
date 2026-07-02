@@ -169,3 +169,146 @@ def test_executor_catches_command_exceptions():
 
     assert not report.all_ok
     assert report.results[0].status == Status.FAILED
+
+
+# --- optionaler preview()-Hook (v0.7 Phase 4, ADR-023) ---------------------
+#
+# WICHTIG: MagicMock() ohne spec= erzeugt automatisch JEDES angefragte
+# Attribut (auch .preview) - das wuerde den Rueckwaertskompatibilitaets-
+# Test unbrauchbar machen (getattr(command, "preview", None) faende
+# faelschlich immer ein aufrufbares Mock-Objekt). spec=[...] schliesst
+# .preview bewusst aus, damit getattr(...) wirklich None liefert, wenn
+# das Command (wie alle bisherigen Commands) preview() nicht kennt.
+
+
+def test_executor_confirmation_unchanged_when_command_has_no_preview():
+    """Rueckwaertskompatibilitaet: ein Command ohne preview() zeigt exakt
+    denselben Bestaetigungstext wie vor dem preview()-Hook."""
+    speech = MagicMock()
+    speech.listen.return_value = "ja"
+    ai = MagicMock()
+    command = MagicMock(
+        spec=["requires_confirmation", "confirmation_phrase", "execute"],
+        requires_confirmation=True,
+        confirmation_phrase=None,
+    )
+    command.execute.return_value = Result(status=Status.SUCCESS, message="ok")
+    tool_manager = MagicMock(resolve=MagicMock(return_value=command))
+    executor = Executor(speech, ai, tool_manager=tool_manager)
+
+    report = executor.run([Plan(intent="x", raw_input="tu etwas kritisches")])
+
+    speech.say.assert_called_once_with("Ich würde jetzt ausführen: 'tu etwas kritisches'. Bestätigen?")
+    assert report.all_ok
+
+
+def test_executor_stufe3_confirmation_unchanged_when_command_has_no_preview():
+    speech = MagicMock()
+    speech.listen.return_value = "HERUNTERFAHREN"
+    ai = MagicMock()
+    command = MagicMock(
+        spec=["requires_confirmation", "confirmation_phrase", "execute"],
+        requires_confirmation=True,
+        confirmation_phrase="HERUNTERFAHREN",
+    )
+    command.execute.return_value = Result(status=Status.SUCCESS, message="ok")
+    tool_manager = MagicMock(resolve=MagicMock(return_value=command))
+    executor = Executor(speech, ai, tool_manager=tool_manager)
+
+    executor.run([Plan(intent="shutdown_pc", raw_input="fahr den pc runter")])
+
+    speech.say.assert_called_once_with(
+        "Ich würde jetzt ausführen: 'fahr den pc runter'. Das ist eine kritische "
+        "Aktion (Sicherheitsstufe 3). Bitte tippe zur Bestätigung genau: HERUNTERFAHREN"
+    )
+
+
+def test_executor_shows_preview_text_before_stufe2_confirmation():
+    speech = MagicMock()
+    speech.listen.return_value = "ja"
+    ai = MagicMock()
+    command = MagicMock(
+        spec=["requires_confirmation", "confirmation_phrase", "execute", "preview"],
+        requires_confirmation=True,
+        confirmation_phrase=None,
+    )
+    command.preview.return_value = "Ich würde 10 Dateien mit 2.0 GB löschen."
+    command.execute.return_value = Result(status=Status.SUCCESS, message="ok")
+    tool_manager = MagicMock(resolve=MagicMock(return_value=command))
+    executor = Executor(speech, ai, tool_manager=tool_manager)
+
+    executor.run([Plan(intent="clean_temp_files", raw_input="bereinige temp")])
+
+    speech.say.assert_called_once_with(
+        "Ich würde jetzt ausführen: 'bereinige temp'. Ich würde 10 Dateien mit "
+        "2.0 GB löschen. Bestätigen?"
+    )
+    command.preview.assert_called_once()
+
+
+def test_executor_shows_preview_text_before_stufe3_confirmation():
+    speech = MagicMock()
+    speech.listen.return_value = "BEREINIGEN"
+    ai = MagicMock()
+    command = MagicMock(
+        spec=["requires_confirmation", "confirmation_phrase", "execute", "preview"],
+        requires_confirmation=True,
+        confirmation_phrase="BEREINIGEN",
+    )
+    command.preview.return_value = "Ich würde 10 Dateien mit 2.0 GB löschen."
+    command.execute.return_value = Result(status=Status.SUCCESS, message="ok")
+    tool_manager = MagicMock(resolve=MagicMock(return_value=command))
+    executor = Executor(speech, ai, tool_manager=tool_manager)
+
+    report = executor.run([Plan(intent="clean_temp_files", raw_input="bereinige temp")])
+
+    say_text = speech.say.call_args.args[0]
+    assert "Ich würde 10 Dateien mit 2.0 GB löschen." in say_text
+    assert "BEREINIGEN" in say_text
+    assert report.all_ok
+
+
+def test_executor_falls_back_to_old_text_when_preview_returns_none():
+    speech = MagicMock()
+    speech.listen.return_value = "ja"
+    ai = MagicMock()
+    command = MagicMock(
+        spec=["requires_confirmation", "confirmation_phrase", "execute", "preview"],
+        requires_confirmation=True,
+        confirmation_phrase=None,
+    )
+    command.preview.return_value = None
+    command.execute.return_value = Result(status=Status.SUCCESS, message="ok")
+    tool_manager = MagicMock(resolve=MagicMock(return_value=command))
+    executor = Executor(speech, ai, tool_manager=tool_manager)
+
+    executor.run([Plan(intent="x", raw_input="tu etwas")])
+
+    speech.say.assert_called_once_with("Ich würde jetzt ausführen: 'tu etwas'. Bestätigen?")
+
+
+def test_executor_calls_preview_before_execute_and_execute_runs_independently():
+    """execute() darf nicht von preview() abhaengen - beide werden vom
+    Executor unabhaengig aufgerufen (ADR-023: execute() scannt immer
+    frisch, verlaesst sich nie auf preview())."""
+    speech = MagicMock()
+    speech.listen.return_value = "BEREINIGEN"
+    ai = MagicMock()
+    call_order = []
+    command = MagicMock(
+        spec=["requires_confirmation", "confirmation_phrase", "execute", "preview"],
+        requires_confirmation=True,
+        confirmation_phrase="BEREINIGEN",
+    )
+    command.preview.side_effect = lambda plan: call_order.append("preview") or "Vorschau-Text."
+    command.execute.side_effect = lambda plan: call_order.append("execute") or Result(
+        status=Status.SUCCESS, message="ok"
+    )
+    tool_manager = MagicMock(resolve=MagicMock(return_value=command))
+    executor = Executor(speech, ai, tool_manager=tool_manager)
+
+    executor.run([Plan(intent="clean_temp_files", raw_input="bereinige temp")])
+
+    assert call_order == ["preview", "execute"]
+    command.preview.assert_called_once()
+    command.execute.assert_called_once()

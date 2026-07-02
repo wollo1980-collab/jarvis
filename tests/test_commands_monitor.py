@@ -2,7 +2,9 @@
 werden gemockt, es wird nichts vom echten System gelesen."""
 from __future__ import annotations
 
+import os
 import subprocess
+import time
 import xml.etree.ElementTree as ET
 from unittest.mock import MagicMock, patch
 
@@ -10,6 +12,8 @@ import commands.monitor as monitor_commands
 from commands.monitor import (
     AnalyzeEventLogCommand,
     AnalyzePcCommand,
+    AnalyzeTempFilesCommand,
+    CleanTempFilesCommand,
     DisableAutostartEntryCommand,
     EnableAutostartEntryCommand,
     SystemStatusCommand,
@@ -828,3 +832,229 @@ def test_collect_startup_folder_ignores_subdirectories(monkeypatch, tmp_path):
     names = {e["name"] for e in entries}
     assert "Dropbox.lnk" in names
     assert monitor_commands._STARTUP_DISABLED_SUBFOLDER_NAME not in names
+
+
+# --- analyze_temp_files / clean_temp_files (v0.7 Phase 4, ADR-023) --------
+
+
+def _setup_temp_env(monkeypatch, tmp_path, windows=True):
+    monkeypatch.setattr(monitor_commands.platform, "system", lambda: "Windows" if windows else "Linux")
+    temp_dir = tmp_path / "Temp"
+    temp_dir.mkdir()
+    monkeypatch.setenv("TEMP", str(temp_dir))
+    monkeypatch.delenv("TMP", raising=False)
+    return temp_dir
+
+
+def _write_temp_file(path, hours_ago):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"x" * 100)
+    ts = time.time() - hours_ago * 3600
+    os.utime(path, (ts, ts))
+
+
+def test_analyze_temp_files_fails_clearly_on_non_windows(monkeypatch, tmp_path):
+    _setup_temp_env(monkeypatch, tmp_path, windows=False)
+    cmd = AnalyzeTempFilesCommand()
+
+    result = cmd.execute(Plan(intent="analyze_temp_files"))
+
+    assert result.status == Status.FAILED
+
+
+def test_analyze_temp_files_counts_only_old_files(monkeypatch, tmp_path):
+    temp_dir = _setup_temp_env(monkeypatch, tmp_path)
+    _write_temp_file(temp_dir / "old.tmp", hours_ago=48)
+    _write_temp_file(temp_dir / "new.tmp", hours_ago=1)
+    cmd = AnalyzeTempFilesCommand()
+
+    result = cmd.execute(Plan(intent="analyze_temp_files"))
+
+    assert result.status == Status.SUCCESS
+    assert result.data["count"] == 1
+    assert "1 Datei" in result.message
+
+
+def test_analyze_temp_files_includes_files_in_subfolders(monkeypatch, tmp_path):
+    temp_dir = _setup_temp_env(monkeypatch, tmp_path)
+    _write_temp_file(temp_dir / "sub" / "nested.tmp", hours_ago=48)
+    cmd = AnalyzeTempFilesCommand()
+
+    result = cmd.execute(Plan(intent="analyze_temp_files"))
+
+    assert result.data["count"] == 1
+
+
+def test_analyze_temp_files_missing_temp_env_var_fails(monkeypatch, tmp_path):
+    monkeypatch.setattr(monitor_commands.platform, "system", lambda: "Windows")
+    monkeypatch.delenv("TEMP", raising=False)
+    monkeypatch.delenv("TMP", raising=False)
+    cmd = AnalyzeTempFilesCommand()
+
+    result = cmd.execute(Plan(intent="analyze_temp_files"))
+
+    assert result.status == Status.FAILED
+
+
+def test_analyze_temp_files_requires_no_confirmation():
+    assert AnalyzeTempFilesCommand().requires_confirmation is False
+
+
+def test_analyze_temp_files_registered_in_registry():
+    from commands import REGISTRY
+
+    assert "analyze_temp_files" in REGISTRY
+
+
+def test_clean_temp_files_fails_clearly_on_non_windows(monkeypatch, tmp_path):
+    _setup_temp_env(monkeypatch, tmp_path, windows=False)
+    cmd = CleanTempFilesCommand()
+
+    result = cmd.execute(Plan(intent="clean_temp_files"))
+
+    assert result.status == Status.FAILED
+
+
+def test_clean_temp_files_deletes_only_old_files(monkeypatch, tmp_path):
+    temp_dir = _setup_temp_env(monkeypatch, tmp_path)
+    old_file = temp_dir / "old.tmp"
+    new_file = temp_dir / "new.tmp"
+    _write_temp_file(old_file, hours_ago=48)
+    _write_temp_file(new_file, hours_ago=1)
+    cmd = CleanTempFilesCommand()
+
+    result = cmd.execute(Plan(intent="clean_temp_files"))
+
+    assert result.status == Status.SUCCESS
+    assert result.data["deleted_count"] == 1
+    assert not old_file.exists()
+    assert new_file.exists()
+
+
+def test_clean_temp_files_includes_and_deletes_files_in_subfolders(monkeypatch, tmp_path):
+    temp_dir = _setup_temp_env(monkeypatch, tmp_path)
+    nested = temp_dir / "sub" / "nested.tmp"
+    _write_temp_file(nested, hours_ago=48)
+    cmd = CleanTempFilesCommand()
+
+    result = cmd.execute(Plan(intent="clean_temp_files"))
+
+    assert result.data["deleted_count"] == 1
+    assert not nested.exists()
+
+
+def test_clean_temp_files_never_deletes_directories(monkeypatch, tmp_path):
+    temp_dir = _setup_temp_env(monkeypatch, tmp_path)
+    subdir = temp_dir / "sub"
+    subdir.mkdir()
+    old_ts = time.time() - 48 * 3600
+    os.utime(subdir, (old_ts, old_ts))
+    cmd = CleanTempFilesCommand()
+
+    result = cmd.execute(Plan(intent="clean_temp_files"))
+
+    assert result.data["deleted_count"] == 0
+    assert subdir.exists()
+
+
+def test_clean_temp_files_skips_locked_file_without_failing(monkeypatch, tmp_path):
+    from pathlib import Path
+
+    temp_dir = _setup_temp_env(monkeypatch, tmp_path)
+    locked = temp_dir / "locked.tmp"
+    ok = temp_dir / "ok.tmp"
+    _write_temp_file(locked, hours_ago=48)
+    _write_temp_file(ok, hours_ago=48)
+
+    real_unlink = Path.unlink
+
+    def fake_unlink(self, *args, **kwargs):
+        if self.name == "locked.tmp":
+            raise PermissionError("gesperrt")
+        return real_unlink(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", fake_unlink)
+    cmd = CleanTempFilesCommand()
+
+    result = cmd.execute(Plan(intent="clean_temp_files"))
+
+    assert result.status == Status.SUCCESS
+    assert result.data["deleted_count"] == 1
+    assert len(result.data["skipped"]) == 1
+    assert locked.exists()
+    assert not ok.exists()
+
+
+def test_clean_temp_files_skips_already_missing_file(monkeypatch, tmp_path):
+    from pathlib import Path
+
+    temp_dir = _setup_temp_env(monkeypatch, tmp_path)
+    gone = temp_dir / "gone.tmp"
+    ok = temp_dir / "ok.tmp"
+    _write_temp_file(gone, hours_ago=48)
+    _write_temp_file(ok, hours_ago=48)
+
+    real_unlink = Path.unlink
+
+    def fake_unlink(self, *args, **kwargs):
+        if self.name == "gone.tmp":
+            raise FileNotFoundError("bereits weg")
+        return real_unlink(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", fake_unlink)
+    cmd = CleanTempFilesCommand()
+
+    result = cmd.execute(Plan(intent="clean_temp_files"))
+
+    assert result.status == Status.SUCCESS
+    assert result.data["deleted_count"] == 1
+    assert len(result.data["skipped"]) == 1
+
+
+def test_clean_temp_files_preview_reports_fresh_scan(monkeypatch, tmp_path):
+    temp_dir = _setup_temp_env(monkeypatch, tmp_path)
+    _write_temp_file(temp_dir / "old.tmp", hours_ago=48)
+    cmd = CleanTempFilesCommand()
+
+    preview_text = cmd.preview(Plan(intent="clean_temp_files"))
+
+    assert preview_text is not None
+    assert "1 Datei" in preview_text
+
+
+def test_clean_temp_files_preview_returns_none_on_non_windows(monkeypatch, tmp_path):
+    _setup_temp_env(monkeypatch, tmp_path, windows=False)
+    cmd = CleanTempFilesCommand()
+
+    assert cmd.preview(Plan(intent="clean_temp_files")) is None
+
+
+def test_clean_temp_files_execute_does_not_reuse_preview_scan(monkeypatch, tmp_path):
+    """ADR-023-Kernvorgabe: execute() scannt unabhaengig von preview()
+    erneut - eine NACH dem preview()-Aufruf hinzugekommene Datei muss
+    trotzdem von execute() erfasst werden."""
+    temp_dir = _setup_temp_env(monkeypatch, tmp_path)
+    _write_temp_file(temp_dir / "first.tmp", hours_ago=48)
+    cmd = CleanTempFilesCommand()
+
+    preview_text = cmd.preview(Plan(intent="clean_temp_files"))
+    assert "1 Datei" in preview_text
+
+    # Nach der Vorschau kommt eine weitere alte Datei hinzu.
+    _write_temp_file(temp_dir / "second.tmp", hours_ago=48)
+
+    result = cmd.execute(Plan(intent="clean_temp_files"))
+
+    assert result.data["deleted_count"] == 2
+
+
+def test_clean_temp_files_requires_confirmation_stufe3_with_phrase():
+    cmd = CleanTempFilesCommand()
+    assert cmd.requires_confirmation is True
+    assert cmd.confirmation_phrase == "BEREINIGEN"
+
+
+def test_clean_temp_files_registered_in_registry():
+    from commands import REGISTRY
+
+    assert "clean_temp_files" in REGISTRY

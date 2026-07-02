@@ -34,12 +34,12 @@ jarvis/
 │   ├── __init__.py         # Registry + minimaler Dispatch
 │   ├── system.py             # open_program, shutdown_pc
 │   ├── memory.py               # remember_fact, forget_fact
-│   ├── monitor.py               # system_status (ADR-011), analyze_pc (ADR-020), analyze_event_log (ADR-021), disable_/enable_autostart_entry (ADR-022)
+│   ├── monitor.py               # system_status (ADR-011), analyze_pc (ADR-020), analyze_event_log (ADR-021), disable_/enable_autostart_entry (ADR-022), analyze_/clean_temp_files (ADR-023)
 │   ├── installer.py               # install_program (winget, ADR-012)
 │   ├── excel.py                     # read_excel (openpyxl, ADR-014)
 │   └── reports.py                     # analyze_report (ADR-015), calculate_kpi (ADR-016)
 ├── executor/
-│   └── executor.py             # führt Schritte aus, Bestätigung, ✓/✗/?-Report
+│   └── executor.py             # führt Schritte aus, Bestätigung (inkl. optionalem preview()-Hook, ADR-023), ✓/✗/?-Report
 ├── memory/
 │   └── store.py                  # JsonMemoryStore (preferences/history/context)
 ├── memory_data/                     # preferences.json, history.json, context.json
@@ -406,6 +406,49 @@ eindeutiger Zielauflösung + Sicherheitsstufe 2 + Bestätigung.
 **Bewusst nicht enthalten:** HKLM-Schreibzugriff, Administratorrechte,
 Startup-Ordner (Alle Benutzer) schreibend, Löschen, neue Einträge
 erstellen. Siehe ADR-022.
+
+## Temp-/Festplatten-Bereinigung (v0.7 Phase 4, ADR-023)
+
+Vierter v0.7-Baustein - erster **löschender** PC-Admin-Command (anders
+als das reversible Deaktivieren in Phase 3). Zwei Commands:
+`analyze_temp_files` (Sicherheitsstufe 0, nur lesen) zeigt, wie viele
+Temp-Dateien (älter als 24h) im Benutzer-Temp-Ordner liegen.
+`clean_temp_files` (Sicherheitsstufe 3, exakte Bestätigungsphrase
+`BEREINIGEN`) löscht sie unwiderruflich.
+
+```
+Du: Bereinige Temp-Dateien
+Jarvis: Ich würde jetzt ausführen: 'Bereinige Temp-Dateien'. Ich würde
+4.200 Datei(en) mit insgesamt 8.3 GB löschen. Das ist eine kritische
+Aktion (Sicherheitsstufe 3). Bitte tippe zur Bestätigung genau: BEREINIGEN
+Du: BEREINIGEN
+Jarvis: 4.200 Datei(en) mit insgesamt 8.3 GB gelöscht.
+```
+
+**Neuer, optionaler `preview()`-Hook im Executor** (erste Änderung an
+`executor/executor.py` in der gesamten v0.7-Entwicklung): Ein Command
+kann zusätzlich `preview(plan) -> Optional[str]` implementieren - ist
+sie vorhanden, zeigt der Executor ihren Text **vor** der
+Bestätigungsfrage an. Commands ohne `preview()` (alle bisherigen)
+verhalten sich exakt wie zuvor, vollständig rückwärtskompatibel. Kein
+Zugriff für Commands auf `SpeechEngine` - der Hook bleibt eine reine
+`Plan -> Optional[str]`-Funktion, die Anzeige-Logik bleibt beim
+Executor. Etabliert ein einheitliches Sicherheitsmuster für künftige
+schreibende PC-Admin-Commands.
+
+**`clean_temp_files` scannt immer zweimal unabhängig voneinander:**
+einmal in `preview()` für die Vorschau, einmal in `execute()` für die
+tatsächliche Löschung - `execute()` verlässt sich **nie** auf das
+Vorschau-Ergebnis (Zustand kann sich zwischen Vorschau und Bestätigung
+geändert haben). Beschränkt auf `%TEMP%` (kein `C:\Windows\Temp`, keine
+Administratorrechte), nur Dateien älter als 24h, nur Dateien (nie
+Ordner) werden gelöscht, Pfad-Eindämmung gegen Ziele außerhalb von
+`%TEMP%`. Gesperrte/bereits verschwundene Dateien werden einzeln
+übersprungen, kein Totalausfall.
+
+**Bewusst nicht enthalten:** Papierkorb, `C:\Windows\Temp`,
+Browser-Cache/-Profile, Registry-Cleaner, Dienste, Treiber. Siehe
+ADR-023.
 
 ## Pipeline
 

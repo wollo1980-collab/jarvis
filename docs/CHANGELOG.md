@@ -1,5 +1,44 @@
 # Changelog
 
+## v0.7.0 - Temp-/Festplatten-Bereinigung, Phase 4 (ADR-023, 02.07.2026)
+
+Vierter v0.7-Baustein ("PC-Admin", Handbook Kap. 13/17) - erster
+löschender PC-Admin-Command.
+
+### Neu
+- Optionaler `preview(plan) -> Optional[str]`-Hook in
+  `executor/executor.py` (erste Änderung an dieser Datei in der
+  gesamten v0.7-Entwicklung): Commands können vor der Bestätigung
+  einen frisch berechneten Vorschau-Text anzeigen lassen. Commands
+  ohne `preview()` (alle bisherigen) verhalten sich exakt wie zuvor -
+  vollständig rückwärtskompatibel, verifiziert durch neue
+  Regressionstests. Kein Zugriff für Commands auf `SpeechEngine`.
+- `commands/monitor.py::AnalyzeTempFilesCommand` (Intent
+  `analyze_temp_files`, Sicherheitsstufe 0): zeigt Anzahl und
+  Gesamtgröße der Temp-Dateien (älter als 24h) im Benutzer-Temp-Ordner.
+- `commands/monitor.py::CleanTempFilesCommand` (Intent
+  `clean_temp_files`, Sicherheitsstufe 3, Bestätigungsphrase
+  `BEREINIGEN`): löscht diese Dateien unwiderruflich. Nutzt den neuen
+  `preview()`-Hook für eine exakte Vorschau vor der Bestätigung -
+  `execute()` scannt unabhängig davon erneut, verlässt sich nie auf
+  das Vorschau-Ergebnis.
+- Beschränkt auf `%TEMP%` (kein `C:\Windows\Temp`, keine
+  Administratorrechte), nur Dateien älter als 24h, nur Dateien
+  (nie Ordner). Pfad-Eindämmung gegen Ziele außerhalb von `%TEMP%`.
+  Gesperrte/bereits verschwundene Dateien werden einzeln
+  übersprungen, kein Totalausfall.
+- Beide neuen Commands bleiben in `commands/monitor.py` (kein neues
+  Modul, KISS/YAGNI, Product-Owner-Entscheidung).
+- 23 neue Tests (`tests/test_commands_monitor.py`,
+  `tests/test_executor.py`) - 225 Tests gesamt, alle grün.
+
+### Bewusst nicht enthalten (Phase 4)
+- Papierkorb leeren (explizit nicht Bestandteil von ADR-023).
+- `C:\Windows\Temp`, Administratorrechte/Elevation.
+- Browser-Cache/-Profile, Registry-Cleaner.
+- Dienste-Verwaltung, Treiber-Aktualisierung (weiterhin offene
+  Kap.-17-Bausteine).
+
 ## v0.7.0 - Autostart verwalten, Phase 3 (ADR-022, 02.07.2026)
 
 Dritter v0.7-Baustein ("PC-Admin", Handbook Kap. 13/17) - erster

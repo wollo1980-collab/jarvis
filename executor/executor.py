@@ -20,6 +20,14 @@ Bei einem gescheiterten oder unsicheren Zwischenschritt bricht der
 Executor die restlichen Schritte ab - keine Kettenreaktion auf Basis
 eines Ergebnisses, dem nicht vertraut werden kann ("niemals raten,
 sondern nachfragen").
+
+Optionaler preview()-Hook (v0.7 Phase 4, ADR-023): ein Command kann
+zusaetzlich eine Methode preview(plan) -> Optional[str] implementieren.
+Ist sie vorhanden, wird ihr Ergebnis vor der Bestaetigungsfrage
+angezeigt (z. B. eine frisch gescannte Zusammenfassung bei
+clean_temp_files). Commands OHNE preview() verhalten sich exakt wie
+zuvor - kein Zugriff auf SpeechEngine fuer Commands, die Anzeige
+bleibt vollstaendig Aufgabe des Executors.
 """
 from __future__ import annotations
 
@@ -108,10 +116,21 @@ class Executor:
             ):
                 phrase = getattr(command, "confirmation_phrase", None)
 
+                # Optionaler preview()-Hook (ADR-023): nur aufrufen, wenn das
+                # Command ihn tatsaechlich implementiert - liefert er nichts
+                # (kein Attribut oder None), bleibt der Text exakt wie vor
+                # diesem Hook.
+                preview_fn = getattr(command, "preview", None)
+                preview_text = preview_fn(step) if callable(preview_fn) else None
+
+                announcement = f"Ich würde jetzt ausführen: {step.raw_input!r}."
+                if preview_text:
+                    announcement = f"{announcement} {preview_text}"
+
                 if phrase:
                     # Sicherheitsstufe 3: exakte Phrase statt einfachem Ja/Nein.
                     self.speech.say(
-                        f"Ich würde jetzt ausführen: {step.raw_input!r}. Das ist eine "
+                        f"{announcement} Das ist eine "
                         f"kritische Aktion (Sicherheitsstufe 3). Bitte tippe zur "
                         f"Bestätigung genau: {phrase}"
                     )
@@ -119,7 +138,7 @@ class Executor:
                     confirmed = answer == phrase
                 else:
                     # Sicherheitsstufe 2: einfaches Ja/Nein reicht.
-                    self.speech.say(f"Ich würde jetzt ausführen: {step.raw_input!r}. Bestätigen?")
+                    self.speech.say(f"{announcement} Bestätigen?")
                     answer = self.speech.listen().strip().lower()
                     confirmed = answer in _CONFIRM_WORDS
 

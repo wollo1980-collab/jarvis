@@ -1,5 +1,83 @@
 # Logbook
 
+## 2026-07-02 - Temp-/Festplatten-Bereinigung implementiert, v0.7 Phase 4 (ADR-023)
+
+**Kontext:** Nach Commit von v0.7 Phase 3 (Autostart verwalten, ADR-022,
+`b108c06`) wurde die Gesamtbewertung von v0.7 gegen das Handbook
+vorgelegt: von den drei in Kap. 13 genannten v0.7-Kernthemen
+("System-Analyse, Treiber, Reinigung") war nur "System-Analyse"
+vollstaendig abgedeckt. Wolfgang hat entschieden, v0.7 weiterzufuehren
+(kein Tag) und "Temp-/Festplatten-Bereinigung" als naechsten Baustein
+priorisiert.
+
+**Technischer Vorschlag und Product-Owner-Entscheidungen:** Zwei
+Commands (`analyze_temp_files` Stufe 0, `clean_temp_files` Stufe 3 -
+Handbook Kap. 10 klassifiziert "Datei loeschen" explizit als kritisch),
+Papierkorb ausdruecklich nicht Bestandteil, 24h-Alters-Schwellwert,
+Modul bleibt `commands/monitor.py`. Vor der Implementierung eine
+zusaetzliche Architekturentscheidung: `clean_temp_files` soll immer
+einen frischen Scan durchfuehren, eine exakte Vorschau zeigen, und erst
+NACH Bestaetigung loeschen - als einheitliches Sicherheitsmuster fuer
+alle kuenftigen schreibenden PC-Admin-Commands.
+
+**Architekturaenderung:** Der bestehende Executor-Bestaetigungsmechanismus
+zeigt nur den rohen Sprachbefehl (`raw_input`) an, bevor `execute()`
+ueberhaupt aufgerufen wird - er kann daher keine vom Command berechneten
+Vorschau-Daten einbauen. Geloest durch einen neuen, optionalen
+`preview(plan) -> Optional[str]`-Hook in `executor/executor.py` - die
+**erste Aenderung an dieser Datei in der gesamten v0.7-Entwicklung**.
+Implementiert `command.preview()` und liefert sie einen Text, zeigt der
+Executor ihn vor der Bestaetigungsfrage an. Commands ohne `preview()`
+(alle bisherigen: `InstallProgramCommand`, `ShutdownPcCommand`,
+`DisableAutostartEntryCommand` usw.) verhalten sich exakt wie zuvor -
+`getattr(command, "preview", None)` liefert fuer sie `None`, keine
+Verhaltensaenderung. Kein Zugriff fuer Commands auf `SpeechEngine` - der
+Hook bleibt eine reine `Plan -> Optional[str]`-Funktion, die
+Anzeige-Logik bleibt vollstaendig im Executor. Keine Aenderung an
+`core/planner.py`, `core/tool_manager.py`, `core/ai.py`.
+
+**Umsetzung:** `commands/monitor.py::AnalyzeTempFilesCommand`/
+`CleanTempFilesCommand`. Gemeinsame interne Scan-Funktion
+`_scan_eligible_temp_files()` - scannt `%TEMP%` rekursiv nach Dateien
+aelter als `_TEMP_FILE_MIN_AGE_HOURS` (24h), mit Pfad-Eindaemmung
+(`resolved.is_relative_to(base)`) gegen Ziele ausserhalb von `%TEMP%`.
+Wird unabhaengig voneinander von `analyze_temp_files.execute()`,
+`CleanTempFilesCommand.preview()` UND `CleanTempFilesCommand.execute()`
+aufgerufen - **`execute()` verlaesst sich nie auf das
+`preview()`-Ergebnis**, sondern scannt beim tatsaechlichen Loeschen
+erneut frisch (Product-Owner-Kernvorgabe). Nur Dateien werden geloescht,
+nie Ordner. Gesperrte (`PermissionError`) und zwischenzeitlich
+verschwundene Dateien (`FileNotFoundError`, Race Condition) werden
+einzeln uebersprungen und im Ergebnis vermerkt, kein Totalausfall.
+
+`clean_temp_files`: Sicherheitsstufe 3 (`requires_confirmation = True`,
+`confirmation_phrase = "BEREINIGEN"`) - hoeher als Autostart-Verwalten
+(Stufe 2, ADR-022), da Handbook Kap. 10 "Datei loeschen" explizit als
+kritisch einstuft und eine geloeschte Temp-Datei anders als ein
+deaktivierter Autostart-Eintrag nicht ueber einen Jarvis-eigenen
+Mechanismus wiederherstellbar ist.
+
+**Bewusst nicht enthalten:** Papierkorb (explizit nicht Bestandteil von
+ADR-023), `C:\Windows\Temp`/Administratorrechte, Browser-Cache/-Profile,
+Registry-Cleaner, Dienste, Treiber. Keine Aenderung an `core/ai.py`,
+`core/planner.py`, `core/tool_manager.py`, `main.py`.
+
+**Tests:** 23 neue Tests - 6 in `tests/test_executor.py` (Rueckwaerts-
+kompatibilitaet mit/ohne `preview()`, Stufe 2 und Stufe 3, Fallback bei
+`None`-Rueckgabe, unabhaengige Aufrufreihenfolge preview()/execute())
+und 17 in `tests/test_commands_monitor.py` (Plattformpruefung,
+Alters-Filter, Unterordner-Rekursion, fehlende TEMP-Variable,
+Ordner-werden-nie-geloescht, gesperrte/verschwundene Dateien,
+Vorschau-vs-Ausfuehrung-scannt-unabhaengig-Test, Stufe-3-Verifikation,
+Registrierung). Vollstaendige Suite: **225/225 gruen** (202 vorher + 23
+neu). `git diff --stat` bestaetigt: `commands/monitor.py`,
+`executor/executor.py`, beide Testdateien geaendert, `docs/adr/ADR-023.md`
+neu - keine Aenderung an `core/ai.py`, `core/planner.py`,
+`core/tool_manager.py`, `main.py`.
+
+v0.7 bleibt weiterhin offen/ungetaggt (Dienste, Treiber noch offen) -
+kein Tag gesetzt, keine v0.7-Abschlussentscheidung getroffen.
+
 ## 2026-07-02 - Jarvis-Eigenstart als Roadmap-Baustein aufgenommen (Kap.-19-Dokumentation, wartet auf Handbook v3.6)
 
 **Kontext:** Wolfgang stellte fest, dass automatischer Start von Jarvis mit

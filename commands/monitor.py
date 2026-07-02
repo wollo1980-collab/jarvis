@@ -35,6 +35,18 @@ den Eintrag aus der echten Quelle und sichert ihn (Registry: Klartext
 in einem eigenen Jarvis-Registry-Zweig, kein StartupApproved-
 Binaerformat; Startup-Ordner: Verschieben in einen Jarvis-Unterordner)
 - nie loeschen. Kein KI-Zugriff noetig (deterministischer Text).
+
+analyze_temp_files/clean_temp_files (v0.7 Phase 4, ADR-023):
+analyze_temp_files (Sicherheitsstufe 0) zeigt, wie viele Temp-Dateien
+(aelter als _TEMP_FILE_MIN_AGE_HOURS) im Benutzer-Temp-Ordner liegen.
+clean_temp_files (Sicherheitsstufe 3, confirmation_phrase
+"BEREINIGEN") loescht sie - erster tatsaechlich LOESCHENDER PC-Admin-
+Command (anders als das reversible Deaktivieren in Phase 3). Nutzt den
+neuen, optionalen Executor-Hook preview() (ADR-023), um vor der
+Bestaetigung eine frisch gescannte Vorschau zu zeigen - execute()
+verlaesst sich nie auf das preview()-Ergebnis, sondern scannt beim
+tatsaechlichen Loeschen erneut. Beschraenkt auf %TEMP%, nur Dateien
+(nie Ordner), Pfad-Eindaemmung gegen Ziele ausserhalb von %TEMP%.
 """
 from __future__ import annotations
 
@@ -126,6 +138,14 @@ _EVENT_LOG_PROMPT_TEMPLATE = (
 _JARVIS_DISABLED_REGISTRY_PATH = r"Software\Jarvis\DisabledAutostart\Run"
 # Jarvis-eigener Unterordner innerhalb des echten Benutzer-Startup-Ordners.
 _STARTUP_DISABLED_SUBFOLDER_NAME = "_jarvis_disabled"
+
+# --- analyze_temp_files / clean_temp_files (v0.7 Phase 4, ADR-023) -------
+
+# Nur Dateien, die seit mindestens so vielen Stunden nicht mehr
+# geaendert wurden, gelten als "bereinigbar" - vermeidet, gerade aktiv
+# geschriebene Dateien zu treffen.
+_TEMP_FILE_MIN_AGE_HOURS = 24
+_CLEAN_TEMP_CONFIRMATION_PHRASE = "BEREINIGEN"
 
 
 def configure(ai_engine: "AIEngine") -> None:
@@ -725,6 +745,147 @@ class EnableAutostartEntryCommand:
         )
 
 
+def _scan_eligible_temp_files() -> tuple[list[Path], int, list[str]]:
+    """Scannt %TEMP% rekursiv nach Dateien, die aelter als
+    _TEMP_FILE_MIN_AGE_HOURS sind (v0.7 Phase 4, ADR-023). Liefert
+    (Dateien, Gesamtgroesse in Bytes, Fehlertexte pro uebersprungener
+    Datei). Wird von analyze_temp_files, CleanTempFilesCommand.preview()
+    UND execute() unabhaengig aufgerufen - execute() verlaesst sich nie
+    auf das Ergebnis eines frueheren Aufrufs (Product-Owner-Vorgabe,
+    ADR-023: immer frisch scannen)."""
+    temp_dir = os.environ.get("TEMP") or os.environ.get("TMP")
+    if not temp_dir:
+        raise OSError("TEMP-/TMP-Umgebungsvariable nicht gesetzt")
+    base = Path(temp_dir).resolve()
+    cutoff = time.time() - _TEMP_FILE_MIN_AGE_HOURS * 3600
+
+    files: list[Path] = []
+    total_size = 0
+    errors: list[str] = []
+    for item in base.rglob("*"):
+        try:
+            if not item.is_file():
+                continue
+            resolved = item.resolve()
+            # Pfad-Eindaemmung: nur Dateien tatsaechlich innerhalb von
+            # %TEMP% anfassen (Schutz gegen Symlinks/Junctions, die nach
+            # aussen zeigen), ADR-023.
+            if not resolved.is_relative_to(base):
+                continue
+            if item.stat().st_mtime > cutoff:
+                continue
+            size = item.stat().st_size
+        except OSError as e:
+            errors.append(f"{item}: {e}")
+            continue
+        files.append(item)
+        total_size += size
+
+    return files, total_size, errors
+
+
+def _format_temp_summary(count: int, total_bytes: int) -> str:
+    return f"{count} Datei(en) mit insgesamt {_format_gb(total_bytes)}"
+
+
+class AnalyzeTempFilesCommand:
+    name = "analyze_temp_files"
+    description = (
+        "Zeigt an, wie viele Temp-Dateien (älter als 24h) im Benutzer-"
+        "Temp-Ordner liegen und wie viel Platz sie belegen - nur Lesen, "
+        "Sicherheitsstufe 0. Kein target/parameters nötig."
+    )
+    requires_confirmation = False
+
+    def execute(self, plan: Plan) -> Result:
+        if platform.system() != "Windows":
+            return Result(
+                status=Status.FAILED,
+                message="Temp-Analyse ist aktuell nur unter Windows verfügbar.",
+            )
+
+        try:
+            files, total_size, errors = _scan_eligible_temp_files()
+        except OSError as e:
+            return Result(status=Status.FAILED, message=f"Temp-Ordner konnte nicht gelesen werden: {e}")
+
+        message = (
+            f"Im Temp-Ordner liegen {_format_temp_summary(len(files), total_size)}, "
+            f"die älter als {_TEMP_FILE_MIN_AGE_HOURS}h sind."
+        )
+        if errors:
+            message += f" ({len(errors)} Datei(en) konnten nicht geprüft werden.)"
+
+        return Result(
+            status=Status.SUCCESS,
+            message=message,
+            data={"count": len(files), "total_bytes": total_size, "errors": errors},
+        )
+
+
+class CleanTempFilesCommand:
+    name = "clean_temp_files"
+    description = (
+        "Löscht Temp-Dateien (älter als 24h) im Benutzer-Temp-Ordner "
+        "unwiderruflich - Sicherheitsstufe 3, exakte Bestätigungsphrase "
+        "erforderlich. Kein target/parameters nötig."
+    )
+    # Datei loeschen = Sicherheitsstufe 3 laut Handbook Kap. 10 ("kritisch",
+    # mehrfache Bestaetigung) - anders als das reversible Deaktivieren in
+    # Phase 3 (Stufe 2), ADR-023.
+    requires_confirmation = True
+    confirmation_phrase = _CLEAN_TEMP_CONFIRMATION_PHRASE
+
+    def preview(self, plan: Plan) -> Optional[str]:
+        """Optionaler Executor-Hook (ADR-023): frischer Scan fuer die
+        Vorschau VOR der Bestaetigung. execute() verlaesst sich NICHT auf
+        dieses Ergebnis, sondern scannt beim tatsaechlichen Loeschen
+        erneut - der Zustand kann sich zwischen Vorschau und Bestaetigung
+        geaendert haben."""
+        if platform.system() != "Windows":
+            return None
+        try:
+            files, total_size, _errors = _scan_eligible_temp_files()
+        except OSError:
+            return None
+        return f"Ich würde {_format_temp_summary(len(files), total_size)} löschen."
+
+    def execute(self, plan: Plan) -> Result:
+        if platform.system() != "Windows":
+            return Result(
+                status=Status.FAILED,
+                message="Temp-Bereinigung ist aktuell nur unter Windows verfügbar.",
+            )
+
+        try:
+            files, _total_size, scan_errors = _scan_eligible_temp_files()
+        except OSError as e:
+            return Result(status=Status.FAILED, message=f"Temp-Ordner konnte nicht gelesen werden: {e}")
+
+        deleted_count = 0
+        deleted_bytes = 0
+        skipped: list[str] = list(scan_errors)
+        for file_path in files:
+            try:
+                size = file_path.stat().st_size
+                file_path.unlink()
+            except OSError as e:
+                skipped.append(f"{file_path}: {e}")
+                continue
+            deleted_count += 1
+            deleted_bytes += size
+
+        message = f"{_format_temp_summary(deleted_count, deleted_bytes)} gelöscht."
+        if skipped:
+            message += f" {len(skipped)} Datei(en) konnten nicht gelöscht werden."
+
+        return Result(
+            status=Status.SUCCESS,
+            message=message,
+            data={"deleted_count": deleted_count, "deleted_bytes": deleted_bytes, "skipped": skipped},
+        )
+
+
 # Registrierungspunkt für dieses Modul - commands/__init__.py liest
 # diese Liste beim Start ein.
 COMMANDS = [
@@ -733,4 +894,6 @@ COMMANDS = [
     AnalyzeEventLogCommand(),
     DisableAutostartEntryCommand(),
     EnableAutostartEntryCommand(),
+    AnalyzeTempFilesCommand(),
+    CleanTempFilesCommand(),
 ]
