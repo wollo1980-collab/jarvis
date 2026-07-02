@@ -1,5 +1,16 @@
 # Logbook
 
+## 2026-07-02 - v0.7 getaggt (Abschluss)
+
+Nach der Konsolidierung (Handbook v3.6, Commit `a7eb86d`) hat Wolfgang als
+Product Owner den Tag `v0.7` freigegeben - separat von der Konsolidierung,
+in einer eigenen Freigabe-Runde (gleiches Muster wie bei v0.6: erst
+Konsolidierung/Handbook, dann getrennt der Tag). Definition of Done (Kap.
+28, "v0.7 - spezifisch") erfuellt, Tests weiterhin 225/225 gruen.
+`git tag -a v0.7` gesetzt, zeigt auf `a7eb86d`. `v0.7 "PC-Admin"` ist damit
+als Gesamtversion abgeschlossen - naechster geplanter Baustein ist `v0.8
+"Multi-KI"` (Handbook Kap. 13), noch nicht begonnen.
+
 ## 2026-07-02 - Entwicklungsprozess weiterentwickelt, Handbook v3.6 (Konsolidierung)
 
 **Kontext:** Nach vollständigem Abschluss von v0.7 (Commit `920e32c`) wollte

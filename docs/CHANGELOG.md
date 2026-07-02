@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.7 - PC-Admin (abgeschlossen, getaggt, 02.07.2026)
+
+Handbook auf v3.6 aktualisiert (siehe eigener Abschnitt unten) - Kap. 13
+markiert v0.7 als abgeschlossen, Kap. 29 enthält die sechs descopten
+Bausteine (Treiber, Dienste, HKLM-Autostart, Papierkorb, `C:\Windows\Temp`,
+Browser-Cache/-Profile) im Backlog. Definition of Done (Kap. 28,
+"v0.7 - spezifisch") erfüllt: alle vier Phasen implementiert (ADR-020 bis
+ADR-023), 225/225 Tests grün, Logbook/Changelog aktuell, Handbook-Version
+erstellt. Tag `v0.7` gesetzt (zeigt auf `a7eb86d`). `v0.7` ist damit als
+Gesamtversion abgeschlossen.
+
 ## Handbook v3.6 - v0.7-Abschluss, Entwicklungsprozess-Weiterentwicklung (02.07.2026)
 
 Kein Code-Release - reine Dokumentations-/Governance-Aktualisierung nach
