@@ -1,5 +1,35 @@
 # Changelog
 
+## v0.7.0 - Ereignisprotokoll-Analyse, Phase 2 (ADR-021, 02.07.2026)
+
+Zweiter v0.7-Baustein ("PC-Admin", Handbook Kap. 13/17).
+
+### Neu
+- `commands/monitor.py::AnalyzeEventLogCommand` (Intent
+  `analyze_event_log`, Sicherheitsstufe 0, keine Bestätigung nötig):
+  liest die jüngsten Fehler/Warnungen aus dem Windows-Ereignisprotokoll
+  (`System` und `Application`) über `wevtutil` (Windows-Bordmittel,
+  `subprocess`, keine neue Abhängigkeit) - serverseitig gefiltert auf
+  Level Error/Warning, begrenzt auf 20 Einträge je Log, kein
+  kompletter Dump. Ausgabeformat `/f:RenderedXml` für sprachversions-
+  unabhängiges Parsen. Python sammelt/strukturiert deterministisch,
+  die KI formuliert nur den Bericht - gleicher Pflicht-Disclaimer wie
+  `analyze_pc`/`calculate_kpi`.
+- Jede der zwei Log-Quellen einzeln abgesichert (Teilergebnis statt
+  Totalausfall, wie die vier Autostart-Quellen in ADR-020) - schlagen
+  beide fehl, liefert der Command `Status.FAILED` ohne KI-Aufruf.
+- Nutzt die bereits vorhandene `configure()`-Infrastruktur aus
+  `commands/monitor.py` (ADR-020/ADR-015) - keine Änderung an
+  `main.py` nötig.
+- 16 neue Tests (`tests/test_commands_monitor.py`) - 180 Tests gesamt,
+  alle grün.
+
+### Bewusst nicht enthalten (Phase 2)
+- Security-Log (sensibler, eigene spätere Diskussion).
+- Löschen von Log-Einträgen, automatische Reparaturmaßnahmen.
+- Dienste-Verwaltung, Autostart-Schreibzugriff, Bereinigung,
+  Treiber-Aktualisierung (weiterhin offene Kap.-17-Bausteine).
+
 ## v0.7.0 - PC-Analyse, Phase 1 (ADR-020, 02.07.2026)
 
 Erster v0.7-Baustein ("PC-Admin", Handbook Kap. 13/17).

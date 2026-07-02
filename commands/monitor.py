@@ -20,13 +20,21 @@ interpretiert Auffaelligkeiten - sie rechnet nichts nach. Eigenes,
 zu commands/reports.py bewusst dupliziertes configure()-Muster statt
 einer gemeinsamen Abstraktion (Wolfgangs Entscheidung: erst pruefen,
 wenn ein dritter Bereich KI-Zugriff braucht).
+
+analyze_event_log (v0.7 Phase 2, ADR-021) liest ueber wevtutil
+(Windows-Bordmittel, subprocess, keine neue Abhaengigkeit) die
+juengsten Fehler/Warnungen aus System- und Application-Log und nutzt
+dasselbe deterministisch-sammeln/KI-nur-formuliert-Muster wie
+analyze_pc.
 """
 from __future__ import annotations
 
 import logging
 import os
 import platform
+import subprocess
 import time
+import xml.etree.ElementTree as ET
 from collections import Counter
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
@@ -78,6 +86,27 @@ _ANALYSIS_PROMPT_TEMPLATE = (
     "RAM-Verbraucher, mehrfach laufende Prozesse, ungewöhnlich viele "
     "Autostart-Einträge). Rechne selbst nichts nach - die Zahlen sind "
     "bereits final.\n\nDaten:\n{data}"
+)
+
+# --- analyze_event_log (v0.7 Phase 2, ADR-021) ---------------------------
+
+_EVENT_LOG_NAMES = ("System", "Application")
+# Anzahl statt Zeitraum-Filter (Wolfgangs Vorgabe erlaubte beides) - konsistent
+# mit _TOP_N_PROCESSES, kein kompletter Log-Dump.
+_MAX_EVENTS_PER_LOG = 20
+_EVENT_QUERY_TIMEOUT = 15
+# Level 2 = Error, Level 3 = Warning (wevtutil-Standardwerte) - bewusst kein
+# Level 1 (Critical) oder 4/5 (Information/Verbose), siehe ADR-021.
+_EVENT_LEVEL_XPATH = "*[System[(Level=2 or Level=3)]]"
+_EVENT_XML_NS = "{http://schemas.microsoft.com/win/2004/08/events/event}"
+_MESSAGE_TRUNCATE_LENGTH = 200
+
+_EVENT_LOG_PROMPT_TEMPLATE = (
+    "Erstelle aus den folgenden, bereits gesammelten Ereignisprotokoll-"
+    "Einträgen (Windows System-/Application-Log, nur Fehler/Warnungen, "
+    "neueste zuerst) einen kurzen, zusammenhängenden Bericht auf Deutsch. "
+    "Fasse wiederkehrende oder auffällige Einträge zusammen. Rechne/zähle "
+    "selbst nichts nach - die Daten sind bereits final.\n\nDaten:\n{data}"
 )
 
 
@@ -296,6 +325,134 @@ class AnalyzePcCommand:
         return Result(status=Status.SUCCESS, message=message, data=data)
 
 
+def _query_event_log(log_name: str) -> str:
+    """Ruft wevtutil fuer ein einzelnes Log auf. Wirft bei Fehlern
+    (Aufrufer faengt gezielt ab, siehe _collect_event_log)."""
+    proc = subprocess.run(
+        [
+            "wevtutil", "qe", log_name,
+            f"/q:{_EVENT_LEVEL_XPATH}",
+            f"/c:{_MAX_EVENTS_PER_LOG}",
+            "/rd:true",
+            "/f:RenderedXml",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=_EVENT_QUERY_TIMEOUT,
+        check=True,
+    )
+    return proc.stdout
+
+
+def _parse_event_log_xml(raw_xml: str, log_name: str) -> list[dict]:
+    """wevtutil /f:RenderedXml liefert mehrere <Event>-Wurzelelemente ohne
+    gemeinsame Klammer - vor dem Parsen in ein synthetisches Wurzelelement
+    huellen. Tag-Namen sind sprachunabhaengig, nur Textinhalte (z. B.
+    Level) sind lokalisiert (siehe ADR-021)."""
+    if not raw_xml.strip():
+        return []
+
+    ns = _EVENT_XML_NS
+    root = ET.fromstring(f"<Events>{raw_xml}</Events>")
+    entries = []
+    for event in root.findall(f"{ns}Event"):
+        system = event.find(f"{ns}System")
+        rendering = event.find(f"{ns}RenderingInfo")
+
+        time_el = system.find(f"{ns}TimeCreated") if system is not None else None
+        provider_el = system.find(f"{ns}Provider") if system is not None else None
+        event_id_el = system.find(f"{ns}EventID") if system is not None else None
+        level_el = rendering.find(f"{ns}Level") if rendering is not None else None
+        message_el = rendering.find(f"{ns}Message") if rendering is not None else None
+
+        message = (message_el.text or "").strip() if message_el is not None else ""
+        entries.append(
+            {
+                "log": log_name,
+                "zeit": time_el.get("SystemTime") if time_el is not None else "?",
+                "quelle": provider_el.get("Name") if provider_el is not None else "?",
+                "event_id": event_id_el.text if event_id_el is not None else "?",
+                "stufe": level_el.text if level_el is not None else "?",
+                "meldung": message[:_MESSAGE_TRUNCATE_LENGTH],
+            }
+        )
+    return entries
+
+
+def _collect_event_log(log_name: str) -> tuple[list[dict], Optional[str]]:
+    """Liefert (Eintraege, Fehlertext-oder-None). Ein Fehlschlag bei
+    diesem Log ist kein Totalausfall - gleiches Prinzip wie bei den vier
+    Autostart-Quellen in ADR-020."""
+    try:
+        raw_xml = _query_event_log(log_name)
+    except FileNotFoundError:
+        return [], f"{log_name}: wevtutil nicht gefunden"
+    except subprocess.TimeoutExpired:
+        return [], f"{log_name}: Zeitüberschreitung bei der Abfrage"
+    except subprocess.CalledProcessError as e:
+        detail = e.stderr.strip() if e.stderr else str(e)
+        return [], f"{log_name}: {detail}"
+
+    try:
+        return _parse_event_log_xml(raw_xml, log_name), None
+    except ET.ParseError as e:
+        return [], f"{log_name}: Antwort konnte nicht gelesen werden ({e})"
+
+
+def _format_event_log_report_data(data: dict) -> str:
+    lines = []
+    for log_name in _EVENT_LOG_NAMES:
+        entries = data["events"].get(log_name, [])
+        lines.append(f"[{log_name}] {len(entries)} Eintraege")
+        for e in entries:
+            lines.append(
+                f"{e['zeit']} | Stufe {e['stufe']} | {e['quelle']} (ID {e['event_id']}): {e['meldung']}"
+            )
+    if data["errors"]:
+        lines.append("[Ereignisprotokoll - nicht lesbare Quellen] " + "; ".join(data["errors"]))
+    return "\n".join(lines)
+
+
+class AnalyzeEventLogCommand:
+    name = "analyze_event_log"
+    description = (
+        "Analysiert die jüngsten Fehler/Warnungen im Windows-"
+        "Ereignisprotokoll (System und Application) - nur Lesen, "
+        "Sicherheitsstufe 0. Kein target/parameters nötig."
+    )
+    # Reine Leseaktion (Sicherheitsstufe 0) - keine Bestaetigung noetig,
+    # kein Schreibzugriff irgendeiner Art.
+    requires_confirmation = False
+
+    def execute(self, plan: Plan) -> Result:
+        if platform.system() != "Windows":
+            return Result(
+                status=Status.FAILED,
+                message="Ereignisprotokoll-Analyse ist aktuell nur unter Windows verfügbar.",
+            )
+
+        events: dict[str, list[dict]] = {}
+        errors: list[str] = []
+        for log_name in _EVENT_LOG_NAMES:
+            entries, error = _collect_event_log(log_name)
+            events[log_name] = entries
+            if error:
+                errors.append(error)
+
+        if errors and not any(events[log_name] for log_name in _EVENT_LOG_NAMES):
+            return Result(
+                status=Status.FAILED,
+                message="Ereignisprotokoll konnte nicht gelesen werden: " + "; ".join(errors),
+            )
+
+        data = {"events": events, "errors": errors}
+        prompt = _EVENT_LOG_PROMPT_TEMPLATE.format(data=_format_event_log_report_data(data))
+        analysis = _require_ai_engine().answer(prompt, history=[])
+
+        message = f"{analysis}\n\n{_DISCLAIMER}"
+        return Result(status=Status.SUCCESS, message=message, data=data)
+
+
 # Registrierungspunkt für dieses Modul - commands/__init__.py liest
 # diese Liste beim Start ein.
-COMMANDS = [SystemStatusCommand(), AnalyzePcCommand()]
+COMMANDS = [SystemStatusCommand(), AnalyzePcCommand(), AnalyzeEventLogCommand()]

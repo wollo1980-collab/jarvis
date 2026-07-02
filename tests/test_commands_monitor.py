@@ -1,11 +1,13 @@
-"""Tests für commands/monitor.py - psutil/winreg werden gemockt, es
-wird nichts vom echten System gelesen."""
+"""Tests für commands/monitor.py - psutil/winreg/wevtutil (subprocess)
+werden gemockt, es wird nichts vom echten System gelesen."""
 from __future__ import annotations
 
+import subprocess
+import xml.etree.ElementTree as ET
 from unittest.mock import MagicMock, patch
 
 import commands.monitor as monitor_commands
-from commands.monitor import AnalyzePcCommand, SystemStatusCommand
+from commands.monitor import AnalyzeEventLogCommand, AnalyzePcCommand, SystemStatusCommand
 from core.models import Plan, Status
 
 
@@ -248,3 +250,234 @@ def test_analyze_pc_registered_in_registry():
     from commands import REGISTRY
 
     assert "analyze_pc" in REGISTRY
+
+
+# --- analyze_event_log (v0.7 Phase 2, ADR-021) ----------------------------
+
+
+def _rendered_xml_event(event_id, provider, level_text, message, system_time="2026-07-01T10:00:00.000000000Z"):
+    return (
+        '<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">'
+        "<System>"
+        f'<Provider Name="{provider}" />'
+        f"<EventID>{event_id}</EventID>"
+        "<Level>2</Level>"
+        f'<TimeCreated SystemTime="{system_time}" />'
+        "<Channel>System</Channel>"
+        "</System>"
+        f'<RenderingInfo Culture="de-DE"><Message>{message}</Message><Level>{level_text}</Level></RenderingInfo>'
+        "</Event>"
+    )
+
+
+def _fake_wevtutil_result(stdout):
+    proc = MagicMock()
+    proc.stdout = stdout
+    return proc
+
+
+def test_analyze_event_log_fails_clearly_on_non_windows(monkeypatch):
+    _configure_fake_ai()
+    monkeypatch.setattr(monitor_commands.platform, "system", lambda: "Linux")
+    cmd = AnalyzeEventLogCommand()
+
+    result = cmd.execute(Plan(intent="analyze_event_log"))
+
+    assert result.status == Status.FAILED
+
+
+def test_parse_event_log_xml_extracts_fields():
+    raw = _rendered_xml_event(41, "Kernel-Power", "Fehler", "Unerwarteter Neustart")
+
+    entries = monitor_commands._parse_event_log_xml(raw, "System")
+
+    assert len(entries) == 1
+    entry = entries[0]
+    assert entry["log"] == "System"
+    assert entry["event_id"] == "41"
+    assert entry["quelle"] == "Kernel-Power"
+    assert entry["stufe"] == "Fehler"
+    assert entry["meldung"] == "Unerwarteter Neustart"
+    assert entry["zeit"] == "2026-07-01T10:00:00.000000000Z"
+
+
+def test_parse_event_log_xml_truncates_long_message():
+    long_message = "x" * 500
+    raw = _rendered_xml_event(1, "SomeProvider", "Warnung", long_message)
+
+    entries = monitor_commands._parse_event_log_xml(raw, "Application")
+
+    assert len(entries[0]["meldung"]) == monitor_commands._MESSAGE_TRUNCATE_LENGTH
+
+
+def test_parse_event_log_xml_empty_output_returns_no_entries():
+    assert monitor_commands._parse_event_log_xml("", "System") == []
+
+
+def test_collect_event_log_handles_missing_wevtutil(monkeypatch):
+    monkeypatch.setattr(
+        monitor_commands.subprocess, "run", MagicMock(side_effect=FileNotFoundError())
+    )
+
+    entries, error = monitor_commands._collect_event_log("System")
+
+    assert entries == []
+    assert "wevtutil nicht gefunden" in error
+
+
+def test_collect_event_log_handles_timeout(monkeypatch):
+    monkeypatch.setattr(
+        monitor_commands.subprocess,
+        "run",
+        MagicMock(side_effect=subprocess.TimeoutExpired(cmd="wevtutil", timeout=15)),
+    )
+
+    entries, error = monitor_commands._collect_event_log("System")
+
+    assert entries == []
+    assert "Zeitüberschreitung" in error
+
+
+def test_collect_event_log_handles_called_process_error(monkeypatch):
+    err = subprocess.CalledProcessError(returncode=1, cmd="wevtutil", stderr="Zugriff verweigert")
+    monkeypatch.setattr(monitor_commands.subprocess, "run", MagicMock(side_effect=err))
+
+    entries, error = monitor_commands._collect_event_log("Application")
+
+    assert entries == []
+    assert "Zugriff verweigert" in error
+
+
+def test_collect_event_log_handles_malformed_xml(monkeypatch):
+    monkeypatch.setattr(
+        monitor_commands.subprocess,
+        "run",
+        MagicMock(return_value=_fake_wevtutil_result("<Event><Unclosed>")),
+    )
+
+    entries, error = monitor_commands._collect_event_log("System")
+
+    assert entries == []
+    assert "System" in error
+
+
+def test_collect_event_log_success(monkeypatch):
+    raw = _rendered_xml_event(41, "Kernel-Power", "Fehler", "Unerwarteter Neustart")
+    monkeypatch.setattr(
+        monitor_commands.subprocess, "run", MagicMock(return_value=_fake_wevtutil_result(raw))
+    )
+
+    entries, error = monitor_commands._collect_event_log("System")
+
+    assert error is None
+    assert len(entries) == 1
+
+
+def test_analyze_event_log_success_calls_ai_with_structured_text_and_disclaimer(monkeypatch):
+    fake_ai = _configure_fake_ai("Ein Neustart war ungeplant, sonst unauffaellig.")
+    monkeypatch.setattr(monitor_commands.platform, "system", lambda: "Windows")
+
+    system_xml = _rendered_xml_event(41, "Kernel-Power", "Fehler", "Unerwarteter Neustart")
+    app_xml = _rendered_xml_event(1000, "Application Error", "Warnung", "App abgestuerzt")
+
+    def fake_run(cmd, **kwargs):
+        log_name = cmd[2]
+        raw = system_xml if log_name == "System" else app_xml
+        return _fake_wevtutil_result(raw)
+
+    monkeypatch.setattr(monitor_commands.subprocess, "run", MagicMock(side_effect=fake_run))
+    cmd = AnalyzeEventLogCommand()
+
+    result = cmd.execute(Plan(intent="analyze_event_log"))
+
+    assert result.status == Status.SUCCESS
+    assert "Ein Neustart war ungeplant, sonst unauffaellig." in result.message
+    assert "Bitte vor Entscheidungen prüfen" in result.message
+    prompt_arg = fake_ai.answer.call_args.args[0]
+    assert "[System]" in prompt_arg
+    assert "[Application]" in prompt_arg
+    assert "Kernel-Power" in prompt_arg
+    assert "Rechne/zähle selbst nichts nach" in prompt_arg
+    assert len(result.data["events"]["System"]) == 1
+    assert len(result.data["events"]["Application"]) == 1
+
+
+def test_analyze_event_log_uses_level_and_count_filter_and_two_logs(monkeypatch):
+    _configure_fake_ai()
+    monkeypatch.setattr(monitor_commands.platform, "system", lambda: "Windows")
+    run_mock = MagicMock(return_value=_fake_wevtutil_result(""))
+    monkeypatch.setattr(monitor_commands.subprocess, "run", run_mock)
+    cmd = AnalyzeEventLogCommand()
+
+    cmd.execute(Plan(intent="analyze_event_log"))
+
+    assert run_mock.call_count == 2
+    called_logs = {call.args[0][2] for call in run_mock.call_args_list}
+    assert called_logs == {"System", "Application"}
+    for call in run_mock.call_args_list:
+        cmd_args = call.args[0]
+        assert cmd_args[0] == "wevtutil"
+        assert f"/c:{monitor_commands._MAX_EVENTS_PER_LOG}" in cmd_args
+        assert any("Level=2" in a and "Level=3" in a for a in cmd_args)
+
+
+def test_analyze_event_log_partial_failure_still_succeeds(monkeypatch):
+    fake_ai = _configure_fake_ai()
+    monkeypatch.setattr(monitor_commands.platform, "system", lambda: "Windows")
+    app_xml = _rendered_xml_event(1000, "Application Error", "Warnung", "App abgestuerzt")
+
+    def fake_run(cmd, **kwargs):
+        log_name = cmd[2]
+        if log_name == "System":
+            raise subprocess.CalledProcessError(returncode=1, cmd="wevtutil", stderr="nicht lesbar")
+        return _fake_wevtutil_result(app_xml)
+
+    monkeypatch.setattr(monitor_commands.subprocess, "run", MagicMock(side_effect=fake_run))
+    cmd = AnalyzeEventLogCommand()
+
+    result = cmd.execute(Plan(intent="analyze_event_log"))
+
+    assert result.status == Status.SUCCESS
+    assert any("System" in e for e in result.data["errors"])
+    assert len(result.data["events"]["Application"]) == 1
+    fake_ai.answer.assert_called_once()
+
+
+def test_analyze_event_log_fails_when_both_logs_unreadable(monkeypatch):
+    fake_ai = _configure_fake_ai()
+    monkeypatch.setattr(monitor_commands.platform, "system", lambda: "Windows")
+    err = subprocess.CalledProcessError(returncode=1, cmd="wevtutil", stderr="nicht lesbar")
+    monkeypatch.setattr(monitor_commands.subprocess, "run", MagicMock(side_effect=err))
+    cmd = AnalyzeEventLogCommand()
+
+    result = cmd.execute(Plan(intent="analyze_event_log"))
+
+    assert result.status == Status.FAILED
+    assert "nicht lesbar" in result.message
+    fake_ai.answer.assert_not_called()
+
+
+def test_analyze_event_log_raises_clear_error_when_not_configured(monkeypatch):
+    monkeypatch.setattr(monitor_commands, "_ai_engine", None)
+    monkeypatch.setattr(monitor_commands.platform, "system", lambda: "Windows")
+    raw = _rendered_xml_event(41, "Kernel-Power", "Fehler", "Unerwarteter Neustart")
+    monkeypatch.setattr(
+        monitor_commands.subprocess, "run", MagicMock(return_value=_fake_wevtutil_result(raw))
+    )
+    cmd = AnalyzeEventLogCommand()
+
+    try:
+        cmd.execute(Plan(intent="analyze_event_log"))
+        assert False, "hätte RuntimeError werfen müssen"
+    except RuntimeError as e:
+        assert "configure()" in str(e)
+
+
+def test_analyze_event_log_requires_no_confirmation():
+    assert AnalyzeEventLogCommand().requires_confirmation is False
+
+
+def test_analyze_event_log_registered_in_registry():
+    from commands import REGISTRY
+
+    assert "analyze_event_log" in REGISTRY

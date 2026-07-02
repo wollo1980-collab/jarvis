@@ -34,7 +34,7 @@ jarvis/
 │   ├── __init__.py         # Registry + minimaler Dispatch
 │   ├── system.py             # open_program, shutdown_pc
 │   ├── memory.py               # remember_fact, forget_fact
-│   ├── monitor.py               # system_status (ADR-011), analyze_pc (ADR-020)
+│   ├── monitor.py               # system_status (ADR-011), analyze_pc (ADR-020), analyze_event_log (ADR-021)
 │   ├── installer.py               # install_program (winget, ADR-012)
 │   ├── excel.py                     # read_excel (openpyxl, ADR-014)
 │   └── reports.py                     # analyze_report (ADR-015), calculate_kpi (ADR-016)
@@ -340,6 +340,34 @@ Muster in `commands/monitor.py`, keine gemeinsame Abstraktion).
 **Bewusst nicht enthalten (Phase 1):** Windows-Ereignisprotokoll,
 Optimierung/Bereinigung, Registry-Änderungen, Dienste-Verwaltung,
 Treiber-Aktualisierung. Siehe ADR-020.
+
+## Ereignisprotokoll-Analyse (v0.7 Phase 2, ADR-021)
+
+Zweiter v0.7-Baustein: Jarvis liest die jüngsten Fehler/Warnungen aus
+dem Windows-Ereignisprotokoll (System und Application) und fasst sie
+zusammen. Sicherheitsstufe 0 - reines Lesen, keine Bestätigung nötig.
+
+```
+Du: Analysiere das Ereignisprotokoll
+Jarvis: Im System-Log gab es einen unerwarteten Neustart (Kernel-Power).
+Im Application-Log ist eine App wiederholt abgestürzt ...
+
+Analyse auf Basis der gelieferten Daten. Bitte vor Entscheidungen prüfen.
+```
+
+**Datenquelle: `wevtutil`** (Windows-Bordmittel, über `subprocess`) -
+keine neue Abhängigkeit. Serverseitig gefiltert auf Fehler/Warnungen
+(Level 2/3), begrenzt auf die letzten 20 Einträge je Log (`System`,
+`Application`), kein kompletter Log-Dump. Ausgabeformat
+`/f:RenderedXml` statt `/f:text`, damit das Parsen unabhängig von der
+Windows-Sprachversion funktioniert (stabile XML-Tag-Namen, nur
+Textinhalte sind lokalisiert). Python sammelt/strukturiert
+deterministisch, die KI formuliert nur den Bericht - gleiches Muster
+wie `analyze_pc` (ADR-020). Nutzt dieselbe `configure()`-Infrastruktur
+aus `commands/monitor.py`, keine Änderung an `main.py` nötig.
+
+**Bewusst nicht enthalten:** Security-Log, Löschen von Log-Einträgen,
+automatische Reparaturmaßnahmen. Siehe ADR-021.
 
 ## Pipeline
 

@@ -1,5 +1,86 @@
 # Logbook
 
+## 2026-07-02 - Ereignisprotokoll-Analyse implementiert, v0.7 Phase 2 (ADR-021)
+
+**Kontext:** Nach Commit von v0.7 Phase 1 (PC-Analyse, ADR-020, `48f0f83`)
+wurde per AI_START.md neu eingestiegen und ein technischer Vergleich der
+fuenf verbleibenden Kap.-17-Bausteine (Ereignisprotokoll, Dienste,
+Autostart-Verwaltung, Bereinigung, Treiber) nach Nutzen, Risiko/
+Sicherheitsstufe, Komplexitaet, Testbarkeit, Passung zu ADR-020 und
+ADR-Bedarf vorgelegt. Empfehlung: Ereignisprotokoll, da als einziger
+Baustein ohne Sicherheitsstufen-Sprung (weiterhin Stufe 0) direkt in
+das ADR-020-Muster passt. Wolfgang hat diese Empfehlung als Product
+Owner freigegeben.
+
+**Product-Owner-Vorgaben (vollstaendig uebernommen):** Intent
+`analyze_event_log`, Sicherheitsstufe 0, rein lesend, Windows-only mit
+klarer Fehlermeldung, Auswertung von `System` und `Application`, nur
+Fehler/Warnungen, begrenzte Anzahl/Zeitraum (kein kompletter Dump),
+Python sammelt/strukturiert deterministisch, KI formuliert nur,
+Pflicht-Disclaimer wie bei `analyze_pc`/KPI, Umsetzung in
+`commands/monitor.py`, gleiches dupliziertes `configure()`-Muster,
+keine neue gemeinsame Abstraktion. ADR-021 zuerst entworfen, danach
+implementiert.
+
+**Umsetzung:** `commands/monitor.py::AnalyzeEventLogCommand`.
+Datenquelle `wevtutil` (Windows-Bordmittel) ueber `subprocess` -
+bewusst keine neue Abhaengigkeit (`pywin32`/`win32evtlog` verworfen).
+Aufruf pro Log: `wevtutil qe <Log> /q:"*[System[(Level=2 or Level=3)]]"
+/c:20 /rd:true /f:RenderedXml` - serverseitige Filterung auf
+Error/Warning, Begrenzung auf 20 Eintraege, neueste zuerst.
+`/f:RenderedXml` statt `/f:text` gewaehlt, weil die XML-Tag-Namen
+sprachversions-unabhaengig sind (nur Textinhalte wie "Level" sind auf
+Windows lokalisiert, z. B. "Fehler") - loest das Problem strukturell
+statt mit fragilem Text-Parsing. Parsing ueber
+`xml.etree.ElementTree` (Standardbibliothek) - wevtutil liefert pro
+Event ein eigenstaendiges `<Event>`-Wurzelelement ohne gemeinsame
+Klammer, die rohe Ausgabe wird deshalb vor dem Parsen in ein
+synthetisches `<Events>`-Element gehuellt.
+
+Jede der zwei Log-Quellen (System, Application) wird einzeln gegen
+`FileNotFoundError`, `subprocess.TimeoutExpired`,
+`subprocess.CalledProcessError` und `ET.ParseError` abgesichert - ein
+Fehlschlag bei einer Quelle liefert nur einen Fehlertext, kein
+Totalausfall (gleiches Prinzip wie die vier Autostart-Quellen in
+ADR-020). Schlagen beide Quellen fehl, liefert der Command
+`Status.FAILED` ohne die KI mit leeren Daten zu befragen - anders als
+bei `analyze_pc` gibt es hier keine weitere unabhaengige Datenquelle,
+die den Bericht traegt.
+
+KI bekommt die strukturierten Eintraege (Zeit, Quelle, Event-ID,
+Stufe, gekuerzte Meldung) als Text mit der Anweisung, nur zu
+formulieren/zusammenzufassen, nichts nachzuzaehlen - derselbe
+Pflicht-Disclaimer wie bei `analyze_pc` (bereits vorhandene
+`_DISCLAIMER`-Konstante in `monitor.py`, keine neue Duplizierung
+noetig). Nutzt die aus ADR-020 bereits vorhandene
+`configure()`/`_require_ai_engine()`-Infrastruktur in
+`commands/monitor.py` - **keine Aenderung an `main.py`** noetig, die
+`monitor_commands.configure(ai)`-Verdrahtung existiert bereits.
+
+**Bewusst nicht enthalten:** Security-Log (sensibler, eigene spaetere
+Diskussion), Loeschen von Log-Eintraegen, automatische
+Reparaturmassnahmen, Dienste/Autostart-Schreibzugriff/Bereinigung/
+Treiber (weiterhin offene, separat zu priorisierende Kap.-17-Bausteine).
+Keine Aenderung an `core/ai.py`, `core/planner.py`,
+`core/tool_manager.py`, `executor/executor.py` oder anderen
+`commands/*.py`-Dateien.
+
+**Tests:** 16 neue Tests (`tests/test_commands_monitor.py`) - Plattform-
+pruefung, XML-Parsing (Feldextraktion, Kuerzung langer Meldungen, leere
+Ausgabe), alle vier Fehlerpfade pro Log-Quelle, Erfolgsfall mit
+KI-Aufruf-Verifikation (strukturierter Text + Disclaimer), Level-/
+Anzahl-Filter-Verifikation in den `wevtutil`-Aufrufparametern,
+Teilausfall-bleibt-erfolgreich, Totalausfall-beider-Quellen-liefert-
+FAILED-ohne-KI-Aufruf, Nicht-konfiguriert-Fehler, keine Bestaetigung
+noetig, Registrierung. Vollstaendige Suite: **180/180 gruen** (164 vorher
++ 16 neu). `git diff --stat` bestaetigt: nur `commands/monitor.py` und
+`tests/test_commands_monitor.py` geaendert, `docs/adr/ADR-021.md` neu -
+keine Aenderung an `main.py` oder anderen Kernmodulen.
+
+v0.7 bleibt weiterhin offen/ungetaggt (Dienste, Treiber, Bereinigung,
+Autostart-Schreibzugriff noch offen) - kein Tag gesetzt, keine
+v0.7-Abschlussentscheidung getroffen.
+
 ## 2026-07-02 - PC-Analyse implementiert, v0.7 Phase 1 (ADR-020)
 
 **Kontext:** Nach Handbook v3.5 war "PC-Admin" (Kap. 13) der naechste
