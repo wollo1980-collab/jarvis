@@ -1,5 +1,36 @@
 # Changelog
 
+## v0.7 - PC-Admin: System-Analyse, Autostart-Verwaltung, Temp-Bereinigung (Scope abgeschlossen, Tag ausstehend, 02.07.2026)
+
+Product-Owner-Entscheidung (02.07.2026): v0.7 wird mit dem aktuellen Umfang
+abgeschlossen. Vier Bausteine umgesetzt: PC-Analyse (Phase 1, ADR-020),
+Ereignisprotokoll-Analyse (Phase 2, ADR-021), Autostart-Verwaltung (Phase 3,
+ADR-022), Temp-Bereinigung (Phase 4, ADR-023). 225/225 Tests grün.
+
+**Begründung:** System-Analyse ist vollständig abgedeckt (Kap. 13). Autostart-
+Verwaltung ist im Benutzer-Scope umgesetzt (HKCU Run-Key, Benutzer-Startup-
+Ordner). Temp-Bereinigung ist im sicheren Benutzer-Scope umgesetzt (`%TEMP%`,
+Sicherheitsstufe 3, `preview()`-Hook). Treiber prüfen/aktualisieren und
+Dienste starten/stoppen bleiben bewusst offen - die beiden riskantesten und
+komplexesten Kap.-17-Bausteine (Treiber ist Handbooks eigenes Stufe-3-
+Beispiel) werden explizit ins Backlog verschoben statt überstürzt in v0.7
+mitgenommen zu werden.
+
+**Ins Backlog verschoben** (Details: `docs/PROJECT_STATE.md`, Abschnitt
+"Backlog"):
+- Treiber prüfen/aktualisieren.
+- Dienste starten/stoppen.
+- Autostart-Verwaltung auf HKLM/Alle-Benutzer erweitern (Administratorrechte).
+- Temp-Bereinigung um Papierkorb erweitern.
+- Temp-Bereinigung um `C:\Windows\Temp` erweitern (Administratorrechte).
+- Browser-Cache-/Profil-Bereinigung.
+
+**Noch offen bis zum vollständigen Abschluss:** Handbook-Aktualisierung auf
+v3.6 (Kap. 13 als abgeschlossen markieren, Kap. 29 Backlog-Ergänzung, Kap. 28
+DoD-Abschnitt, Jarvis-Eigenstart-Kapitel) und danach `git tag v0.7` - beides
+noch NICHT durchgeführt. Siehe `docs/PROJECT_STATE.md` für die vollständige,
+laufend aktuelle Statuszusammenfassung.
+
 ## v0.7.0 - Temp-/Festplatten-Bereinigung, Phase 4 (ADR-023, 02.07.2026)
 
 Vierter v0.7-Baustein ("PC-Admin", Handbook Kap. 13/17) - erster

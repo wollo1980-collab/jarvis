@@ -1,5 +1,68 @@
 # Logbook
 
+## 2026-07-02 - v0.7-Abschluss vorbereitet (Scope-Entscheidung, Backlog, Dokumentation)
+
+**Kontext:** Nach Commit von v0.7 Phase 4 (Temp-Bereinigung, ADR-023,
+`a765c9d`) wurde per AI_START.md neu eingestiegen und der Gesamtstand von
+v0.7 erneut gegen das Handbook bewertet: von den drei in Kap. 13 genannten
+v0.7-Kernthemen ("System-Analyse, Treiber, Reinigung") war "System-Analyse"
+vollstaendig, "Reinigung" im sicheren Benutzer-Scope abgedeckt - nur
+"Treiber" blieb komplett unbearbeitet.
+
+**Product-Owner-Entscheidung:** v0.7 wird mit dem aktuellen Umfang
+abgeschlossen. Begruendung (vollstaendig uebernommen): System-Analyse ist
+vollstaendig abgedeckt, Autostart-Verwaltung ist im Benutzer-Scope
+umgesetzt, Temp-Bereinigung ist im sicheren Benutzer-Scope umgesetzt.
+Treiber und Dienste bleiben bewusst offen, weil sie die riskantesten
+Bausteine sind und separat priorisiert werden sollen.
+
+**Erste Korrektur:** `docs/PROJECT_STATE.md` (Abschnitt "Git") enthielt noch
+die veraltete Aussage, die Temp-Bereinigung sei nicht committed - korrigiert
+auf Commit `a765c9d`, dazu klargestellt, dass v0.7 bis zum vollstaendigen
+Abschlussprozess (Handbook v3.6, Tag) ungetaggt bleibt.
+
+**v0.7-Abschluss vorbereitet:**
+1. **Treiber pruefen/aktualisieren** und **Dienste starten/stoppen** (Kap.
+   17) explizit ins Backlog verschoben - beide als riskanteste/komplexeste
+   Kap.-17-Bausteine begruendet (Treiber ist Handbooks eigenes
+   Stufe-3-Beispiel, Kap. 10).
+2. Vier weitere offene Erweiterungen als spaetere Bausteine dokumentiert:
+   Autostart-Verwaltung auf HKLM/Alle-Benutzer (Administratorrechte),
+   Temp-Bereinigung um Papierkorb, Temp-Bereinigung um
+   `C:\Windows\Temp` (Administratorrechte), Browser-Cache-/Profil-
+   Bereinigung.
+3. Neuer, konsolidierter Abschnitt "Backlog" in `docs/PROJECT_STATE.md` -
+   alle sechs Punkte an einer Stelle, mit Verweis auf die formale Aufnahme
+   in Handbook Kap. 29 beim v3.6-Update (Kap.-19-Mechanismus, gleiches
+   Vorgehen wie bei Power BI/v0.5 und Post-Arbeitsmodule-Generalisierung/
+   v0.6 - Entscheidung jetzt in PROJECT_STATE.md/logbook.md massgeblich
+   festgehalten, Handbook-`.docx` erst beim tatsaechlichen Versionswechsel
+   angefasst).
+4. Abschnitt "Ausstehende Handbook-Erweiterung" zu "Ausstehende
+   Handbook-Aktualisierung (v3.6, vor dem Tag)" erweitert - fasst jetzt
+   alle vier fuer v3.6 anstehenden Handbook-Aenderungen zusammen (Kap. 13
+   als abgeschlossen markieren, Kap. 29 Backlog-Ergaenzung, Kap. 28
+   DoD-Abschnitt fuer v0.7, Jarvis-Eigenstart-Kapitel).
+5. `docs/CHANGELOG.md`: neuer, oberster Eintrag "v0.7 - PC-Admin ...
+   (Scope abgeschlossen, Tag ausstehend, 02.07.2026)" - konsolidierte
+   Zusammenfassung aller vier Phasen plus Backlog-Liste, referenziert
+   `PROJECT_STATE.md` fuer den laufend aktuellen Stand (gleiches Muster
+   wie die v0.5-/v0.6-Abschluss-Eintraege, nur mit "Tag ausstehend" statt
+   "getaggt", da hier bewusst noch kein Tag gesetzt wurde).
+6. `docs/PROJECT_STATE.md`: "Current Version"/"Status"/"Current
+   Development Phase"/"Next Planned Version"/"Next Goal According To
+   Handbook" auf "v0.7 inhaltlich abgeschlossen, Tag noch ausstehend"
+   umgestellt.
+
+**Noch NICHT durchgefuehrt (bewusst, wie angewiesen):** kein Tag gesetzt,
+Handbook-`.docx` nicht angefasst (Kap.-2-Regel: erst beim tatsaechlichen
+Versionswechsel, das ist der naechste, noch ausstehende Schritt). Kein
+Code geschrieben, keine neue ADR (reine Scope-/Backlog-Entscheidung, wie
+bei der Power-BI-Descoping-Entscheidung).
+
+**Tests:** vollstaendige Suite erneut ausgefuehrt, weiterhin **225/225
+gruen** - reine Dokumentationsaenderung, kein Code beruehrt.
+
 ## 2026-07-02 - Temp-/Festplatten-Bereinigung implementiert, v0.7 Phase 4 (ADR-023)
 
 **Kontext:** Nach Commit von v0.7 Phase 3 (Autostart verwalten, ADR-022,
