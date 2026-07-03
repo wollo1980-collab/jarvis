@@ -11,14 +11,14 @@ stand: 2026-07-03
 Quelle: `README.md`, `docs/handbook/HANDBOOK.md`, `docs/logbook.md`, `docs/CHANGELOG.md`, `docs/adr/*.md`
 Der maschinenlesbare Kopf (oben) ist die Single Source der Kern-Kennzahlen; das Konsistenz-Gate prüft ihn gegen die Realität (siehe CONTRIBUTING §7).
 
-**Hinweis (ab v3.6, siehe Handbook Kap. 19):** Dieses Dokument ist ein temporärer Arbeitsbereich zwischen zwei Handbook-Versionen, keine dauerhafte Wissensquelle. Nach jedem Konsolidierungsprozess wird es auf den aktuellen Projektstatus zurückgebaut - dauerhaft gültige Entscheidungen (Roadmap, Backlog, Governance-Regeln, Leitbild) leben im Handbook, nicht hier.
+**Hinweis (Dokument-Landkarte, siehe `CONTRIBUTING.md` §1):** Dieses Dokument ist die Heimat des *aktuellen Stands* — Version, Teststand, aktives Increment, offene Aufgaben, bekannte Schuld, Roadmap/Backlog und Known Limitations. Zeitlose Festlegungen (Leitbild/DNA, Vision, Prinzipien, Sicherheitsmodell) leben in der Verfassung (`docs/handbook/HANDBOOK.md`), der Entwicklungsprozess in `CONTRIBUTING.md`. Hier steht kein zeitloses Gesetz.
 
 ## Current Version
 `v0.8 "Multi-KI"` - **Phase 1 + Phase 2 umgesetzt, getestet und committet** (noch kein `v0.8`-Git-Tag: v0.8 ist als Version nicht abgeschlossen, da bewusst kein weiterer Phasenausbau jetzt erfolgt - siehe „Next Planned Version").
 
 Davor abgeschlossen und getaggt: `v0.7` "PC-Admin" (`v0.7` → `a7eb86d`); der **Infrastruktur-/Runtime-Baustein** (ADR-024 bis ADR-028, ohne eigene Versionsnummer/Tag), konsolidiert in Handbook v3.7. `v0.4`/`v0.5`/`v0.6`/`v0.7` sind alle abgeschlossen und getaggt.
 
-Handbook: **v3.8** aktuell (Leitbild/DNA, EBENE 1). v3.7 = Infrastruktur-/Runtime-Baustein.
+Verfassung: **`docs/handbook/HANDBOOK.md`** (`constitution_version 4.0`) — zeitlose Projektverfassung, Leitbild/DNA in Teil 1. Die früheren `.docx`-Handbücher (v3.2–v3.8) liegen als Historie unter `docs/handbook/archive/` (nicht maßgeblich).
 
 ## Status
 
@@ -35,10 +35,10 @@ Handbook-Konsolidierungen seit v0.7:
 - **v3.7**: Infrastruktur-/Runtime-Baustein (ADR-024 bis ADR-028).
 - **v3.8**: **Leitbild / DNA** (Produktidentität, EBENE 1) - Kap. 0 Leitbild „Wofür Jarvis existiert" (Identität als Haltung) + 9 Produkt-Leitplanken; Angleichungen in Kap. 1/7/26/32; Mission unverändert. Bewusste, dokumentierte Governance-Ausnahme (reine EBENE-1-Konsolidierung mitten in v0.8, ohne Auswirkung auf die technische Code-Basis).
 
-Weiterhin gültig aus v0.7 und davor (Details im Handbook Kap. 13/17/27): PC-Admin (ADR-020-023), Infrastruktur-/Runtime-Baustein (ADR-024-028), Telegram-Fernzugriff (ADR-018), Excel/Tabellen-Auswertung/KPI (ADR-014/015/016), Kurz-/Langzeitgedächtnis (ADR-009), PC-Grundsteuerung (ADR-011/012).
+Weiterhin gültig aus v0.7 und davor (Details in den jeweiligen ADRs): PC-Admin (ADR-020-023), Infrastruktur-/Runtime-Baustein (ADR-024-028), Telegram-Fernzugriff (ADR-018), Excel/Tabellen-Auswertung/KPI (ADR-014/015/016), Kurz-/Langzeitgedächtnis (ADR-009), PC-Grundsteuerung (ADR-011/012).
 
 ## Next Planned Version
-**Nutzwert-Phase „Mit Jarvis leben"** (PO-Entscheidung 03.07.2026). Bewusst **kein** weiterer v0.8-Phasenausbau (z. B. Routing-Intelligenz/Orchestrator) jetzt - stattdessen beweisen, dass das gelegte Fundament einem Menschen *täglich* Last abnimmt. Methode: **Dogfooding-Protokoll** sammeln („Warum muss ich dafür noch eine App öffnen?"), dann gemeinsam die größte Alltagsreibung **end-to-end** bauen, bis echte tägliche Verlässlichkeit. Erfolgsmarke: der erste echte „Ohne Jarvis würde mir das täglich 30 Minuten kosten"-Moment (Handbook Kap. 26). Prozess bewusst **leichter** (keine neue Philosophie/Governance-Zeremonie).
+**Nutzwert-Phase „Mit Jarvis leben"** (PO-Entscheidung 03.07.2026). Bewusst **kein** weiterer v0.8-Phasenausbau (z. B. Routing-Intelligenz/Orchestrator) jetzt - stattdessen beweisen, dass das gelegte Fundament einem Menschen *täglich* Last abnimmt. Methode: **Dogfooding-Protokoll** sammeln („Warum muss ich dafür noch eine App öffnen?"), dann gemeinsam die größte Alltagsreibung **end-to-end** bauen, bis echte tägliche Verlässlichkeit. Erfolgsmarke: der erste echte „Ohne Jarvis würde mir das täglich 30 Minuten kosten"-Moment (HANDBOOK.md Teil 1 / Leitplanke 9 „Erfolg = weniger Last, nicht mehr Funktion"). Prozess bewusst **leichter** (keine neue Philosophie/Governance-Zeremonie).
 
 Die Nutzwert-Phase läuft als **benannter Block ohne eigene Versionsnummer** (Präzedenz: Runtime-Baustein; Versionsnummer ggf. später), **getrennt von v0.8**. **Baustein 1 umgesetzt: Mail-Briefing „Was liegt an?"** (ADR-031) - erster externer Connector, lokal-lesend, gelernte Absenderregeln. Nächster Schritt: weiter Dogfooding-Reibungen sammeln.
 
@@ -58,8 +58,8 @@ Keiner aktuell.
 ### Technische TODOs (Definition of Done / Betrieb, kein neuer Scope)
 - **Live-Test Mail-Briefing (ADR-031)** auf dem echten Windows-Rechner: `mail_accounts` in `config.json` eintragen, Gmail-**App-Passwort** (2FA) als Env-Variable setzen, „was liegt an?" real testen - bisher nur gemockt. **Hotmail-Auth verifizieren** (Microsoft baut Basis-Auth/App-Passwörter ab; ggf. OAuth statt IMAP-Passwort).
 - **Live-Test Claude-Provider** mit echtem `ANTHROPIC_API_KEY` auf dem echten Windows-Rechner - bewusst verschobener manueller Verifikationsschritt (kein offener Implementierungsfehler). Pfad ist offline bis zur SDK-Grenze verifiziert; nur der bezahlte End-zu-End-Call steht aus.
-- Manueller Live-Test der übrigen Kernfunktionen mit echtem API-Key auf dem echten Windows-Rechner (Definition of Done, Handbook Kap. 28) - bisher nur automatisiert/gemockt. `install_program` real ausführen ist ein bewusster, expliziter Schritt und sollte gezielt vom Product Owner freigegeben/begleitet werden.
-- Manueller Smoke-Test der Jarvis-Runtime mit echtem Bot-Token (TelegramChannel) sowie ein realer Jarvis-Eigenstart-Test nach Windows-Anmeldung - bisher nur automatisiert/gemockt (Definition of Done, Handbook Kap. 28).
+- Manueller Live-Test der übrigen Kernfunktionen mit echtem API-Key auf dem echten Windows-Rechner (Definition of Done, CONTRIBUTING §8) - bisher nur automatisiert/gemockt. `install_program` real ausführen ist ein bewusster, expliziter Schritt und sollte gezielt vom Product Owner freigegeben/begleitet werden.
+- Manueller Smoke-Test der Jarvis-Runtime mit echtem Bot-Token (TelegramChannel) sowie ein realer Jarvis-Eigenstart-Test nach Windows-Anmeldung - bisher nur automatisiert/gemockt (Definition of Done, CONTRIBUTING §8).
 - Piper-Sprachmodell herunterladen und `tts_enabled: true` für einen Live-TTS-Test setzen.
 - `anthropic` ist im `.venv` installiert (0.116.0); `requirements.txt` führt es bewusst optional/auskommentiert (lazy Import, ADR-029).
 - `.git_broken_5/` (Reste eines frühen, abgebrochenen git-init-Versuchs) liegt noch im Arbeitsordner, per `.gitignore` ausgeschlossen - bewusst nicht gelöscht (keine destruktive Aktion ohne Rückfrage).
@@ -92,7 +92,7 @@ Davor - v0.8 „Multi-KI", Phase 1+2 (ADR-029/030): Die KI-Anbindung ist nicht m
 - `system_status`/`analyze_pc`: keine Temperatur (psutil-Limitierung unter Windows).
 - `read_excel`/`analyze_report`/`calculate_kpi`: nur `.xlsx`/`.xlsm`, nur Werte, 500 Zeilen/Blatt.
 - `telegram_main.py`: nur vier Intents erreichbar, kein gleichzeitiger Betrieb mit der Konsole, `TelegramSpeech.listen()` fail-closed (ADR-018).
-- `analyze_pc`/`analyze_event_log`/`disable_/enable_autostart_entry`/`analyze_/clean_temp_files`: alle Windows-exklusiv, jeweiliger Scope siehe Handbook Kap. 17.
+- `analyze_pc`/`analyze_event_log`/`disable_/enable_autostart_entry`/`analyze_/clean_temp_files`: alle Windows-exklusiv, jeweiliger Scope siehe die jeweiligen ADRs (ADR-020–023).
 - `jarvis_runtime.py`: kein UI/Tray/Wake-Word, kein abstraktes Channel-Interface. `ConsoleDummyChannel` bleibt für unbeaufsichtigten Betrieb ungeeignet (blockiert auf `input()`) - wird beim Jarvis-Eigenstart (`pythonw.exe`) deshalb gar nicht erst gestartet; Telegram übernimmt die Erreichbarkeit.
 - Single-Instance-Schutz (ADR-026) schützt nur vor gleichzeitigem *Prozessstart* gegen dasselbe `memory_dir` - kein Schutz gegen externes Löschen der Lock-Datei, während eine Instanz läuft (bekanntes, akzeptiertes Restrisiko).
 - `telegram_main.py` (eigenständig) und `TelegramChannel` (über die Runtime) dürfen nicht gleichzeitig mit demselben Bot-Token laufen - Telegram erlaubt pro Bot nur eine aktive Long-Polling-Verbindung.

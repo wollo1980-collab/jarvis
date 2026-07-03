@@ -362,7 +362,7 @@ Kanal würde ohne `setx` beim Autostart stillschweigend nicht starten.
 `OPENAI_API_KEY` (siehe "Setup") betrifft dasselbe Problem und sollte aus
 demselben Grund ebenfalls per `setx` dauerhaft gesetzt werden.
 
-**Bewusst eingeschränkt (siehe Kap. 10 v3.5 "Fernzugriff-Sicherheitsprinzip"):**
+**Bewusst eingeschränkt (siehe `HANDBOOK.md` Teil 6 „Sicherheitsmodell" / ADR-019):**
 - Nur `chat`, `remember_fact`, `forget_fact`, `system_status` sind über
   Telegram erreichbar (Sicherheitsstufe 0 und ausgewählte
   Speicher-Interaktionen der Stufe 1).

@@ -1,5 +1,15 @@
 # Logbook
 
+## 2026-07-03 - Verifikations-/Korrektur-Chunk: Doku-Kette nach dem Governance-Umbau bereinigt
+
+**PO-Freigabe am 2026-07-03.**
+
+**Umgesetzt:** Vorwärts-Zeiger auf verschobene Inhalte korrigiert. PROJECT_STATE: „Handbook v3.8 aktuell" → HANDBOOK.md (constitution_version 4.0); veraltete Selbstbeschreibung (Roadmap/Backlog „im Handbook") an CONTRIBUTING §1 angeglichen; DoD-Verweise → CONTRIBUTING §8; Scope-/Detail-Verweise → jeweilige ADRs; Erfolgsmarke-Zitat → HANDBOOK Teil 1/Leitplanke 9 (Roadmap-Substanz unverändert). README: Fernzugriff-Sicherheitsprinzip → HANDBOOK Teil 6 / ADR-019.
+
+**Bewusst NICHT geändert:** README-Feature-/Historie-Tags (Kap. N) — nutzerseitige Doku/Historie, lösen sich ins klar markierte Archiv auf, teils roadmap-nah → eigener README-Body-Chunk. PROJECT_STATE-Konsolidierungshistorie (Kap. 1/7/26/32) als Historie belassen. Historie in logbook/CHANGELOG/ADRs unangetastet.
+
+Gate PASS; Suite 346 grün.
+
 ## 2026-07-03 - Governance-Umbau, Chunk 5: Struktur-Generator + README Variante B (Umbau abgeschlossen)
 
 **PO-Freigabe am 2026-07-03** für Chunk 5.
