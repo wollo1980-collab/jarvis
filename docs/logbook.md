@@ -1,5 +1,19 @@
 # Logbook
 
+## 2026-07-03 - Governance-Umbau, Chunk 4: Roadmap/Backlog → PROJECT_STATE, Lessons → logbook, Feature-Matrix → CONTRIBUTING
+
+**PO-Freigabe am 2026-07-03** für Chunk 4 (enthält eine CONTRIBUTING-Änderung = 🔴).
+
+**Umgesetzt:** Offener Backlog (Kap. 29) nach PROJECT_STATE (v0.x-Bezüge gestrippt); die überholte PROJECT_STATE-Zeile „Roadmap/Backlog leben im Handbook (Kap. 13/29)" korrigiert (Roadmap/Backlog leben jetzt hier). Feature-Entscheidungsmatrix (Kap. 29) als „Feature-Entscheidung" nach CONTRIBUTING §4. Frühe Lessons Learned (Kap. 25) hierher übernommen (siehe unten). Kap. 13 Roadmap + Kap. 27 Now/Next/Later = erledigte v0.1–v0.7-Historie, **bewusst NICHT** erneut übernommen (steht in CHANGELOG).
+
+**Frühe Lessons (aus Handbook Kap. 25, v0.1/v0.2-Zeit):**
+- `pyttsx3.init()` wurde bei jedem Sprechen neu initialisiert (langsam) → einmalig global initialisieren.
+- `chat_verlauf` war definiert, aber nie verwendet → Jarvis hatte kein Gedächtnis; Variablen müssen auch benutzt werden.
+- Modellname „gpt-5.5" existierte vermutlich nicht → Modellnamen immer in der API-Dokumentation prüfen.
+- Architecture Astronautics: zu früh zu viele leere Ordner → erst anlegen, wenn wirklich gebraucht (Regel 6).
+
+Gate PASS; No-Loss per Substanz-Checkliste.
+
 ## 2026-07-03 - Governance-Umbau, Chunk 3: PERSONAL_DEVELOPMENT.md (persönliche Entwicklung ausgelagert)
 
 **PO-Freigabe am 2026-07-03** für Chunk 3. Neue Datei `PERSONAL_DEVELOPMENT.md` = 🟡/Doku (kein Verfassungs-/Charter-Dokument).

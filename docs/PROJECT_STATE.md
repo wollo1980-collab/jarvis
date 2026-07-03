@@ -64,8 +64,8 @@ Keiner aktuell.
 - `anthropic` ist im `.venv` installiert (0.116.0); `requirements.txt` führt es bewusst optional/auskommentiert (lazy Import, ADR-029).
 - `.git_broken_5/` (Reste eines frühen, abgebrochenen git-init-Versuchs) liegt noch im Arbeitsordner, per `.gitignore` ausgeschlossen - bewusst nicht gelöscht (keine destruktive Aktion ohne Rückfrage).
 
-### Feature-TODOs (nächste Roadmap-Bausteine, NICHT jetzt umsetzen)
-Roadmap/Backlog leben vollständig im Handbook (Kap. 13 Roadmap, Kap. 29 Backlog). Hier nur technische Detail-Notizen ohne eigenen Backlog-Eintrag:
+### Feature-TODOs & Backlog (nächste Bausteine, NICHT jetzt umsetzen)
+Roadmap und Backlog leben **hier** in PROJECT_STATE — die Verfassung (`HANDBOOK`) trägt keine Roadmap/Status; abgeschlossene Versionen stehen in `CHANGELOG`. Technische Detail-Notizen:
 - Spätere v0.8-Phasen (nach der Nutzwert-Phase, falls fortgesetzt): aufgabenabhängiges Routing/Orchestrierung, ggf. `ANALYSIS`-Trennung (optionaler `task`-Parameter an `answer()`), lokale Modelle (Ollama). Bewusst NICHT jetzt (siehe ADR-030 „Bewusst NICHT Bestandteil von Phase 2").
 - Dritter KI-Verwender: `configure()`-Duplizierung (`reports.py`/`monitor.py`) zu einer gemeinsamen Abstraktion zusammenführen prüfen (Wolfgangs Entscheidung bei ADR-020).
 - **EBENE-2-Ist-Stand-Audit (bekannte Schuld, bewusst aufgeschoben - NICHT in der Nutzwert-Phase):** Mehrere „lebendige" Handbook-Kapitel hängen auf altem Stand, während EBENE 1 frisch gepflegt wurde (Zwei-Review-Befund 03.07.2026). Konkret: Kap. 12 „Projektstruktur" zeigt eine „Zielstruktur (ab v0.5+)" (`brain/`/`voice/`/`tools/`/`utils/`), die es im echten Code nie gab (real: `core/`/`commands/`/`memory/`/`executor/`), Überschrift noch „v0.2 – Aktuell"; Kap. 13 Roadmap = kaputte Tabellen-Seitenumbrüche + inkonsistente Fertig-Marker (✅ nur bei v0.1) + „v0.8 noch nicht begonnen" (überholt); Kap. 22 Academy (nur Level 1 markiert); Kap. 23 Portfolio („v0.2 in Arbeit"); Kap. 20 listet nur ADR-000..003 inline (vermutlich beabsichtigt, aber ohne erklärenden Satz). Nachziehen als EIN bewusster Schritt bei der nächsten echten Konsolidierung. (Der interne Widerspruch Kap. 7 ↔ Kap. 13 wurde am 03.07.2026 an der Wurzel behoben: Kap. 7 trägt keine Status-Aussage mehr.)
@@ -73,6 +73,13 @@ Roadmap/Backlog leben vollständig im Handbook (Kap. 13 Roadmap, Kap. 29 Backlog
 - `.docx`-Handbook als binäre, nicht diffbare SSoT: Umstieg auf ein diffbares Format (z. B. Markdown) erwägen - bewusst aufgeschoben (Ablenkung von der Nutzwert-Phase), aber als technische Schuld notiert. Dieselbe Wurzel wie die beiden Drift-Funde: unsichtbare, manuell gepflegte binäre SSoT.
 - Veralteter Fußzeilen-Vermerk „v3.5 - ab jetzt eingefroren" am Handbook-Ende bei nächster Gelegenheit bereinigen.
 - Den `preview()`-Hook (ADR-023) für weitere schreibende PC-Admin-Commands nutzen, sobald umgesetzt.
+
+**Backlog (zurückgestellte Ideen, kein aktueller Scope — Grund je Zeile):**
+- **Spotify-/Medien-Steuerung** — kein echtes Arbeitsproblem.
+- **Wake-Word** (z. B. Porcupine) — aktuell reicht „jarvis" im Text; nach der Nutzwert-Phase erneut prüfen. (Lokale Modelle/Ollama siehe oben „Spätere v0.8-Phasen".)
+- **Power-BI-Integration** — liegt im Firmenumfeld/auf dem Firmenrechner; im privaten Jarvis-Rahmen aktuell nicht praktikabel.
+- **Generalisierung der Post-Arbeitsmodule** → allgemeine Excel-/Report-Analyse — die bestehenden Commands bleiben bewusst spezifisch, bis mehrere Report-Typen es rechtfertigen (Regel 6).
+- **Fernzugriff-Ausbau** (Web-Interface, VPN) — Alternativen/Ergänzungen zu Telegram, aktuell nicht nötig.
 
 Im Code wurden keine `TODO`-/`FIXME`-Marker gefunden.
 

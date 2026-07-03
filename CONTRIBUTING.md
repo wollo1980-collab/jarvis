@@ -93,6 +93,16 @@ Sonderfälle: kein klarer nächster Schritt → Optionen vorschlagen. Drift *wä
 - **30-Minuten-Regel:** Wird über eine Frage länger als ~30 Minuten diskutiert, prüfe *„Kann ein kleiner Prototyp sie schneller beantworten?"* (Ausnahme: grundlegende Architekturentscheidungen dürfen länger reifen).
 - **Design-Review (drei Blickwinkel):** Vor größeren Entscheidungen aus drei Perspektiven prüfen — *Pragmatiker* (Funktioniert das heute?), *Architekt* (In zwei Jahren noch wartbar?), *Produktmanager* (Bringt das Nutzen?).
 
+### Feature-Entscheidung (Idee → bauen oder Backlog?)
+Jede neue Idee — egal von wem — wird an fünf Fragen geprüft:
+1. Löst es ein **echtes Problem** des Nutzers? (sonst → Backlog)
+2. Passt es zum **aktuellen Scope/Increment**? (sonst → später)
+3. Kann der Nutzer es nach dem Einbau **verstehen/erklären**? (sonst → vereinfachen)
+4. Ist der **Wartungsaufwand** langfristig vertretbar? (sonst → Backlog)
+5. Gibt es eine **einfachere Lösung** für dasselbe Problem? (dann erst die einfache)
+
+Regel: **Zwei oder mehr „Nein" → Backlog** (nicht in die aktuelle Arbeit). „Interessant" ist kein Grund, „nützlich" schon.
+
 ---
 
 ## 5. Wann ist eine ADR Pflicht?
