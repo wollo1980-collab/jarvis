@@ -9,7 +9,7 @@ Zuerst Projektstand, Roadmap, ADRs und offene Aufgaben lesen.
 
 ## Pflicht-Lesereihenfolge
 1. `README.md`
-2. `docs/handbook/JARVIS_MASTER_HANDBOOK_v3_7.docx` (v3.2/v3.3/v3.4/v3.5/v3.6 bleiben als Archiv, Grundlage fuer v0.4/v0.5/v0.6/v0.7 sowie den Runtime-Baustein zwischen v0.7 und v0.8)
+2. `docs/handbook/JARVIS_MASTER_HANDBOOK_v3_8.docx` (v3.2/v3.3/v3.4/v3.5/v3.6/v3.7 bleiben als Archiv, Grundlage fuer v0.4/v0.5/v0.6/v0.7, den Runtime-Baustein zwischen v0.7 und v0.8 sowie v0.8 Multi-KI; v3.8 = Leitbild/DNA)
 3. `docs/PROJECT_STATE.md`
 4. `docs/logbook.md`
 5. `docs/CHANGELOG.md`
