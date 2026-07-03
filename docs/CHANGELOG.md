@@ -1,5 +1,25 @@
 # Changelog
 
+## Doku-Abgleich + Handbook-v3.8-Korrektur (03.07.2026)
+
+Zwei-Review-Befund (Code- und Handbook-Review durch einen zweiten Agenten):
+Doku war an mehreren Stellen veraltet bzw. widersprüchlich.
+
+- **Doku-Abgleich (Commit `1f7c516`):** `PROJECT_STATE.md`, `README.md`,
+  `docs/AI_START.md` auf den echten Stand (v0.8 Phase 1+2, 306 Tests,
+  Handbook v3.8) gebracht.
+- **Handbook v3.8 – In-place-Korrektur:** In Kap. 7 (EBENE 1, zeitlos) die
+  Implementierungs-Status-Aussage „…als deterministischer Provider-Router in
+  v0.8 Phase 1/2 umgesetzt" entfernt → zeitlos „konkretisiert als
+  deterministischer Provider-Router, siehe ADR-029/030". Behebt den internen
+  Widerspruch zu Kap. 13 an der Wurzel: EBENE 1 trägt keinen Phasen-/
+  Implementierungsstatus (das gehört in EBENE 2 / ADRs / PROJECT_STATE). Der
+  Fehler war in der v3.8-Konsolidierung eingeführt worden.
+- **Bewusst aufgeschoben (in `PROJECT_STATE.md` als Schuld notiert):**
+  EBENE-2-Ist-Stand-Audit (Kap. 12 Phantom-„Zielstruktur" die es nie gab,
+  Kap. 13 Roadmap-Tabelle/Häkchen/v0.8-Status, Kap. 22, 23) - nicht in der
+  Nutzwert-Phase, sondern bei der nächsten echten Konsolidierung.
+
 ## Handbook v3.8: Leitbild / DNA verankert – die „Verfassung" von Jarvis (03.07.2026)
 
 Die zeitlose Produktidentität von Jarvis wurde als bewusste EBENE-1-Konsolidierung

@@ -1,5 +1,25 @@
 # Logbook
 
+## 2026-07-03 - Doku-Abgleich + v3.8-Korrektur (Lesson: EBENE 1 trägt keinen Status)
+
+Ein zweiter Agent hat Code und Handbook geprüft und zwei Drift-Funde gemeldet.
+(1) PROJECT_STATE/README/AI_START waren auf altem Stand → abgeglichen (Commit
+`1f7c516`). (2) **Interner Handbook-Widerspruch**: Kap. 7 (EBENE 1) behauptete
+„Provider-Router in v0.8 Phase 1/2 umgesetzt", Kap. 13 (EBENE 2) sagte „v0.8
+noch nicht begonnen" - eingeführt durch meine v3.8-Konsolidierung.
+
+**Lesson Learned:** EBENE 1 (zeitlos) darf **keine** Implementierungs-/Phasen-
+Status-Aussage tragen - das gehört in EBENE 2 / ADRs / PROJECT_STATE. Ein
+zeitloser ADR-Verweis ist ok, ein „umgesetzt in Phase X" nicht. Behoben durch
+in-place-Korrektur von v3.8 (Kap. 7 zeitlos umformuliert); Kap. 13 bewusst
+nicht angefasst (Product-Owner-Entscheidung: nur den Widerspruch fixen).
+
+**Root Cause (beide Funde):** manuell gepflegte, binäre, nicht diffbare
+`.docx`-SSoT ist für einen Solo-Maintainer schwer konsistent zu halten; Drift
+bleibt unsichtbar, bis jemand liest. Als Schuld notiert (Markdown-SSoT prüfen),
+bewusst aufgeschoben. Ebenso aufgeschoben: EBENE-2-Ist-Stand-Audit (Kap.
+12/13/22/23) - nicht in der Nutzwert-Phase.
+
 ## 2026-07-03 - Handbook v3.8: Leitbild / DNA verankert (die „Verfassung" von Jarvis)
 
 **Kontext:** Nach der Umsetzung von v0.8 Phase 1/2 verschob sich die Diskussion
