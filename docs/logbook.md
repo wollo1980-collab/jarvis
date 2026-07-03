@@ -1,5 +1,22 @@
 # Logbook
 
+## 2026-07-04 - Welle 0: Doku-Realitäts-Korrekturen aus dem Architektur-Audit
+
+**PO-Freigabe am 2026-07-04 für Welle 0** (enthält eine Charter-Korrektur = 🔴, `charter_version` 1.0 → 1.1).
+
+**Kontext:** Ein unabhängiges Architektur-Audit (Jarvis gegen das AI Project Framework, 03./04.07.2026) fand in Jarvis drei Doku-Realitäts-Drifts, die das Gate nicht erkennen kann, weil es Zahlen und Tokens prüft, aber keine Prosa-Behauptungen.
+
+**Umsetzung:**
+- **Echter Testsuite-Lauf:** 346/346 grün (venv-Interpreter, `--basetemp`, 4,9 s). Die Kopfzahl `tests: 346` war bisher nur statisch gezählt (Gate zählt `def test_`-Definitionen), nie durch einen dokumentierten echten Lauf dieser Session verifiziert.
+- **`active_increment`:** `governance-rebuild` → `nutzwert-phase` korrigiert (der Umbau ist laut logbook Chunk 5 abgeschlossen; der laufende benannte Block ist die Nutzwert-Phase). `stand` auf 2026-07-04.
+- **Charter §5 Seed-ADR-Angabe:** Die Behauptung „Frühe Seed-ADRs (ADR-000–003) liegen ebenfalls als Dateien in `docs/adr/`" wurde per Git-Historie geprüft: Seit dem Initial-Commit (v0.4) wurden ausschließlich ADR-004 bis ADR-031 getrackt; keine weitere Erwähnung im Repo; `.git_broken_5/` enthält nur Hook-Templates, keinen Objektbestand. Die Aussage war falsch und wurde durch die belegbare ersetzt (ADR-Reihe beginnt bei ADR-004; v0.1–v0.3 nur als Text in CHANGELOG/logbook überliefert).
+
+**Tests:** 346 grün (echter Lauf, s. o.). Gate PASS vor und nach den Änderungen.
+
+**Bewusst nicht umgesetzt (außerhalb der Welle-0-Freigabe):** README-Body-Chunk (bekannte Schuld, eigenes Paket) · `PERSONAL_DEVELOPMENT.md` in die Landkarte §1 aufnehmen · Löschung von `.git_broken_5/` (destruktiv, separate PO-Rückfrage). Keine neuen Architekturfragen während der Umsetzung aufgetreten.
+
+**Lesson Learned:** Prosa-Behauptungen in Governance-Dokumenten (Seed-ADR-Satz) und die Aktualität benannter Blöcke (`active_increment` akzeptiert jeden Namen) liegen außerhalb des mechanisch Prüfbaren — sie brauchen periodische manuelle Audits als bewussten Konsolidierungsschritt.
+
 ## 2026-07-03 - Verifikations-/Korrektur-Chunk: Doku-Kette nach dem Governance-Umbau bereinigt
 
 **PO-Freigabe am 2026-07-03.**

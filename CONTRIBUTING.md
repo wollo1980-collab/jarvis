@@ -1,7 +1,7 @@
 ---
-charter_version: 1.0
+charter_version: 1.1
 gilt_fuer: Alle Entwickler an Jarvis (Mensch oder KI) in der Lead-Software-Engineer-Rolle
-status: In Kraft (charter_version 1.0). Umsetzungsstand der beschriebenen Mechanismen: siehe PROJECT_STATE.
+status: In Kraft (charter_version 1.1). Umsetzungsstand der beschriebenen Mechanismen: siehe PROJECT_STATE.
 aendern: Nur mit PO-Freigabe (Rot). Entwurf/Umsetzung durch den Engineer, Entscheidung/Freigabe durch den PO.
 ---
 
@@ -117,7 +117,7 @@ Eine ADR ist erforderlich (🟡), wenn eine Änderung mindestens eines erfüllt:
 Keine ADR nötig (🟢) für: Bugfixes, verhaltenswahrende Refactorings, Doku-Pflege, Tests, Umsetzung einer bereits per ADR freigegebenen Sache.
 
 ### ADR-Format
-Jede ADR-Datei unter `docs/adr/ADR-NNN.md` folgt der Struktur: **Problem/Kontext · Entscheidung · Begründung · Alternativen · Konsequenzen · Status**. Der `Status` ist `Accepted` / `Superseded` / `Rejected` — nur er ändert sich nachträglich (Superseded stets durch eine *neue* ADR, siehe §6). Umfangreichere ADRs ergänzen Risiken/Teststrategie. Frühe Seed-ADRs (ADR-000–003) liegen ebenfalls als Dateien in `docs/adr/`.
+Jede ADR-Datei unter `docs/adr/ADR-NNN.md` folgt der Struktur: **Problem/Kontext · Entscheidung · Begründung · Alternativen · Konsequenzen · Status**. Der `Status` ist `Accepted` / `Superseded` / `Rejected` — nur er ändert sich nachträglich (Superseded stets durch eine *neue* ADR, siehe §6). Umfangreichere ADRs ergänzen Risiken/Teststrategie. Die ADR-Reihe beginnt mit `ADR-004` (Beginn der Git-Historie bei v0.4); Entscheidungen aus der Zeit davor (v0.1–v0.3) sind nur als Text in `docs/CHANGELOG.md`/`docs/logbook.md` überliefert, nicht als ADR-Dateien.
 
 ---
 
