@@ -1,5 +1,17 @@
 # Logbook
 
+## 2026-07-03 - Governance-Umbau, Chunk 1: Handbook nach Markdown migriert + konsolidiert (constitution_version 4.0)
+
+**PO-Freigabe am 2026-07-03** für Chunk 1. Handbook-Migration = 🔴 (Verfassungsebene): Entscheidung/Freigabe PO, Entwurf/Umsetzung Engineer.
+
+**Umgesetzt:** `docs/handbook/HANDBOOK.md` neu (Markdown, maßgeblich), von 32 Kapiteln auf **7 Teile** konsolidiert (Leitbild & Identität · Vision & Fähigkeitsbereiche · Produkt-Leitplanken · Engineering-/Design-Prinzipien · Architektur-Invarianten · Sicherheitsmodell · Projektgrenzen) + Präambel + neue Invariante **Modellneutralität**. Bewusste Konsolidierung statt 1:1; keine Status-/Roadmap-/Prozessinhalte mehr. Die 7 bisherigen `.docx` (v3.2–v3.8) nach `docs/handbook/archive/` (`git mv`, nicht gelöscht). Verweise in README/PROJECT_STATE auf `HANDBOOK.md` umgestellt. Gate PASS inkl. jetzt aktiver **Handbook-Reinheit**.
+
+**No-Loss:** Substanz-Checkliste pro Quell-Kapitel → Ziel (Verfassung bzw. spätere Chunks) vor der Migration erstellt und gegen den Entwurf geprüft.
+
+**Lesson (Migration):** Kern-Verfassungsinhalte (Sicherheitsstufen 0–4, Design Principles, Gedächtnis-Ebenen, Executor-Status ✓/✗/?) standen in **Tabellen** — die python-docx-Absatz-Extraktion überspringt Tabellen. Ohne separate `doc.tables`-Extraktion wäre der wichtigste Inhalt verloren gegangen. Bei künftigen `.docx`-Migrationen immer Tabellen mitlesen.
+
+**Nächste Chunks:** 2 (CONTRIBUTING absorbiert Prozessinhalte), 3 (PERSONAL_DEVELOPMENT), 4 (PROJECT_STATE/logbook: Roadmap + Lessons), 5 (`gen_structure.py`).
+
 ## 2026-07-03 - Governance-Umbau, Schritt 1: Developer Charter (CONTRIBUTING.md, charter_version 1.0)
 
 **PO-Freigabe am 2026-07-03** für die Erstellung der Developer Charter. Charter-Erstellung ist 🔴 (Meta/Verfassungsebene): Entscheidung/Freigabe durch den PO, Entwurf/Umsetzung durch den Engineer.

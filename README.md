@@ -4,7 +4,7 @@ Modularer, dokumentationsgetriebener Sprach-/Text-Assistent: Planner/Executor,
 Gesprächs- und Langzeitgedächtnis, echte Chat-Antworten, PC-Steuerung und erste
 externe Integrationen.
 
-- **Wofür / was** (Vision, DNA, Leitplanken, Architekturprinzipien) → Handbook / Projektverfassung (`docs/handbook/JARVIS_MASTER_HANDBOOK_v3_8.docx`; ältere `v3_2`–`v3_7` = Archiv, nicht maßgeblich).
+- **Wofür / was** (Vision, DNA, Leitplanken, Architekturprinzipien) → Handbook / Projektverfassung (`docs/handbook/HANDBOOK.md`; frühere `.docx`-Fassungen v3.2–v3.8 unter `docs/handbook/archive/`, nicht maßgeblich).
 - **Wie entwickelt wird** (Prozess, Session-Runbook, Freigaberegeln) → **`CONTRIBUTING.md`** (Jarvis Developer Charter).
 - **Aktueller Stand** → `docs/PROJECT_STATE.md`. **Historie** → `docs/CHANGELOG.md`.
 

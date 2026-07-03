@@ -8,7 +8,7 @@ stand: 2026-07-03
 
 # PROJECT STATE
 
-Quelle: `README.md`, `docs/handbook/JARVIS_MASTER_HANDBOOK_v3_8.docx`, `docs/logbook.md`, `docs/CHANGELOG.md`, `docs/adr/*.md`
+Quelle: `README.md`, `docs/handbook/HANDBOOK.md`, `docs/logbook.md`, `docs/CHANGELOG.md`, `docs/adr/*.md`
 Der maschinenlesbare Kopf (oben) ist die Single Source der Kern-Kennzahlen; das Konsistenz-Gate prüft ihn gegen die Realität (siehe CONTRIBUTING §7).
 
 **Hinweis (ab v3.6, siehe Handbook Kap. 19):** Dieses Dokument ist ein temporärer Arbeitsbereich zwischen zwei Handbook-Versionen, keine dauerhafte Wissensquelle. Nach jedem Konsolidierungsprozess wird es auf den aktuellen Projektstatus zurückgebaut - dauerhaft gültige Entscheidungen (Roadmap, Backlog, Governance-Regeln, Leitbild) leben im Handbook, nicht hier.
