@@ -1,9 +1,9 @@
 ---
 version: "v0.8 P1+2 (Multi-KI) abgeschlossen; Nutzwert-Phase gestartet"
-active_increment: governance-rebuild
+active_increment: nutzwert-phase
 tests: 346
 latest_adr: 31
-stand: 2026-07-03
+stand: 2026-07-04
 ---
 
 # PROJECT STATE
