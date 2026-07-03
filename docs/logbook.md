@@ -1,5 +1,15 @@
 # Logbook
 
+## 2026-07-03 - Governance-Umbau, Schritt 1: Developer Charter (CONTRIBUTING.md, charter_version 1.0)
+
+**PO-Freigabe am 2026-07-03** für die Erstellung der Developer Charter. Charter-Erstellung ist 🔴 (Meta/Verfassungsebene): Entscheidung/Freigabe durch den PO, Entwurf/Umsetzung durch den Engineer.
+
+**Inhalt:** einzige Quelle für *wie* an Jarvis entwickelt wird — Rollen (Entscheidung PO / Umsetzung Engineer), Dokument-Landkarte + Grenzregeln, Session-Runbook, Delegations-Matrix (🟢/🟡/🔴, Commit vorerst 🟡), ADR-Pflicht-Kriterien, Doku-Pflichten, Konsistenz-Gate-Konzept, DoD, Sicherheits-Gate, Entrenchment, Governance-Version. Ersetzt AI_START als Prozess-Heimat (AI_START wird noch abgelöst).
+
+**Selbstprüfung vor Freigabe (Lesson/Arbeitsweise):** Zwei driftbare Status-Zeilen (Frontmatter + §7: „Gate ausstehend/noch nicht erstellt") gegen die eigene Grenzregel „kein driftbarer Status im Gesetz-Dokument" erkannt und in neutrale Zeiger auf PROJECT_STATE umformuliert, **bevor** die Freigabe erfolgte. Diese proaktive Selbstprüfung gegen die Governance ist ab jetzt fester Bestandteil der Arbeitsweise (PO-Wunsch).
+
+**Kontext:** Schritt 1 des Governance-Umbaus. Vereinbarte Reihenfolge: CONTRIBUTING → PROJECT_STATE-Kopf → README-Verweis → Konsistenz-Gate → Handbook-Migration (mit Relocation-Map). Strikt in dieser Reihenfolge, keine Schritte vorziehen.
+
 ## 2026-07-03 - Nutzwert-Phase, Baustein 1: Mail-Briefing „Was liegt an?" (ADR-031)
 
 **Kontext:** Erste dogfooding-getriebene Alltagsreibung, umgesetzt nach ADR-031.
