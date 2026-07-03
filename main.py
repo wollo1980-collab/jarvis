@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 from datetime import date
 
+import commands.mail as mail_commands
 import commands.memory as memory_commands
 import commands.monitor as monitor_commands
 import commands.reports as reports_commands
@@ -84,6 +85,10 @@ def main() -> None:
         # direkt die KI auf - eigenes, zu reports_commands bewusst
         # dupliziertes configure()-Muster (siehe ADR-020).
         monitor_commands.configure(ai)
+
+        # Mail-Briefing (Nutzwert-Phase, ADR-031): baut die Postfächer aus
+        # config.mail_accounts + Env-Passwörtern und den lokalen Regel-Speicher.
+        mail_commands.configure(config)
 
         logger.info("Jarvis v0.4 gestartet.")
         speech.say("Jarvis ist bereit.")

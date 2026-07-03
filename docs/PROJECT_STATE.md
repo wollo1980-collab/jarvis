@@ -32,13 +32,16 @@ Weiterhin gültig aus v0.7 und davor (Details im Handbook Kap. 13/17/27): PC-Adm
 ## Next Planned Version
 **Nutzwert-Phase „Mit Jarvis leben"** (PO-Entscheidung 03.07.2026). Bewusst **kein** weiterer v0.8-Phasenausbau (z. B. Routing-Intelligenz/Orchestrator) jetzt - stattdessen beweisen, dass das gelegte Fundament einem Menschen *täglich* Last abnimmt. Methode: **Dogfooding-Protokoll** sammeln („Warum muss ich dafür noch eine App öffnen?"), dann gemeinsam die größte Alltagsreibung **end-to-end** bauen, bis echte tägliche Verlässlichkeit. Erfolgsmarke: der erste echte „Ohne Jarvis würde mir das täglich 30 Minuten kosten"-Moment (Handbook Kap. 26). Prozess bewusst **leichter** (keine neue Philosophie/Governance-Zeremonie).
 
-Die Nutzwert-Phase läuft als **benannter Block ohne eigene Versionsnummer** (Präzedenz: Runtime-Baustein; Versionsnummer ggf. später), **getrennt von v0.8**. Erster Baustein: **Mail-Briefing „Was liegt an?"** (erster externer Connector, lokal-lesend, Gmail+Hotmail, gelernte Absenderregeln) - **ADR-031 vorgeschlagen, Umsetzung nach Freigabe ausstehend**.
+Die Nutzwert-Phase läuft als **benannter Block ohne eigene Versionsnummer** (Präzedenz: Runtime-Baustein; Versionsnummer ggf. später), **getrennt von v0.8**. **Baustein 1 umgesetzt: Mail-Briefing „Was liegt an?"** (ADR-031) - erster externer Connector, lokal-lesend, gelernte Absenderregeln. Nächster Schritt: weiter Dogfooding-Reibungen sammeln.
+
+Umgesetzt in der Nutzwert-Phase (Details: `docs/CHANGELOG.md`, ADR-031):
+- **Mail-Briefing** - `commands/mail.py` (check_mail / show_mail_advertising / mail_hide_sender / mail_keep_sender, alle Sicherheitsstufe 0), `core/mail_reader.py` (imaplib/email stdlib, **read-only** via `select(readonly=True)`+`BODY.PEEK`, nur Kopfzeilen), `memory/mail_rules.py` (lokale, korrigierbare Absenderregeln - Regel schlägt Heuristik). `mail_accounts` in Config (Secrets per Env). Rein lokal, kein Mailinhalt an eine KI. `core/ai.py` unverändert.
 
 ## Tests
 Letzter Check am 2026-07-03: volle Suite grün.
 
 ### Test Status
-`306 / 306` bestanden (venv-Interpreter; für die volle Suite ist ein beschreibbares `--basetemp` nötig, da die Sandbox sonst den System-Temp der `tmp_path`-Fixture blockiert - kein Testdefekt).
+`327 / 327` bestanden (venv-Interpreter; für die volle Suite ist ein beschreibbares `--basetemp` nötig, da die Sandbox sonst den System-Temp der `tmp_path`-Fixture blockiert - kein Testdefekt).
 
 ### Known Failure
 Keiner aktuell.
@@ -46,6 +49,7 @@ Keiner aktuell.
 ## Offene Aufgaben
 
 ### Technische TODOs (Definition of Done / Betrieb, kein neuer Scope)
+- **Live-Test Mail-Briefing (ADR-031)** auf dem echten Windows-Rechner: `mail_accounts` in `config.json` eintragen, Gmail-**App-Passwort** (2FA) als Env-Variable setzen, „was liegt an?" real testen - bisher nur gemockt. **Hotmail-Auth verifizieren** (Microsoft baut Basis-Auth/App-Passwörter ab; ggf. OAuth statt IMAP-Passwort).
 - **Live-Test Claude-Provider** mit echtem `ANTHROPIC_API_KEY` auf dem echten Windows-Rechner - bewusst verschobener manueller Verifikationsschritt (kein offener Implementierungsfehler). Pfad ist offline bis zur SDK-Grenze verifiziert; nur der bezahlte End-zu-End-Call steht aus.
 - Manueller Live-Test der übrigen Kernfunktionen mit echtem API-Key auf dem echten Windows-Rechner (Definition of Done, Handbook Kap. 28) - bisher nur automatisiert/gemockt. `install_program` real ausführen ist ein bewusster, expliziter Schritt und sollte gezielt vom Product Owner freigegeben/begleitet werden.
 - Manueller Smoke-Test der Jarvis-Runtime mit echtem Bot-Token (TelegramChannel) sowie ein realer Jarvis-Eigenstart-Test nach Windows-Anmeldung - bisher nur automatisiert/gemockt (Definition of Done, Handbook Kap. 28).
@@ -65,11 +69,12 @@ Roadmap/Backlog leben vollständig im Handbook (Kap. 13 Roadmap, Kap. 29 Backlog
 Im Code wurden keine `TODO`-/`FIXME`-Marker gefunden.
 
 ## Latest ADR
-`ADR-030 - Minimaler deterministischer Provider-Router in AIEngine (v0.8 Multi-KI, Phase 2)` (letzte umgesetzte).
-`ADR-031 - Mail-Briefing „Was liegt an?" (Nutzwert-Phase, erster externer Connector)` - **vorgeschlagen, Umsetzung ausstehend**.
+`ADR-031 - Mail-Briefing „Was liegt an?" (Nutzwert-Phase, erster externer Connector)` - **umgesetzt** (`commands/mail.py`, `core/mail_reader.py`, `memory/mail_rules.py`).
 
 ## Latest Architecture Change
-v0.8 „Multi-KI", Phase 1+2 (ADR-029/030): Die KI-Anbindung ist nicht mehr fest an OpenAI gebunden. `AIEngine` delegiert den rohen Modellaufruf an einen austauschbaren `LLMProvider` (`core/providers.py`, OpenAI/Claude), gewählt über `config.ai_provider`. Ein deterministischer `ProviderRouter` erlaubt pro Aufgabentyp (`get_plan`=PLANNING, `answer`=GENERATION) einen eigenen Provider (`planning_provider`/`answer_provider`, Rückfall auf `ai_provider`), mit Fallback auf den Standardprovider. Öffentliche `AIEngine`-Schnittstelle und alle Aufrufer unverändert; `confirmed`-Strip zentral. Details: ADR-029, ADR-030.
+**Erster externer Connector (ADR-031, Nutzwert-Phase):** neuer `commands/mail.py` mit read-only IMAP-Zugriff (`core/mail_reader.py`, stdlib) und einem lokalen, korrigierbaren Präferenzspeicher (`memory/mail_rules.py`). Bewusst noch KEINE generische Connector-Abstraktion (YAGNI - erst beim zweiten Dienst); der Command darf konkret sein. `core/ai.py`/Executor-Kern unverändert.
+
+Davor - v0.8 „Multi-KI", Phase 1+2 (ADR-029/030): Die KI-Anbindung ist nicht mehr fest an OpenAI gebunden. `AIEngine` delegiert den rohen Modellaufruf an einen austauschbaren `LLMProvider` (`core/providers.py`, OpenAI/Claude), gewählt über `config.ai_provider`. Ein deterministischer `ProviderRouter` erlaubt pro Aufgabentyp (`get_plan`=PLANNING, `answer`=GENERATION) einen eigenen Provider (`planning_provider`/`answer_provider`, Rückfall auf `ai_provider`), mit Fallback auf den Standardprovider. Öffentliche `AIEngine`-Schnittstelle und alle Aufrufer unverändert; `confirmed`-Strip zentral. Details: ADR-029, ADR-030.
 
 ## Known Limitations
 - Claude-Provider im Prompt-JSON-Modus (Phase 1, ADR-029): keine strukturierte Ausgabe/Tool-Use; ungültiges JSON fällt über das vorhandene `json.loads`-Fallback auf einen `chat`-Plan zurück (akzeptiertes Restrisiko).

@@ -16,5 +16,14 @@
   "temperature": 0.0,
   "timeout": 15.0,
   "max_tokens": 300,
-  "debug": false
+  "debug": false,
+  "mail_accounts": [
+    {
+      "label": "Gmail",
+      "imap_host": "imap.gmail.com",
+      "imap_port": 993,
+      "username": "dein.name@gmail.com",
+      "password_env": "JARVIS_GMAIL_APP_PASSWORD"
+    }
+  ]
 }

@@ -1,5 +1,41 @@
 # Logbook
 
+## 2026-07-03 - Nutzwert-Phase, Baustein 1: Mail-Briefing „Was liegt an?" (ADR-031)
+
+**Kontext:** Erste dogfooding-getriebene Alltagsreibung, umgesetzt nach ADR-031.
+Erster externer Connector. Auswahl bewusst: private Mail (eigene Daten,
+unbedenklich) statt der teureren Firmendaten-Kandidaten (#3/#4 wegen
+Arbeitgeber-Freigabe zurückgestellt).
+
+**Umgesetzt:** `commands/mail.py` (check_mail / show_mail_advertising /
+mail_hide_sender / mail_keep_sender, alle Stufe 0), `core/mail_reader.py`
+(imaplib/email stdlib, strikt read-only via `select(readonly=True)`+`BODY.PEEK`,
+nur Kopfzeilen), `memory/mail_rules.py` (lokale, korrigierbare Absenderregeln,
+Regel schlägt Heuristik). `mail_accounts` in Config (Secrets per Env, ADR-018).
+`core/ai.py` unangetastet - Intent über die Registry.
+
+**Design-Entscheidungen (decken sich mit ADR-031):**
+- Lokal-first: nur Kopfzeilen, **kein Mailinhalt an eine KI**; nur der Befehl
+  „was liegt an" geht wie immer durch get_plan.
+- „Lernen" = transparente, korrigierbare Regeln (kein ML/Blackbox) - der Nutzer
+  korrigiert, Jarvis merkt es lokal, die Regel gewinnt immer (Leitplanke 8).
+- „Ausblenden ≠ wegwerfen": Werbung wird gezählt/zusammengefaltet, nie stumm
+  verworfen (schützt vor False Positives der Heuristik).
+- Werbung-Signal primär `List-Unsubscribe`; bewusst konservativ (kein `info@`),
+  damit legitime Absender nicht fälschlich gefiltert werden.
+
+**Lesson (Umsetzung):** Typografische Anführungszeichen (`„…"`) in
+f-Strings - das schließende ASCII-`"` beendete den String vorzeitig
+(SyntaxError). In Message-Strings nun einfache `'…'` verwendet. Beim Schreiben
+deutscher Strings darauf achten.
+
+**Tests:** 21 neue (Read-only-Nachweis via gemocktem imaplib, MIME-Decode,
+Regel-Vorrang, Zusammenfalten, Korrektur, fail-safe bei Kontofehlern).
+**327/327 grün.**
+
+**Offen (bewusst):** Live-Test mit echtem Gmail-App-Passwort auf Windows;
+Hotmail-Auth verifizieren (Microsoft baut Basis-Auth ab); später Telegram/TTS.
+
 ## 2026-07-03 - Doku-Abgleich + v3.8-Korrektur (Lesson: EBENE 1 trägt keinen Status)
 
 Ein zweiter Agent hat Code und Handbook geprüft und zwei Drift-Funde gemeldet.

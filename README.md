@@ -107,6 +107,43 @@ konfigurativ (spätere v0.8-Phasen, ADR-029). Für den Autostart gilt wie bei
 `OPENAI_API_KEY`: `ANTHROPIC_API_KEY` dauerhaft per `setx` setzen (siehe
 Telegram-Abschnitt).
 
+## Mail-Briefing „Was liegt an?" (Nutzwert-Phase, ADR-031)
+
+Auf „Jarvis, was liegt an?" trägt Jarvis einen knappen Überblick über deine
+neuen/ungelesenen privaten Mails vor – Werbung/Newsletter werden ausgeblendet
+(aber gezählt, nie stumm verworfen), Wichtiges wird genannt. **Rein lesend**
+(nichts wird gesendet, gelöscht oder als gelesen markiert), **rein lokal**:
+es werden nur Kopfzeilen gelesen, **kein Mailinhalt geht an eine KI**.
+
+Einrichtung (Beispiel Gmail):
+1. In `config.json` unter `mail_accounts` das Postfach hinterlegen (nur
+   nicht-geheime Felder – siehe `config.example.json`):
+   ```json
+   "mail_accounts": [
+     { "label": "Gmail", "imap_host": "imap.gmail.com", "imap_port": 993,
+       "username": "du@gmail.com", "password_env": "JARVIS_GMAIL_APP_PASSWORD" }
+   ]
+   ```
+2. Bei Gmail ein **App-Passwort** erzeugen (setzt Zwei-Faktor-Anmeldung voraus)
+   und **als Umgebungsvariable** setzen – niemals in `config.json`/Git (ADR-018).
+   Für den Autostart dauerhaft per `setx` (siehe Telegram-Abschnitt):
+   ```bash
+   setx JARVIS_GMAIL_APP_PASSWORD "abcd efgh ijkl mnop"
+   ```
+   Ist das Passwort nicht gesetzt, wird das Konto beim Start übersprungen – so
+   kann man Gmail zuerst einrichten und weitere Konten später nachziehen.
+
+**Hotmail/Outlook.com:** IMAP-Host `outlook.office365.com`. Microsoft baut
+Basis-Auth/App-Passwörter zunehmend zugunsten von OAuth2 ab – ob ein
+App-Passwort noch funktioniert, hängt von den Kontoeinstellungen ab. Deshalb
+zuerst Gmail nutzen und Hotmail bei Bedarf verifizieren.
+
+**Lernen (korrigierbare Regeln):** Sag „von Amazon will ich nichts mehr"
+(künftig ausblenden) oder „das ist keine Werbung" bzw. „von X will ich immer
+hören" (künftig immer zeigen). Die Regeln liegen menschenlesbar lokal
+(`memory_data/mail_rules.json`) und schlagen immer die automatische Erkennung.
+„zeig mir die Werbung" blendet die ausgeblendeten Mails einmalig ein.
+
 ## Tests ausführen
 
 ```bash

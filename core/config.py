@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -32,6 +32,12 @@ class Config:
     # ohne diese Felder verhaelt sich alles wie in Phase 1).
     planning_provider: str = ""   # get_plan() / TaskType.PLANNING
     answer_provider: str = ""     # answer()   / TaskType.GENERATION
+
+    # Mail-Briefing (Nutzwert-Phase, ADR-031): Liste privater Postfächer für
+    # „Was liegt an?". Nur nicht-geheime Felder hier (label/imap_host/
+    # imap_port/username/password_env); das Passwort/App-Passwort steht
+    # AUSSCHLIESSLICH in der genannten Umgebungsvariable (ADR-018), nie hier.
+    mail_accounts: list = field(default_factory=list)
 
     # Sprache / Stimme
     voice: str = "default"
@@ -103,6 +109,7 @@ class Config:
             claude_model=data.get("claude_model", cls.claude_model),
             planning_provider=data.get("planning_provider", cls.planning_provider),
             answer_provider=data.get("answer_provider", cls.answer_provider),
+            mail_accounts=data.get("mail_accounts", []),
             voice=data.get("voice", cls.voice),
             volume=data.get("volume", cls.volume),
             hotword=data.get("hotword", cls.hotword),

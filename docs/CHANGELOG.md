@@ -1,5 +1,43 @@
 # Changelog
 
+## Nutzwert-Phase: Mail-Briefing „Was liegt an?" (ADR-031, 03.07.2026)
+
+Erster Baustein der Nutzwert-Phase und **erster externer Connector**: Jarvis
+gibt auf „was liegt an?" einen Überblick über neue private Mails (Gmail +
+Hotmail), blendet Werbung aus und trägt Wichtiges vor. Rein lesend, rein lokal,
+**kein Mailinhalt an eine KI**.
+
+### Neu
+- `commands/mail.py`: vier Commands über die Registry – `check_mail`
+  („was liegt an"), `show_mail_advertising` („zeig die Werbung"),
+  `mail_hide_sender`, `mail_keep_sender`. Alle Sicherheitsstufe 0 (reines
+  Lesen), kein Senden/Löschen/Markieren.
+- `core/mail_reader.py`: IMAP-Zugriff mit Bordmitteln (`imaplib`/`email`,
+  **keine neue Abhängigkeit**), strikt **read-only** (`select(readonly=True)`
+  + `BODY.PEEK` → setzt niemals `\Seen`), **nur Kopfzeilen** (From, Subject,
+  Date, List-Unsubscribe, Precedence). Werbung-Heuristik (primär
+  `List-Unsubscribe`).
+- `memory/mail_rules.py`: gelernte, korrigierbare Absenderregeln – lokaler,
+  menschenlesbarer Speicher (`mail_rules.json`); die explizite Regel schlägt
+  immer die Heuristik (transparentes „Lernen", kein ML).
+- `core/config.py` + `config.example.json`: `mail_accounts` (nur nicht-geheime
+  Felder; Passwort/App-Passwort ausschließlich per Env-Variable, ADR-018).
+- Tests: `tests/test_mail_reader.py` (Heuristik, MIME-Decode, **Read-only-
+  Nachweis** via gemocktem imaplib) und `tests/test_commands_mail.py`
+  (Regel-Vorrang, Werbung-Zusammenfalten, Korrektur, fail-safe bei
+  Kontofehlern). 327 Tests grün.
+
+### Geändert
+- `commands/__init__.py`, `main.py`: `mail`-Modul registriert und beim Start
+  konfiguriert (`configure(config)`). **`core/ai.py` unverändert** – der Intent
+  kommt automatisch über die Registry (ADR-007).
+
+### Bewusst nicht enthalten (ADR-031)
+KI-Formulierung/-Zusammenfassung von Mails · Mailinhalte lesen/speichern ·
+Senden/Antworten/Löschen · TTS · Telegram · ML-Lernen · generische
+Connector-Abstraktion. Hotmail-Auth (Microsoft baut Basis-Auth ab): zuerst
+Gmail, Hotmail bei Bedarf verifizieren.
+
 ## Doku-Abgleich + Handbook-v3.8-Korrektur (03.07.2026)
 
 Zwei-Review-Befund (Code- und Handbook-Review durch einen zweiten Agenten):
