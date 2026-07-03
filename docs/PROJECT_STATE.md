@@ -1,7 +1,7 @@
 ---
 version: "v0.8 P1+2 (Multi-KI) abgeschlossen; Nutzwert-Phase gestartet"
 active_increment: governance-rebuild
-tests: 342
+tests: 346
 latest_adr: 31
 stand: 2026-07-03
 ---
@@ -68,10 +68,6 @@ Keiner aktuell.
 Roadmap und Backlog leben **hier** in PROJECT_STATE — die Verfassung (`HANDBOOK`) trägt keine Roadmap/Status; abgeschlossene Versionen stehen in `CHANGELOG`. Technische Detail-Notizen:
 - Spätere v0.8-Phasen (nach der Nutzwert-Phase, falls fortgesetzt): aufgabenabhängiges Routing/Orchestrierung, ggf. `ANALYSIS`-Trennung (optionaler `task`-Parameter an `answer()`), lokale Modelle (Ollama). Bewusst NICHT jetzt (siehe ADR-030 „Bewusst NICHT Bestandteil von Phase 2").
 - Dritter KI-Verwender: `configure()`-Duplizierung (`reports.py`/`monitor.py`) zu einer gemeinsamen Abstraktion zusammenführen prüfen (Wolfgangs Entscheidung bei ADR-020).
-- **EBENE-2-Ist-Stand-Audit (bekannte Schuld, bewusst aufgeschoben - NICHT in der Nutzwert-Phase):** Mehrere „lebendige" Handbook-Kapitel hängen auf altem Stand, während EBENE 1 frisch gepflegt wurde (Zwei-Review-Befund 03.07.2026). Konkret: Kap. 12 „Projektstruktur" zeigt eine „Zielstruktur (ab v0.5+)" (`brain/`/`voice/`/`tools/`/`utils/`), die es im echten Code nie gab (real: `core/`/`commands/`/`memory/`/`executor/`), Überschrift noch „v0.2 – Aktuell"; Kap. 13 Roadmap = kaputte Tabellen-Seitenumbrüche + inkonsistente Fertig-Marker (✅ nur bei v0.1) + „v0.8 noch nicht begonnen" (überholt); Kap. 22 Academy (nur Level 1 markiert); Kap. 23 Portfolio („v0.2 in Arbeit"); Kap. 20 listet nur ADR-000..003 inline (vermutlich beabsichtigt, aber ohne erklärenden Satz). Nachziehen als EIN bewusster Schritt bei der nächsten echten Konsolidierung. (Der interne Widerspruch Kap. 7 ↔ Kap. 13 wurde am 03.07.2026 an der Wurzel behoben: Kap. 7 trägt keine Status-Aussage mehr.)
-- **Projektstruktur doppelt gepflegt & veraltet (Governance-Schuld, Fix in Schritt 4 / Handbook-Migration):** Die Datei-/Projektstruktur lebt an ZWEI Stellen — `README.md` (`## Struktur`-Baum) UND Handbook Kap. 12 — und beide sind falsch. Der README-Baum listet real existierende Module nicht: `core/providers.py` (ADR-029), `core/mail_reader.py` (ADR-031), `commands/mail.py` (ADR-031), `memory/long_term.py` (ADR-009, fehlt seit v0.4!), `memory/mail_rules.py` (ADR-031). Handbook Kap. 12 zeigt eine nie existierte „Zielstruktur" (`brain/`/`voice/`/`tools/`/`utils/`). Ziel: EINE autoritative Heimat für die Projektstruktur oder eine aus dem Code ableitbare Darstellung. Bewusst NICHT als README-Einzelpatch (Symptomkur, Doppelpflege), sondern gebündelt im Handbook-Migrations-/EBENE-2-Audit (Schritt 4).
-- `.docx`-Handbook als binäre, nicht diffbare SSoT: Umstieg auf ein diffbares Format (z. B. Markdown) erwägen - bewusst aufgeschoben (Ablenkung von der Nutzwert-Phase), aber als technische Schuld notiert. Dieselbe Wurzel wie die beiden Drift-Funde: unsichtbare, manuell gepflegte binäre SSoT.
-- Veralteter Fußzeilen-Vermerk „v3.5 - ab jetzt eingefroren" am Handbook-Ende bei nächster Gelegenheit bereinigen.
 - Den `preview()`-Hook (ADR-023) für weitere schreibende PC-Admin-Commands nutzen, sobald umgesetzt.
 
 **Backlog (zurückgestellte Ideen, kein aktueller Scope — Grund je Zeile):**

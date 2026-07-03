@@ -1,5 +1,17 @@
 # Logbook
 
+## 2026-07-03 - Governance-Umbau, Chunk 5: Struktur-Generator + README Variante B (Umbau abgeschlossen)
+
+**PO-Freigabe am 2026-07-03** für Chunk 5.
+
+**Umgesetzt:** Generischer `scripts/gen_structure.py` (stdlib, `root`-Parameter, reine `build_tree`, als Projekt-Template wiederverwendbar) leitet die Projektstruktur aus dem Repository ab. README auf Variante B: keine handgepflegte Baumgrafik mehr, Verweis auf den Generator + kurzer Bereichs-Überblick (Begründung im Diff). Vier migrationsbedingt erledigte Schuld-Notizen aus PROJECT_STATE entfernt (EBENE-2-Audit, Struktur-Doppelpflege, .docx→Markdown, v3.5-Fußzeile). 4 Tests, Suite 346 grün.
+
+**Selbstprüfung (Lesson):** cp1252-`UnicodeEncodeError` an den Baumzeichen im Demo-Lauf gefunden → `main()` erzwingt UTF-8-Ausgabe, bevor Freigabe.
+
+**Offen für die finale Konsolidierung:** PROJECT_STATE nennt noch „Handbook v3.8" statt HANDBOOK.md v4.0 (inhaltlich, bewusst außerhalb Chunk 5).
+
+Gate PASS; No-Loss per Substanz-Checkliste. Governance-Umbau damit abgeschlossen.
+
 ## 2026-07-03 - Governance-Umbau, Chunk 4: Roadmap/Backlog → PROJECT_STATE, Lessons → logbook, Feature-Matrix → CONTRIBUTING
 
 **PO-Freigabe am 2026-07-03** für Chunk 4 (enthält eine CONTRIBUTING-Änderung = 🔴).

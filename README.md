@@ -14,47 +14,25 @@ externe Integrationen.
 
 ## Struktur
 
+Der vollständige, **aktuelle** Verzeichnisbaum wird aus dem Repository generiert, statt von Hand gepflegt zu werden:
+
+```bash
+python scripts/gen_structure.py
 ```
-jarvis/
-├── core/
-│   ├── config.py        # zentrale Config (API-Keys, Modell, Pfade, ...)
-│   ├── models.py         # Plan, Result, Status, Message
-│   ├── ai.py             # AI Layer - Intent-Erkennung (get_plan) + Chat-Antworten (answer)
-│   ├── planner.py        # zerlegt Eingabe in 1..n Schritte
-│   ├── tool_manager.py    # löst Intent -> Command auf
-│   ├── speech.py           # Speech-Schnittstelle (Konsole + optional Piper TTS)
-│   └── single_instance.py   # Single-Instance-Schutz pro memory_dir (ADR-026)
-├── commands/
-│   ├── __init__.py         # Registry + minimaler Dispatch
-│   ├── system.py             # open_program, shutdown_pc
-│   ├── memory.py               # remember_fact, forget_fact
-│   ├── monitor.py               # system_status (ADR-011), analyze_pc (ADR-020), analyze_event_log (ADR-021), disable_/enable_autostart_entry (ADR-022), analyze_/clean_temp_files (ADR-023), enable_/disable_jarvis_autostart (ADR-028)
-│   ├── installer.py               # install_program (winget, ADR-012)
-│   ├── excel.py                     # read_excel (openpyxl, ADR-014)
-│   └── reports.py                     # analyze_report (ADR-015), calculate_kpi (ADR-016)
-├── executor/
-│   └── executor.py             # führt Schritte aus, Bestätigung (inkl. optionalem preview()-Hook, ADR-023), ✓/✗/?-Report
-├── memory/
-│   └── store.py                  # JsonMemoryStore (preferences/history/context)
-├── memory_data/                     # preferences.json, history.json, context.json, jarvis.lock (ADR-026)
-├── logs/                               # YYYY-MM-DD.log
-├── tests/                               # pytest, alles gemockt, kein echter API-Key nötig
-├── docs/
-│   ├── AI_START.md               # Weiterleitung -> CONTRIBUTING.md (abgelöst, ADR-010 superseded)
-│   ├── CHANGELOG.md
-│   ├── PROJECT_STATE.md
-│   ├── logbook.md
-│   ├── handbook/
-│   └── adr/
-├── CONTRIBUTING.md                     # Jarvis Developer Charter - verbindlicher Entwicklungsprozess (Einstieg)
-├── config.example.json
-├── requirements.txt
-├── CHANGELOG.md                        # Verweis auf docs/CHANGELOG.md
-├── main.py                                 # verdrahtet die Pipeline (Konsole)
-├── telegram_main.py                          # separater Einstiegspunkt (Telegram, ADR-018)
-├── jarvis_runtime.py                           # koordinierender Runtime-Einstiegspunkt (ADR-024/025/026/027/028)
-└── telegram_channel.py                           # zweiter Runtime-Kanal - Telegram über die Runtime (ADR-027)
-```
+
+*Warum keine statische Baumgrafik mehr:* Eine handgepflegte Struktur veraltet unweigerlich (sie hatte real fehlende Module) und musste doppelt gepflegt werden. Die generierte Ableitung ist immer aktuell und hat genau eine Quelle — den Code selbst.
+
+Grober Überblick der Bereiche:
+
+- **`core/`** — Kern: Config, Modelle, AI-Layer, Planner, Tool-Manager, Speech, Single-Instance, Provider/Mail-Reader.
+- **`commands/`** — Command-Registry + Commands (System, Memory, Monitor, Installer, Excel, Reports, Mail).
+- **`executor/`** — führt Pläne aus (Bestätigung, ✓/✗/?-Report).
+- **`memory/`** — Kurz-/Langzeitgedächtnis + Mail-Regeln.
+- **`scripts/`** — Werkzeuge: Konsistenz-Gate, Struktur-Generator.
+- **`tests/`** — pytest, alles gemockt.
+- **`docs/`** — `PROJECT_STATE`, `CHANGELOG`, `logbook`, `handbook/HANDBOOK.md` (Verfassung), `adr/`.
+- **Einstiegspunkte** — `main.py` (Konsole), `telegram_main.py`, `jarvis_runtime.py` (Runtime).
+- **Governance** — `CONTRIBUTING.md` (Prozess), `docs/handbook/HANDBOOK.md` (Verfassung), `PERSONAL_DEVELOPMENT.md`.
 
 ## Setup
 
