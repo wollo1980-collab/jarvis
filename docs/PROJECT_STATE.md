@@ -32,6 +32,8 @@ Weiterhin gültig aus v0.7 und davor (Details im Handbook Kap. 13/17/27): PC-Adm
 ## Next Planned Version
 **Nutzwert-Phase „Mit Jarvis leben"** (PO-Entscheidung 03.07.2026). Bewusst **kein** weiterer v0.8-Phasenausbau (z. B. Routing-Intelligenz/Orchestrator) jetzt - stattdessen beweisen, dass das gelegte Fundament einem Menschen *täglich* Last abnimmt. Methode: **Dogfooding-Protokoll** sammeln („Warum muss ich dafür noch eine App öffnen?"), dann gemeinsam die größte Alltagsreibung **end-to-end** bauen, bis echte tägliche Verlässlichkeit. Erfolgsmarke: der erste echte „Ohne Jarvis würde mir das täglich 30 Minuten kosten"-Moment (Handbook Kap. 26). Prozess bewusst **leichter** (keine neue Philosophie/Governance-Zeremonie).
 
+Die Nutzwert-Phase läuft als **benannter Block ohne eigene Versionsnummer** (Präzedenz: Runtime-Baustein; Versionsnummer ggf. später), **getrennt von v0.8**. Erster Baustein: **Mail-Briefing „Was liegt an?"** (erster externer Connector, lokal-lesend, Gmail+Hotmail, gelernte Absenderregeln) - **ADR-031 vorgeschlagen, Umsetzung nach Freigabe ausstehend**.
+
 ## Tests
 Letzter Check am 2026-07-03: volle Suite grün.
 
@@ -63,7 +65,8 @@ Roadmap/Backlog leben vollständig im Handbook (Kap. 13 Roadmap, Kap. 29 Backlog
 Im Code wurden keine `TODO`-/`FIXME`-Marker gefunden.
 
 ## Latest ADR
-`ADR-030 - Minimaler deterministischer Provider-Router in AIEngine (v0.8 Multi-KI, Phase 2)`
+`ADR-030 - Minimaler deterministischer Provider-Router in AIEngine (v0.8 Multi-KI, Phase 2)` (letzte umgesetzte).
+`ADR-031 - Mail-Briefing „Was liegt an?" (Nutzwert-Phase, erster externer Connector)` - **vorgeschlagen, Umsetzung ausstehend**.
 
 ## Latest Architecture Change
 v0.8 „Multi-KI", Phase 1+2 (ADR-029/030): Die KI-Anbindung ist nicht mehr fest an OpenAI gebunden. `AIEngine` delegiert den rohen Modellaufruf an einen austauschbaren `LLMProvider` (`core/providers.py`, OpenAI/Claude), gewählt über `config.ai_provider`. Ein deterministischer `ProviderRouter` erlaubt pro Aufgabentyp (`get_plan`=PLANNING, `answer`=GENERATION) einen eigenen Provider (`planning_provider`/`answer_provider`, Rückfall auf `ai_provider`), mit Fallback auf den Standardprovider. Öffentliche `AIEngine`-Schnittstelle und alle Aufrufer unverändert; `confirmed`-Strip zentral. Details: ADR-029, ADR-030.
