@@ -39,6 +39,8 @@ Die Stufe bestimmt nur, *wie viel PO-Zustimmung vor/nach der Umsetzung* nötig i
 
 **Grundregel:** Jeder Fakt hat **genau eine** Heimat. Andere Dokumente **verlinken**, kopieren nie.
 
+**Konflikt-Hierarchie:** Widersprechen sich Quellen über *dauerhafte* Fakten, gilt `HANDBOOK (Verfassung) > ADR > Code > README`. Für den *aktuellen Stand* ist `PROJECT_STATE` maßgeblich (die Verfassung trägt keinen Status).
+
 ### Grenzregeln (der eigentliche Anti-Duplizierungs-Mechanismus)
 
 | Grenze | Regel |
@@ -87,6 +89,10 @@ Sonderfälle: kein klarer nächster Schritt → Optionen vorschlagen. Drift *wä
 
 `Vorschlag → (ADR falls nötig, §5) → PO-Freigabe → Umsetzung → Tests → Doku-Update (§6) → Gate PASS → Commit (auf Freigabe) → ggf. „fertig" (🔴, PO)`
 
+### Entscheidungs-Prozeduren
+- **30-Minuten-Regel:** Wird über eine Frage länger als ~30 Minuten diskutiert, prüfe *„Kann ein kleiner Prototyp sie schneller beantworten?"* (Ausnahme: grundlegende Architekturentscheidungen dürfen länger reifen).
+- **Design-Review (drei Blickwinkel):** Vor größeren Entscheidungen aus drei Perspektiven prüfen — *Pragmatiker* (Funktioniert das heute?), *Architekt* (In zwei Jahren noch wartbar?), *Produktmanager* (Bringt das Nutzen?).
+
 ---
 
 ## 5. Wann ist eine ADR Pflicht?
@@ -100,6 +106,9 @@ Eine ADR ist erforderlich (🟡), wenn eine Änderung mindestens eines erfüllt:
 
 Keine ADR nötig (🟢) für: Bugfixes, verhaltenswahrende Refactorings, Doku-Pflege, Tests, Umsetzung einer bereits per ADR freigegebenen Sache.
 
+### ADR-Format
+Jede ADR-Datei unter `docs/adr/ADR-NNN.md` folgt der Struktur: **Problem/Kontext · Entscheidung · Begründung · Alternativen · Konsequenzen · Status**. Der `Status` ist `Accepted` / `Superseded` / `Rejected` — nur er ändert sich nachträglich (Superseded stets durch eine *neue* ADR, siehe §6). Umfangreichere ADRs ergänzen Risiken/Teststrategie. Frühe Seed-ADRs (ADR-000–003) liegen ebenfalls als Dateien in `docs/adr/`.
+
 ---
 
 ## 6. Doku-Pflichten (nach jeder abgeschlossenen Änderung)
@@ -109,6 +118,15 @@ Keine ADR nötig (🟢) für: Bugfixes, verhaltenswahrende Refactorings, Doku-Pf
 - **logbook**: Begründung/Lesson + ggf. „PO-Freigabe"-Zeile ergänzen (append).
 - **ADR**: bei Architekturentscheidung anlegen; Status pflegen (Accepted → ggf. Superseded durch neue ADR).
 - Grenzregeln (§1) einhalten: nichts doppelt ablegen.
+
+### CHANGELOG-Format
+Pro Eintrag: Überschrift `## <Version/Baustein> – <Titel> (<Datum>)`, darunter `### Neu` / `### Geändert` (weitere nach Bedarf). Append-only.
+
+### logbook-Eintrag
+Pro Eintrag: **Kontext · Umsetzung · Tests · bewusst nicht Umgesetztes · Lessons Learned**. Neueste Einträge oben. Append-only — nie leeren.
+
+### Konsolidierungsprozess
+Wenn dauerhafte Erkenntnisse es erfordern (oder nach einem abgeschlossenen größeren Baustein): freigegebene ADRs, `PROJECT_STATE`, `logbook` und `CHANGELOG` durchsehen; **dauerhaft gültige** Entscheidungen in die Verfassung (`HANDBOOK`) übernehmen; **temporäre** Punkte aus `PROJECT_STATE` entfernen oder als erledigt markieren. `logbook` und `CHANGELOG` werden dabei **nie geleert** (permanente, anwachsende Historie). Änderungen an Verfassung/Charter sind 🔴 (§12).
 
 ---
 
@@ -144,6 +162,7 @@ stand: <YYYY-MM-DD>
 - Code umgesetzt; **Tests grün** (§9).
 - Doku-Pflichten (§6) erfüllt; **Gate PASS**.
 - ADR-Status aktuell.
+- Keine offenen `TODO`/`FIXME`-Marker im Code (oder bewusst in `PROJECT_STATE` als offene Aufgabe geführt).
 - Nicht selbst verifizierbare Schritte (z. B. echte Live-Tests auf dem Windows-Rechner, bezahlte API-Calls) sind als „**umgesetzt, wartet auf PO-Live-Verifikation**" markiert — der Engineer kann sie nicht selbst schließen.
 - Ein Increment als **„fertig" zu erklären ist 🔴** (PO).
 
@@ -160,8 +179,9 @@ stand: <YYYY-MM-DD>
 ## 10. Git-/Commit-Konventionen
 
 - Auf dem Default-Branch nur mit Bedacht; sonst Branch. (Aktuelle Praxis des Projekts beachten.)
+- **Kleine, für sich lauffähige Commits** — kein roter Zwischenstand.
 - **Commit nur nach Freigabe** (🟡), nachdem das Gate PASST.
-- Commit-Message: prägnant, referenziert die **PO-Freigabe** und ggf. die ADR.
+- Commit-Message: prägnant, mit Präfix nach Art der Änderung (`feat:` · `fix:` · `docs:` · `refactor:` · `test:`), referenziert die **PO-Freigabe** und ggf. die ADR.
 - Abschluss der Commit-Message mit der Co-Author-Zeile des jeweiligen Engineers.
 - Keine Secrets in Git (Handbook/ADR-018). Kein `--no-verify`, kein Umgehen von Hooks.
 
@@ -186,3 +206,16 @@ Jedes „Gesetz"-Dokument trägt seine Version im **eigenen** Kopf — nicht in 
 - `HANDBOOK.md` → `constitution_version`
 
 So erkennt jeder Entwickler/jedes KI-Modell die geltende Governance sofort beim Lesen des jeweiligen Dokuments, ohne Cross-Doc-Abgleich.
+
+---
+
+## 14. Coding Standards
+
+- **Sprache:** Python 3.11+.
+- **Namen:** Dateien/Funktionen/Variablen `snake_case`, Klassen `PascalCase`, Konstanten `UPPER_CASE`.
+- **Imports:** Reihenfolge Standardbibliothek → Third-party → lokale Module, je Gruppe durch eine Leerzeile getrennt.
+- **Typing:** alle Funktionen mit Type Hints.
+- **Docstrings:** jede Funktion mit kurzem Docstring.
+- **Formatter/Linting:** Black (Formatierung), Ruff (Linting).
+- **Kommentare** erklären das *Warum*, nicht das *Was*.
+- Betriebsprinzipien (Testbarkeit, Logging, nie lautlos scheitern, kein `except: pass`) stehen als Prinzipien in der Verfassung (`HANDBOOK`, Engineering-Prinzipien) — hier bewusst nicht wiederholt.

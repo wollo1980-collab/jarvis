@@ -1,5 +1,15 @@
 # Logbook
 
+## 2026-07-03 - Governance-Umbau, Chunk 2: CONTRIBUTING absorbiert dauerhafte Prozessregeln
+
+**PO-Freigabe am 2026-07-03** für Chunk 2. CONTRIBUTING-Änderung = 🔴 (Charter): Entscheidung/Freigabe PO, Entwurf/Umsetzung Engineer.
+
+**Umgesetzt:** Dauerhafte Arbeitsregeln aus den archivierten Handbook-Prozesskapiteln (2/3/5/14/15/19/20/21/28) nach CONTRIBUTING überführt — Konflikt-Hierarchie (§1), Entscheidungs-Prozeduren 30-Min-Regel + Design-Review (§4), ADR-Format (§5), CHANGELOG-/logbook-Format + Konsolidierungsprozess (§6), „keine offenen TODOs" (§8), Git-Präfixe + kleine lauffähige Commits (§10), neue Sektion Coding Standards (§14).
+
+**Bewusst NICHT übernommen** (Status/Roadmap/überholt): versions-spezifische DoD-Checklisten, konkrete Commit-Reihenfolgen, v3.X→v0.Y-Kopplung, „nur zwischen Versionen"/„neue Handbook-Version je Hauptversion" (im Governance-Umbau gelockert), GPT-Mentor/Claude-Reviewer-Zuordnung (durch rollenbasiertes §0 abgelöst), AI_START als Pflichtdoku (superseded).
+
+**Keine Dopplung:** Neue Subsections spezifizieren Format/Struktur; bestehende §6-Pflichten unverändert. §5 verweist auf §6, §14 verweist auf HANDBOOK (Betriebsprinzipien nicht dupliziert). `pyproject.toml`-Verweis in §14 auf PO-Wunsch entfernt (kein realer Projektstandard). Gate PASS (inkl. Handbook-Reinheit). No-Loss über Substanz-Checkliste je Kapitel nachgewiesen.
+
 ## 2026-07-03 - Governance-Umbau, Chunk 1: Handbook nach Markdown migriert + konsolidiert (constitution_version 4.0)
 
 **PO-Freigabe am 2026-07-03** für Chunk 1. Handbook-Migration = 🔴 (Verfassungsebene): Entscheidung/Freigabe PO, Entwurf/Umsetzung Engineer.
