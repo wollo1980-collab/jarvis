@@ -1,7 +1,15 @@
+---
+version: "v0.8 P1+2 (Multi-KI) abgeschlossen; Nutzwert-Phase gestartet"
+active_increment: governance-rebuild
+tests: 327
+latest_adr: 31
+stand: 2026-07-03
+---
+
 # PROJECT STATE
 
-Stand: 2026-07-03
 Quelle: `README.md`, `docs/handbook/JARVIS_MASTER_HANDBOOK_v3_8.docx`, `docs/logbook.md`, `docs/CHANGELOG.md`, `docs/adr/*.md`
+Der maschinenlesbare Kopf (oben) ist die Single Source der Kern-Kennzahlen; das Konsistenz-Gate prüft ihn gegen die Realität (siehe CONTRIBUTING §7).
 
 **Hinweis (ab v3.6, siehe Handbook Kap. 19):** Dieses Dokument ist ein temporärer Arbeitsbereich zwischen zwei Handbook-Versionen, keine dauerhafte Wissensquelle. Nach jedem Konsolidierungsprozess wird es auf den aktuellen Projektstatus zurückgebaut - dauerhaft gültige Entscheidungen (Roadmap, Backlog, Governance-Regeln, Leitbild) leben im Handbook, nicht hier.
 
@@ -38,10 +46,9 @@ Umgesetzt in der Nutzwert-Phase (Details: `docs/CHANGELOG.md`, ADR-031):
 - **Mail-Briefing** - `commands/mail.py` (check_mail / show_mail_advertising / mail_hide_sender / mail_keep_sender, alle Sicherheitsstufe 0), `core/mail_reader.py` (imaplib/email stdlib, **read-only** via `select(readonly=True)`+`BODY.PEEK`, nur Kopfzeilen), `memory/mail_rules.py` (lokale, korrigierbare Absenderregeln - Regel schlägt Heuristik). `mail_accounts` in Config (Secrets per Env). Rein lokal, kein Mailinhalt an eine KI. `core/ai.py` unverändert.
 
 ## Tests
-Letzter Check am 2026-07-03: volle Suite grün.
+Volle Suite grün. Autoritative Zahl (`tests`) und Datum (`stand`) stehen im Kopf.
 
-### Test Status
-`327 / 327` bestanden (venv-Interpreter; für die volle Suite ist ein beschreibbares `--basetemp` nötig, da die Sandbox sonst den System-Temp der `tmp_path`-Fixture blockiert - kein Testdefekt).
+Hinweis zum Testlauf: venv-Interpreter; für die volle Suite ist ein beschreibbares `--basetemp` nötig, da die Sandbox sonst den System-Temp der `tmp_path`-Fixture blockiert - kein Testdefekt.
 
 ### Known Failure
 Keiner aktuell.
@@ -67,9 +74,6 @@ Roadmap/Backlog leben vollständig im Handbook (Kap. 13 Roadmap, Kap. 29 Backlog
 - Den `preview()`-Hook (ADR-023) für weitere schreibende PC-Admin-Commands nutzen, sobald umgesetzt.
 
 Im Code wurden keine `TODO`-/`FIXME`-Marker gefunden.
-
-## Latest ADR
-`ADR-031 - Mail-Briefing „Was liegt an?" (Nutzwert-Phase, erster externer Connector)` - **umgesetzt** (`commands/mail.py`, `core/mail_reader.py`, `memory/mail_rules.py`).
 
 ## Latest Architecture Change
 **Erster externer Connector (ADR-031, Nutzwert-Phase):** neuer `commands/mail.py` mit read-only IMAP-Zugriff (`core/mail_reader.py`, stdlib) und einem lokalen, korrigierbaren Präferenzspeicher (`memory/mail_rules.py`). Bewusst noch KEINE generische Connector-Abstraktion (YAGNI - erst beim zweiten Dienst); der Command darf konkret sein. `core/ai.py`/Executor-Kern unverändert.
