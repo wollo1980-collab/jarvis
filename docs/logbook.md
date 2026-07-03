@@ -1,5 +1,13 @@
 # Logbook
 
+## 2026-07-03 - Governance-Umbau, Chunk 3: PERSONAL_DEVELOPMENT.md (persönliche Entwicklung ausgelagert)
+
+**PO-Freigabe am 2026-07-03** für Chunk 3. Neue Datei `PERSONAL_DEVELOPMENT.md` = 🟡/Doku (kein Verfassungs-/Charter-Dokument).
+
+**Umgesetzt:** Persönliche/karrierebezogene Inhalte aus dem archivierten Handbook (Kap. 8 Lernpfad, 22 Academy, 23 Portfolio, 24 Karriere + Kap.-0-„Gesamtbild") in ein eigenes, zeitloses Entwicklungs-/Karrierehandbuch überführt. Karrierepipeline bewusst als **Vision** (keine Reihenfolge/Termine).
+
+**Bewusst weggelassen:** Versions-/Statuskopplungen (Tab.-5-„v0.x"-Spalte, Tab.-15-„Jarvis bekommt"+✅, Tab.-17-Projektliste), Modellvergleich (technische Entscheidung → ADR/PROJECT_STATE), Lessons-Learned-Tabelle (→ logbook, Chunk 4). Zwei persönliche Lernprinzipien bewusst als *Lernhaltung* belassen (kein HANDBOOK-Verweis — PO-Entscheidung: unterschiedliche Zielsetzung der Dokumente reicht als Trennung). Gate PASS; No-Loss per Substanz-Checkliste.
+
 ## 2026-07-03 - Governance-Umbau, Chunk 2: CONTRIBUTING absorbiert dauerhafte Prozessregeln
 
 **PO-Freigabe am 2026-07-03** für Chunk 2. CONTRIBUTING-Änderung = 🔴 (Charter): Entscheidung/Freigabe PO, Entwurf/Umsetzung Engineer.
