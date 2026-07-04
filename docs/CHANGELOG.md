@@ -1,5 +1,13 @@
 # Changelog
 
+## Nutzwert-Phase - Repo-gebundene Pfade fuer Runtime und Autostart (05.07.2026)
+
+### Geaendert
+- `core/config.py`: Relative Werte fuer `memory_dir` und `log_dir` aus `config.json` werden jetzt gegen `BASE_DIR` statt gegen das aktuelle Prozess-cwd aufgeloest. Dadurch schreiben headless Runtime (`jarvis_runtime.py`) und Jarvis-Eigenstart bei Standard-Config wieder unter dem Installationspfad (z. B. `C:\KI\jarvis\logs` und `C:\KI\jarvis\memory_data`). Absolute Pfade bleiben unveraendert moeglich.
+
+### Tests
+- Neue Konfigurations-Tests pruefen relative und absolute Pfade. Die Vollsuite laeuft auf Windows wieder komplett gruen (348 Tests).
+
 ## Nutzwert-Phase: Mail-Briefing „Was liegt an?" (ADR-031, 03.07.2026)
 
 Erster Baustein der Nutzwert-Phase und **erster externer Connector**: Jarvis

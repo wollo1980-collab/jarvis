@@ -7,6 +7,7 @@ geforderten Smoke-Test-Fälle ab:
 """
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -82,10 +83,14 @@ def test_end_to_end_tool_execution(tmp_path: Path):
     executor = Executor(speech, ai)
     memory = JsonMemoryStore(tmp_path, max_history_entries=20)
 
-    with patch("commands.system.shutil.which", return_value="/usr/bin/excel"), patch(
-        "commands.system.subprocess.Popen"
-    ):
-        response = _run_turn("öffne excel", planner, executor, memory)
+    if os.name == "nt":
+        with patch("commands.system.os.startfile", create=True):
+            response = _run_turn("öffne excel", planner, executor, memory)
+    else:
+        with patch("commands.system.shutil.which", return_value="/usr/bin/excel"), patch(
+            "commands.system.subprocess.Popen"
+        ):
+            response = _run_turn("öffne excel", planner, executor, memory)
 
     assert response.startswith("✓")
     assert "geöffnet" in response

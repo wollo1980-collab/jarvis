@@ -1,9 +1,9 @@
 ---
 version: "v0.8 P1+2 (Multi-KI) abgeschlossen; Nutzwert-Phase gestartet"
 active_increment: nutzwert-phase
-tests: 346
+tests: 348
 latest_adr: 31
-stand: 2026-07-04
+stand: 2026-07-05
 ---
 
 # PROJECT STATE
@@ -51,6 +51,7 @@ Bewusst nicht in dieser Phase: Framework-Ausbau, Architektur auf Vorrat, Feature
 
 Umgesetzt in der Nutzwert-Phase (Details: `docs/CHANGELOG.md`, ADR-031):
 - **Mail-Briefing** - `commands/mail.py` (check_mail / show_mail_advertising / mail_hide_sender / mail_keep_sender, alle Sicherheitsstufe 0), `core/mail_reader.py` (imaplib/email stdlib, **read-only** via `select(readonly=True)`+`BODY.PEEK`, nur Kopfzeilen), `memory/mail_rules.py` (lokale, korrigierbare Absenderregeln - Regel schlägt Heuristik). `mail_accounts` in Config (Secrets per Env). Rein lokal, kein Mailinhalt an eine KI. `core/ai.py` unverändert.
+- **Runtime-/Autostart-Pfadfix** - `core/config.py` löst relative `memory_dir`-/`log_dir`-Werte aus `config.json` jetzt gegen `BASE_DIR` statt gegen das aktuelle Prozess-cwd auf. Damit schreiben `jarvis_runtime.py` und der Jarvis-Eigenstart bei relativer Standard-Config wieder repo-gebunden unter dem Installationspfad; absolute Pfade bleiben unverändert möglich.
 
 ## Tests
 Volle Suite grün. Autoritative Zahl (`tests`) und Datum (`stand`) stehen im Kopf.
@@ -66,7 +67,7 @@ Keiner aktuell.
 - **Live-Test Mail-Briefing (ADR-031)** auf dem echten Windows-Rechner: `mail_accounts` in `config.json` eintragen, Gmail-**App-Passwort** (2FA) als Env-Variable setzen, „was liegt an?" real testen - bisher nur gemockt. **Hotmail-Auth verifizieren** (Microsoft baut Basis-Auth/App-Passwörter ab; ggf. OAuth statt IMAP-Passwort).
 - **Live-Test Claude-Provider** mit echtem `ANTHROPIC_API_KEY` auf dem echten Windows-Rechner - bewusst verschobener manueller Verifikationsschritt (kein offener Implementierungsfehler). Pfad ist offline bis zur SDK-Grenze verifiziert; nur der bezahlte End-zu-End-Call steht aus.
 - Manueller Live-Test der übrigen Kernfunktionen mit echtem API-Key auf dem echten Windows-Rechner (Definition of Done, CONTRIBUTING §8) - bisher nur automatisiert/gemockt. `install_program` real ausführen ist ein bewusster, expliziter Schritt und sollte gezielt vom Product Owner freigegeben/begleitet werden.
-- Manueller Smoke-Test der Jarvis-Runtime mit echtem Bot-Token (TelegramChannel) sowie ein realer Jarvis-Eigenstart-Test nach Windows-Anmeldung - bisher nur automatisiert/gemockt (Definition of Done, CONTRIBUTING §8).
+- Manueller Smoke-Test der Jarvis-Runtime mit echtem Bot-Token (TelegramChannel) sowie ein realer Jarvis-Eigenstart-Test nach Windows-Anmeldung mit dem korrigierten repo-gebundenen Pfadverhalten - der echte Login-Lauf steht weiter aus (Definition of Done, CONTRIBUTING §8).
 - Piper-Sprachmodell herunterladen und `tts_enabled: true` für einen Live-TTS-Test setzen.
 - `anthropic` ist im `.venv` installiert (0.116.0); `requirements.txt` führt es bewusst optional/auskommentiert (lazy Import, ADR-029).
 - `.git_broken_5/` (Reste eines frühen, abgebrochenen git-init-Versuchs) liegt noch im Arbeitsordner, per `.gitignore` ausgeschlossen - bewusst nicht gelöscht (keine destruktive Aktion ohne Rückfrage).

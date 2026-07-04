@@ -13,6 +13,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 CONFIG_FILE = BASE_DIR / "config.json"
 
 
+def _resolve_repo_path(value: str | Path) -> Path:
+    """Bindet relative Config-Pfade an das Repo statt ans Prozess-cwd."""
+    path = Path(value)
+    return path if path.is_absolute() else BASE_DIR / path
+
+
 @dataclass
 class Config:
     # API
@@ -125,8 +131,8 @@ class Config:
             kokoro_voices_path=data.get("kokoro_voices_path", cls.kokoro_voices_path),
             kokoro_voice=data.get("kokoro_voice", cls.kokoro_voice),
             kokoro_lang=data.get("kokoro_lang", cls.kokoro_lang),
-            memory_dir=Path(data.get("memory_dir", cls.memory_dir)),
-            log_dir=Path(data.get("log_dir", cls.log_dir)),
+            memory_dir=_resolve_repo_path(data.get("memory_dir", cls.memory_dir)),
+            log_dir=_resolve_repo_path(data.get("log_dir", cls.log_dir)),
             max_history_entries=data.get("max_history_entries", cls.max_history_entries),
             temperature=data.get("temperature", cls.temperature),
             timeout=data.get("timeout", cls.timeout),

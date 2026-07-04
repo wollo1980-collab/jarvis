@@ -1,5 +1,17 @@
 # Logbook
 
+## 2026-07-05 - Bugfix: repo-gebundene Pfadauflösung fuer Runtime und Autostart
+
+**Kontext:** In der Nutzwert-Phase fiel im echten Benutzerkontext auf, dass die headless Runtime bei Autostart unter `C:\Users\wollo\logs` und `C:\Users\wollo\memory_data` schrieb. Die Ursachenanalyse zeigte: `config.json` wird zwar repo-gebunden geladen, aber `core/config.py` übernahm relative Werte fuer `memory_dir` und `log_dir` bisher unveraendert als `Path(...)`. Dadurch wurden sie implizit gegen das aktuelle Working Directory statt gegen `BASE_DIR` aufgeloest. **Governance-Einordnung:** gruener Bugfix, keine ADR (CONTRIBUTING §3/§5).
+
+**Umsetzung:** In `core/config.py` loest ein kleiner Helper relative Config-Pfade jetzt explizit gegen `BASE_DIR` auf. Absolute Pfade bleiben unveraendert. Es gab bewusst keine Aenderung an der Autostart-Mechanik selbst, keine direkte Registry-Behandlung und keine Runtime-Architektur-Aenderung.
+
+**Tests:** Neue Tests decken relative und absolute Pfade in `Config.load()` ab. Zusaetzlich wurde der bestehende End-to-End-Test `test_end_to_end_tool_execution` plattformneutral stabilisiert, damit die Vollsuite unter Windows denselben Codepfad wie der Produktcode nutzt (`os.startfile` statt eines POSIX-Mocks). Vollsuite 348/348 gruen, Gate PASS.
+
+**Bewusst nicht umgesetzt:** Keine direkte Registry-Aenderung, keine Aenderung an `jarvis_runtime.py`, keine neuen Config-Optionen, kein Auto-Migrationspfad fuer bestehende absolute Nutzerpfade, kein Commit.
+
+**Lessons Learned:** Eine repo-gebundene Config-Datei erzeugt noch kein repo-gebundenes Verhalten. Sobald Pfadwerte relativ bleiben, entscheidet der Prozesskontext. Gerade fuer headless Starts muss die Pfadauflösung deshalb explizit an `BASE_DIR` gebunden werden.
+
 ## 2026-07-04 - Produktfokus: Inbetriebnahme vor Features
 
 **PO-Entscheidung am 2026-07-04.** Jarvis wird ab jetzt nicht mehr primär als Architekturprojekt betrachtet, sondern als Produkt, das in den Alltag kommt - vom Projekt zum täglichen Begleiter.
