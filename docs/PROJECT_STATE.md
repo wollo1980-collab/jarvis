@@ -40,7 +40,14 @@ Weiterhin gültig aus v0.7 und davor (Details in den jeweiligen ADRs): PC-Admin 
 ## Next Planned Version
 **Nutzwert-Phase „Mit Jarvis leben"** (PO-Entscheidung 03.07.2026). Bewusst **kein** weiterer v0.8-Phasenausbau (z. B. Routing-Intelligenz/Orchestrator) jetzt - stattdessen beweisen, dass das gelegte Fundament einem Menschen *täglich* Last abnimmt. Methode: **Dogfooding-Protokoll** sammeln („Warum muss ich dafür noch eine App öffnen?"), dann gemeinsam die größte Alltagsreibung **end-to-end** bauen, bis echte tägliche Verlässlichkeit. Erfolgsmarke: der erste echte „Ohne Jarvis würde mir das täglich 30 Minuten kosten"-Moment (HANDBOOK.md Teil 1 / Leitplanke 9 „Erfolg = weniger Last, nicht mehr Funktion"). Prozess bewusst **leichter** (keine neue Philosophie/Governance-Zeremonie).
 
-Die Nutzwert-Phase läuft als **benannter Block ohne eigene Versionsnummer** (Präzedenz: Runtime-Baustein; Versionsnummer ggf. später), **getrennt von v0.8**. **Baustein 1 umgesetzt: Mail-Briefing „Was liegt an?"** (ADR-031) - erster externer Connector, lokal-lesend, gelernte Absenderregeln. Nächster Schritt: weiter Dogfooding-Reibungen sammeln.
+Die Nutzwert-Phase läuft als **benannter Block ohne eigene Versionsnummer** (Präzedenz: Runtime-Baustein; Versionsnummer ggf. später), **getrennt von v0.8**. **Baustein 1 umgesetzt: Mail-Briefing „Was liegt an?"** (ADR-031) - erster externer Connector, lokal-lesend, gelernte Absenderregeln.
+
+**Präzisiert (PO-Entscheidung 04.07.2026): Inbetriebnahme vor Features.** Jarvis wird ab jetzt primär als Produkt behandelt, das in den Alltag kommt. Reihenfolge der Phase:
+1. **Live-Inbetriebnahme** der offenen realen Pfade (siehe „Technische TODOs": `setx`-Variablen, Autostart, Mail-Briefing real, Claude-Provider-Call, TTS).
+2. **Eine Woche echte Nutzung** mit Reibungsprotokoll - bewusst ohne neue Features.
+3. Danach Auswahl **genau einer** größten Reibung als nächstes Nutzwert-Inkrement (Feature-Entscheidung nach CONTRIBUTING §4; Nutzungslauf und bewusster Abschluss je Baustein).
+
+Bewusst nicht in dieser Phase: Framework-Ausbau, Architektur auf Vorrat, Feature-Breite. M3 (README-Body-Chunk) bleibt separates Hygiene-Paket. Nächster Schritt: Schritt 1 (Live-Inbetriebnahme).
 
 Umgesetzt in der Nutzwert-Phase (Details: `docs/CHANGELOG.md`, ADR-031):
 - **Mail-Briefing** - `commands/mail.py` (check_mail / show_mail_advertising / mail_hide_sender / mail_keep_sender, alle Sicherheitsstufe 0), `core/mail_reader.py` (imaplib/email stdlib, **read-only** via `select(readonly=True)`+`BODY.PEEK`, nur Kopfzeilen), `memory/mail_rules.py` (lokale, korrigierbare Absenderregeln - Regel schlägt Heuristik). `mail_accounts` in Config (Secrets per Env). Rein lokal, kein Mailinhalt an eine KI. `core/ai.py` unverändert.

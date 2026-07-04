@@ -1,5 +1,17 @@
 # Logbook
 
+## 2026-07-04 - Produktfokus: Inbetriebnahme vor Features
+
+**PO-Entscheidung am 2026-07-04.** Jarvis wird ab jetzt nicht mehr primär als Architekturprojekt betrachtet, sondern als Produkt, das in den Alltag kommt - vom Projekt zum täglichen Begleiter.
+
+**Entschiedene Reihenfolge der Nutzwert-Phase:** (1) Live-Inbetriebnahme der offenen realen Pfade, (2) eine Woche echte Nutzung mit Reibungsprotokoll ohne neue Features, (3) danach genau eine größte Reibung als nächstes Nutzwert-Inkrement.
+
+**Bewusst ausgeschlossen für diese Phase:** Framework-Ausbau, Architektur auf Vorrat, Feature-Breite. Leitgedanke: Außergewöhnlich heißt nicht viele Funktionen, sondern zuverlässig, loyal und täglich nützlich (HANDBOOK Teil 1, Leitplanke 9).
+
+**Offen bleibende separate Pakete:** M3 README-Body-Chunk (eigene Freigabe) · `.git_broken_5`-Löschung (PO-Entscheid) · M4 passive Pattern-Bewährung (beim nächsten Baustein-Abschluss anwenden).
+
+Keine Code-Änderung; PROJECT_STATE-Fokus entsprechend präzisiert. Gate PASS.
+
 ## 2026-07-04 - Migration M1+M2: Assoziierte Angleichung an das AI Project Framework v1.0
 
 **PO-Freigabe am 2026-07-04 für den Migrationsplan** (M1 = Charter-Änderung = 🔴, `charter_version` 1.1 → 1.2).
