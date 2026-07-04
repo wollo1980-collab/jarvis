@@ -1,5 +1,30 @@
 # Logbook
 
+## 2026-07-04 - Migration M1+M2: Assoziierte Angleichung an das AI Project Framework v1.0
+
+**PO-Freigabe am 2026-07-04 für den Migrationsplan** (M1 = Charter-Änderung = 🔴, `charter_version` 1.1 → 1.2).
+
+**Kontext:** Das AI Project Framework — ursprünglich aus Jarvis extrahiert — liegt nach zwei Härtungswellen und einem validierenden Greenfield-Dogfooding (Prompt Manager v1.0) als v1.0 vor. Die Delta-Analyse ergab: ~80 % Deckungsgleichheit; eine Vollmigration scheitert prinzipiell nur an der AI_GUIDELINES-Pflicht (dort ADR-001, hier ADR-010 — beide gültig). Gewählter Migrationstyp: **assoziierte Angleichung** — bewusste Einzelübernahmen, formaler Austauschkanal, dokumentierte Abweichungen.
+
+**Umgesetzt (M1, Charter 1.2):**
+- Neuer §15 „Austausch mit dem AI Project Framework": Rückfluss über `docs/framework_feedback.md`, Framework-Übernahmen nur bewusst per Freigabe, Abweichungsregister (AI_GUIDELINES/ADR-010, Zwei-Rollen-Modell, Reinheits-Check, Struktur/Namen).
+- Konflikt-Hierarchie um die Charter ergänzt (`HANDBOOK > CONTRIBUTING > ADR > Code > README`).
+- §5: Testinfrastruktur-Abgrenzung (erstmalige Einführung 🟡/ADR, weitere Tests 🟢) — Framework-Erkenntnis FF-006.
+- §6: Routinepflege von PROJECT_STATE ausdrücklich 🟢, Struktur-/Feld-/Regeländerungen 🟡 — Framework-Erkenntnis aus dem Dogfooding.
+- §7: WARN- und SKIP-Semantik prozessual normiert (stand bisher nur im Gate-Skript).
+- §11: Sicherheitsgetriebene Versionssteuerung innerhalb freigegebener Abhängigkeiten als Korrektur mit Nachfreigabe + ADR-Nachpflege — Framework-Erkenntnis FF-005.
+- §1: PERSONAL_DEVELOPMENT in die Dokument-Landkarte aufgenommen (offener Welle-0-Restpunkt).
+
+**Umgesetzt (M2):**
+- PROJECT_STATE „## Git": manuelle Commit-Spiegelung entfernt (aus `git log` ableitbar); nur nicht-ableitbare Fakten bleiben. Granularitäts-Leitplanke aus Framework-PROJECT_INIT.
+- `docs/framework_feedback.md` angelegt mit FF-J-001 (PROJECT_INIT deckt Bestandsprojekt-Adoption nicht ab — die Lücke, die diese Migration selbst aufdeckte) und FF-J-002 (Reinheits-Check als laufender Datenpunkt).
+
+**Bewusst NICHT migriert (Abweichungsregister, §15):** AI_GUIDELINES-Einführung · Vier-Rollen-Modell · Entfernung des Reinheits-Checks · Struktur-/Namensangleichungen. **Offen als eigene Pakete:** M3 README-Body-Chunk (vor dem nächsten Nutzwert-Baustein) · `.git_broken_5`-Löschung (separater PO-Entscheid) · M4 passive Pattern-Bewährung (beim nächsten Increment-Abschluss die Framework-Pattern-Kandidaten „Bewusster Abschluss" und „Nutzungslauf" bewusst anwenden und vermerken → möglicher n=2-Rückfluss).
+
+**Lesson:** Ein Bestandsprojekt migriert man nicht auf ein Framework — man gleicht bewusst an und macht die Differenz sichtbar. Das Abweichungsregister verwandelt Divergenz von einem stillen Risiko in einen gepflegten Zustand.
+
+Gate PASS vor und nach den Änderungen; Suite unverändert (reine Doku-Änderungen).
+
 ## 2026-07-04 - Welle 0: Doku-Realitäts-Korrekturen aus dem Architektur-Audit
 
 **PO-Freigabe am 2026-07-04 für Welle 0** (enthält eine Charter-Korrektur = 🔴, `charter_version` 1.0 → 1.1).

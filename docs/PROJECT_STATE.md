@@ -99,17 +99,4 @@ Davor - v0.8 „Multi-KI", Phase 1+2 (ADR-029/030): Die KI-Anbindung ist nicht m
 - Jarvis-Eigenstart (ADR-028): fester HKCU-Run-Key-Eintragsname `"Jarvis"` setzt eine einzige Installation pro Windows-Benutzerkonto voraus; veraltete Registry-Pfade nach Projekt-/Interpreter-Umzug werden nicht automatisch repariert (Selbstbedienung per erneutem `enable_jarvis_autostart`).
 
 ## Git
-Frühere Historie bis `v0.7` (getaggt, `a7eb86d`) und der Infrastruktur-/Runtime-Baustein (ADR-024-028) siehe Handbook / frühere PROJECT_STATE-Stände. Seither (alle auf `main`, ungetaggt):
-- `86c5918` - Konsolidierung Handbook v3.7 (Infrastruktur-/Runtime-Baustein)
-- `b5fea6e` - Doku: dauerhafte Windows-Env-Vars (`setx`) für Telegram/Autostart
-- `af83614` - Fix: TelegramChannel thread-sicher stoppen (kein `RuntimeError`)
-- `428b9c6` - Fix: Bot-Token nicht mehr über httpx-INFO loggen
-- `6d0c738` - Fix: vom Modell geliefertes `confirmed` am Trust Boundary entfernen
-- `5291cd3` - Doku: ADR-029 (Provider-Abstraktion + Claude, v0.8 Phase 1)
-- `0373358` - v0.8 Phase 1: Provider-Abstraktion + Claude (ADR-029)
-- `65f707c` - Doku: v0.8 Phase 1 technisch abgeschlossen (Logbook)
-- `f35f0f7` - Doku: ADR-030 (deterministischer Provider-Router, v0.8 Phase 2)
-- `4b3b44d` - v0.8 Phase 2: Provider-Router (ADR-030)
-- `ae233fc` - Handbook v3.8: Leitbild/DNA verankert (Produktidentität, EBENE 1)
-
-Frühere Versionen (v0.1-v0.3) existieren nur als Text in `docs/CHANGELOG.md`/`docs/logbook.md`.
+Die Commit-Historie wird hier nicht mehr gespiegelt — sie ist über `git log` und die getaggten Versionen (`v0.4`–`v0.7`) direkt ableitbar (Granularitäts-Leitplanke, Framework-Übernahme M2). Nicht aus Git ableitbar und deshalb hier festgehalten: Frühere Versionen (v0.1–v0.3) existieren nur als Text in `docs/CHANGELOG.md`/`docs/logbook.md`; `v0.8` ist bewusst nicht getaggt (Version nicht abgeschlossen, siehe „Current Version").
