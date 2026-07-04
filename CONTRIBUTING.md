@@ -1,7 +1,7 @@
 ---
-charter_version: 1.1
+charter_version: 1.2
 gilt_fuer: Alle Entwickler an Jarvis (Mensch oder KI) in der Lead-Software-Engineer-Rolle
-status: In Kraft (charter_version 1.1). Umsetzungsstand der beschriebenen Mechanismen: siehe PROJECT_STATE.
+status: In Kraft (charter_version 1.2). Umsetzungsstand der beschriebenen Mechanismen: siehe PROJECT_STATE.
 aendern: Nur mit PO-Freigabe (Rot). Entwurf/Umsetzung durch den Engineer, Entscheidung/Freigabe durch den PO.
 ---
 
@@ -36,10 +36,11 @@ Die Stufe bestimmt nur, *wie viel PO-Zustimmung vor/nach der Umsetzung* nötig i
 | Was hat sich (nutzerseitig) geändert | CHANGELOG |
 | Warum wurde etwas so gemacht · Lesson Learned | logbook |
 | *Wie* entwickelt wird (dieser Prozess) | CONTRIBUTING (dieses Dokument) |
+| Persönliche Entwicklung · Lernpfade · Karrierevision | PERSONAL_DEVELOPMENT |
 
 **Grundregel:** Jeder Fakt hat **genau eine** Heimat. Andere Dokumente **verlinken**, kopieren nie.
 
-**Konflikt-Hierarchie:** Widersprechen sich Quellen über *dauerhafte* Fakten, gilt `HANDBOOK (Verfassung) > ADR > Code > README`. Für den *aktuellen Stand* ist `PROJECT_STATE` maßgeblich (die Verfassung trägt keinen Status).
+**Konflikt-Hierarchie:** Widersprechen sich Quellen über *dauerhafte* Fakten, gilt `HANDBOOK (Verfassung) > CONTRIBUTING (Charter) > ADR > Code > README`. Für den *aktuellen Stand* ist `PROJECT_STATE` maßgeblich (die Verfassung trägt keinen Status).
 
 ### Grenzregeln (der eigentliche Anti-Duplizierungs-Mechanismus)
 
@@ -116,6 +117,8 @@ Eine ADR ist erforderlich (🟡), wenn eine Änderung mindestens eines erfüllt:
 
 Keine ADR nötig (🟢) für: Bugfixes, verhaltenswahrende Refactorings, Doku-Pflege, Tests, Umsetzung einer bereits per ADR freigegebenen Sache.
 
+Zur Abgrenzung bei Tests: Die **erstmalige Einführung einer Testinfrastruktur** (Test-Framework, zentrale Testwerkzeuge) ist als neue Abhängigkeit/neues zentrales Werkzeug ADR-pflichtig (🟡). Weitere Tests innerhalb der bestehenden Testinfrastruktur sind 🟢.
+
 ### ADR-Format
 Jede ADR-Datei unter `docs/adr/ADR-NNN.md` folgt der Struktur: **Problem/Kontext · Entscheidung · Begründung · Alternativen · Konsequenzen · Status**. Der `Status` ist `Accepted` / `Superseded` / `Rejected` — nur er ändert sich nachträglich (Superseded stets durch eine *neue* ADR, siehe §6). Umfangreichere ADRs ergänzen Risiken/Teststrategie. Die ADR-Reihe beginnt mit `ADR-004` (Beginn der Git-Historie bei v0.4); Entscheidungen aus der Zeit davor (v0.1–v0.3) sind nur als Text in `docs/CHANGELOG.md`/`docs/logbook.md` überliefert, nicht als ADR-Dateien.
 
@@ -123,7 +126,7 @@ Jede ADR-Datei unter `docs/adr/ADR-NNN.md` folgt der Struktur: **Problem/Kontext
 
 ## 6. Doku-Pflichten (nach jeder abgeschlossenen Änderung)
 
-- **PROJECT_STATE** aktualisieren: Version/Teststand/aktives Increment/offene Aufgaben — **und den maschinenlesbaren Kopf** (§7) konsistent halten.
+- **PROJECT_STATE** aktualisieren: Version/Teststand/aktives Increment/offene Aufgaben — **und den maschinenlesbaren Kopf** (§7) konsistent halten. Diese routinemäßige Pflege ist 🟢 (§3); Änderungen an **Struktur, Feldern des maschinenlesbaren Kopfs oder Regeln** von PROJECT_STATE sind dagegen 🟡.
 - **CHANGELOG**: nutzerseitige Änderung ergänzen (append).
 - **logbook**: Begründung/Lesson + ggf. „PO-Freigabe"-Zeile ergänzen (append).
 - **ADR**: bei Architekturentscheidung anlegen; Status pflegen (Accepted → ggf. Superseded durch neue ADR).
@@ -162,6 +165,8 @@ stand: <YYYY-MM-DD>
 
 **Wann:** Session-Start (Runbook 5), vor jedem Commit, in CI beim Push.
 **FAIL bedeutet:** STOP — nicht bauen, nicht committen. Melden.
+**WARN bedeutet:** Arbeit darf weitergehen; die Abweichung wird gemeldet und zeitnah behoben.
+**SKIP bedeutet:** Eine Prüfung wurde mangels Voraussetzung übersprungen — ein SKIP gilt nicht als Bestehen der betroffenen Prüfung.
 
 *Hinweis:* Solange das Gate-Skript nicht vorhanden ist, führt der Engineer die obigen Prüfungen manuell nach dieser Liste durch; der Umsetzungsstand wird in PROJECT_STATE geführt.
 
@@ -201,6 +206,8 @@ stand: <YYYY-MM-DD>
 
 Alles, was **handelt** statt nur zu lesen, **fremde/nicht-vertrauenswürdige Inhalte** verarbeitet oder **Secrets/Daten** berührt, ist mindestens 🟡 und erfordert einen expliziten Sicherheits-Review gegen die Handbook-Leitplanke „Wissen fließt, Handeln braucht Erlaubnis". Prompt-Injection ist als Standard-Risiko mitzudenken, sobald fremde Inhalte in ein Modell fließen, das Aktionen auslösen kann.
 
+Sicherheitsgetriebene Versionssteuerung **innerhalb bereits freigegebener Abhängigkeiten** (z. B. Pinning einer verwundbaren transitiven Version) ist eine Korrektur, keine neue Architekturentscheidung: Sie braucht eine ausdrückliche Nachfreigabe (🟡) und die Nachpflege der betroffenen ADR.
+
 ---
 
 ## 12. Änderung dieser Charter und des Handbooks (Meta)
@@ -229,3 +236,17 @@ So erkennt jeder Entwickler/jedes KI-Modell die geltende Governance sofort beim 
 - **Formatter/Linting:** Black (Formatierung), Ruff (Linting).
 - **Kommentare** erklären das *Warum*, nicht das *Was*.
 - Betriebsprinzipien (Testbarkeit, Logging, nie lautlos scheitern, kein `except: pass`) stehen als Prinzipien in der Verfassung (`HANDBOOK`, Engineering-Prinzipien) — hier bewusst nicht wiederholt.
+
+---
+
+## 15. Austausch mit dem AI Project Framework
+
+Jarvis ist das Schwesterprojekt des AI Project Framework (Framework-Repository: `C:\KI\Jarvis Codex\ai-project-framework`, Stand v1.0). Jarvis ist **kein** abgeleitetes Zielprojekt, sondern assoziiert: Die eigene Governance bleibt maßgeblich, der Austausch läuft bewusst und dokumentiert in beide Richtungen.
+
+- **Jarvis → Framework:** Framework-relevante Erkenntnisse werden in `docs/framework_feedback.md` gesammelt (je Eintrag: Herkunft, konkreter Beleg, Änderungsvorschlag — analog Framework-CONTRIBUTING Abschnitt 15). Sie werden nie direkt im Framework-Repository umgesetzt.
+- **Framework → Jarvis:** Framework-Änderungen werden nur bewusst und einzeln übernommen — per Freigabe nach der Delegations-Matrix (§3), nie automatisch. Übernahmen werden im logbook protokolliert.
+- **Abweichungsregister:** Bewusste, dauerhafte Abweichungen vom Framework werden hier geführt, damit Divergenz sichtbar bleibt statt still zu wachsen:
+  - Kein `AI_GUIDELINES.md` — abgeschafft per ADR-010; gestützt durch den Dogfooding-Befund des Frameworks (Nutzung nur in der Aufbauphase eines Projekts).
+  - Zwei-Rollen-Modell (PO/Engineer) mit Delegations-Matrix statt des Vier-Rollen-Modells.
+  - Handbook-Reinheits-Check im Konsistenz-Gate (im Framework bewusst nicht übernommen; läuft hier als fortlaufender Datenpunkt weiter).
+  - Eigene Struktur- und Namenskonventionen (`docs/handbook/HANDBOOK.md`, Weiterleitungs-Stubs, `gen_structure.py`).
