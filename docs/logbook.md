@@ -1,5 +1,21 @@
 # Logbook
 
+## 2026-07-06 - Commit-Übergang 🟡 → 🟢 (Charter 1.3)
+
+**PO-Freigabe am 2026-07-06 für die Charter-Änderung** (🔴, Meta-Governance §12; `charter_version` 1.2 → 1.3). Entscheidungen A (🔴-Commits bleiben ausdrücklich freizugeben) und B (gilt nur für Jarvis) vom PO bestätigt.
+
+**Kontext:** Die Charter knüpfte den Commit-Übergang von 🟡 auf 🟢 an die Bedingung „Gate + Tests automatisch vor jedem Commit". Der Pre-Commit-Hook (`.githooks/pre-commit`) erfüllt das seit vier bewährten Läufen. Damit ist die N4-Absicht aus dem Audit eingelöst: Autonomie wächst genau dort, wo eine mechanische Leitplanke sie absichert.
+
+**Umsetzung:** Vier Charter-Stellen geändert - Delegations-Matrix (§3: Commit von der 🟡- in die 🟢-Zeile), Commit-Status-Notiz (§3, neu formuliert + Auslösedatum), Änderungs-Lebenszyklus (§4), Git-Konventionen (§10). Zusätzlich der Begriff **„PO-Freigabe des Arbeitspakets"** eindeutig definiert (PO-Wunsch): Sie schließt die Commit-Freigabe ein - nach ihr ist keine zweite, separate Commit-Freigabe mehr nötig; ein bloßes „Review empfiehlt Freigabe" genügt nicht. Ausnahme: 🔴-Änderungen behalten die ausdrückliche Commit-Freigabe.
+
+**Unverändert:** Selbstprüfung → unabhängiges Review → PO-Freigabe bleiben in jedem Fall Pflicht. Nur der separate zweite Schritt „Commit freigegeben" entfällt für 🟢-Arbeit.
+
+**Selbstbezug:** Diese Charter-Änderung ist selbst eine 🔴-Änderung und wird deshalb - konsequent nach der neuen Ausnahme - noch mit ausdrücklicher Commit-Freigabe des PO committet. Der letzte Commit unter der alten Regel schaltet die neue scharf.
+
+**Tests:** Reine Doku-/Governance-Änderung, kein Code. Konsistenz-Gate PASS, Vollsuite unverändert grün.
+
+**Lessons Learned:** Der sauberste Zeitpunkt, Autonomie zu gewähren, ist der, an dem sie mechanisch abgesichert ist - nicht früher (Vertrauen ersetzt keine Leitplanke) und nicht später (sonst bleibt die Handbremse Ritual ohne Nutzen).
+
 ## 2026-07-06 - Mail-Briefing über Telegram freigeschaltet (Arbeitspaket B, Nutzwert-Phase)
 
 **Kontext:** Der Telegram-Gegencheck aus Arbeitspaket A wurde abgelehnt („Anfrage abgelehnt wegen Phase 1") - korrektes Verhalten: `check_mail` war nie in der Telegram-Whitelist. Der PO hat daraufhin entschieden, das rein lesende Briefing remote freizuschalten (Nutzwert > Datenschutz-Trade-off), bewusst als eigenständiges Paket B statt als Nachtrag zu A. Scope + Intent-Auswahl vorab vorgelegt, von Reviewer und PO freigegeben.

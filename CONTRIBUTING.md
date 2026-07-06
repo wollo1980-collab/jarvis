@@ -1,7 +1,7 @@
 ---
-charter_version: 1.2
+charter_version: 1.3
 gilt_fuer: Alle Entwickler an Jarvis (Mensch oder KI) in der Lead-Software-Engineer-Rolle
-status: In Kraft (charter_version 1.2). Umsetzungsstand der beschriebenen Mechanismen: siehe PROJECT_STATE.
+status: In Kraft (charter_version 1.3). Umsetzungsstand der beschriebenen Mechanismen: siehe PROJECT_STATE.
 aendern: Nur mit PO-Freigabe (Rot). Entwurf/Umsetzung durch den Engineer, Entscheidung/Freigabe durch den PO.
 ---
 
@@ -76,11 +76,13 @@ Sonderfälle: kein klarer nächster Schritt → Optionen vorschlagen. Drift *wä
 
 | Stufe | Bedeutung | Beispiele |
 |---|---|---|
-| 🟢 **Grün** — autonom, ende-zu-ende | Umkehrbare Arbeit in freigegebenem Scope; Doku-Konsistenz | Freigegebene ADR/Scope umsetzen · Bugfix ohne Architektur-/Verhaltensänderung · verhaltenswahrender Refactor in einem Modul · Tests · PROJECT_STATE/CHANGELOG/logbook aktuell halten · Gate laufen · **vorschlagen (immer erlaubt)** |
-| 🟡 **Gelb** — vorschlagen → Freigabe, dann umsetzen | Neue Entscheidungen/Fläche | Neue ADR / Architektur-/Querschnittsentscheidung · alles mit **Sicherheit, Datenverarbeitung, Secrets, Lesen/Handeln-Grenze** · neue Abhängigkeit · neuer Connector/Integration · **Scope-Änderung** · Löschen/Überschreiben nicht selbst erstellter Dateien · **Commit** (heute) |
+| 🟢 **Grün** — autonom, ende-zu-ende | Umkehrbare Arbeit in freigegebenem Scope; Doku-Konsistenz | Freigegebene ADR/Scope umsetzen · Bugfix ohne Architektur-/Verhaltensänderung · verhaltenswahrender Refactor in einem Modul · Tests · PROJECT_STATE/CHANGELOG/logbook aktuell halten · Gate laufen · **Commit** (nach PO-Freigabe des Arbeitspakets, bestandener Selbstprüfung + grünem Pre-Commit-Hook; Ausnahme 🔴) · **vorschlagen (immer erlaubt)** |
+| 🟡 **Gelb** — vorschlagen → Freigabe, dann umsetzen | Neue Entscheidungen/Fläche | Neue ADR / Architektur-/Querschnittsentscheidung · alles mit **Sicherheit, Datenverarbeitung, Secrets, Lesen/Handeln-Grenze** · neue Abhängigkeit · neuer Connector/Integration · **Scope-Änderung** · Löschen/Überschreiben nicht selbst erstellter Dateien |
 | 🔴 **Rot** — PO-Entscheidung vorab **und** PO-Freigabe des Ergebnisses | Unumkehrbar, nach außen, Autorität. *Umsetzung immer durch den Engineer.* | Unumkehrbare/nach-außen-Aktionen (echte Mail senden, bezahlter Live-Call, force-push, Daten löschen) · Increment als **„fertig" erklären** / Version taggen · **Handbook oder diese Charter ändern** · alles, was die DNA als Nicht-Ziel markiert |
 
-**Commit-Übergang:** Commit ist heute 🟡 (explizite Freigabe je Commit) und wird 🟢, sobald Gate + Tests automatisch vor jedem Commit laufen (pre-commit/CI). *Leitplanke vor Autonomie.*
+**Commit-Status (seit 2026-07-06 🟢, `charter_version` 1.3):** Der Pre-Commit-Hook (`.githooks/pre-commit`: Konsistenz-Gate + Vollsuite) erzwingt die Leitplanke jetzt mechanisch vor jedem Commit — *Leitplanke vor Autonomie*, Bedingung damit erfüllt. Bedeutung: Sobald ein Arbeitspaket die **PO-Freigabe des Arbeitspakets** hat (siehe Definition unten), führt der Engineer den Commit nach bestandener Selbstprüfung und grünem Hook **selbstständig** aus. Eine **zweite, separate Commit-Freigabe ist nicht mehr erforderlich.** *Ausnahme:* Commits von **🔴-Änderungen** (Handbook/Charter, Version taggen, unumkehrbare/nach-außen-Aktionen) brauchen weiterhin die ausdrückliche Commit-Freigabe des PO. Dieser Commit-Status gilt für Jarvis; andere Projekte führen ihren eigenen.
+
+**PO-Freigabe des Arbeitspakets:** die ausdrückliche Freigabe des PO, nachdem Selbstprüfung und unabhängiges Review vorliegen. Sie **schließt die Freigabe zum Commit ein** — der Engineer benötigt danach für den mechanischen Commit keine weitere Bestätigung (Ausnahme 🔴, siehe oben). Ein bloßes „Review empfiehlt Freigabe" genügt nicht; es braucht die Freigabe des PO selbst.
 
 **Freigabe-Protokollierung (Pflicht des Engineers):** Jede 🟡-/🔴-Freigabe wird im Repo festgehalten — die Commit-Message referenziert sie; bei Handbook-/Charter-Änderungen zusätzlich eine logbook-Zeile „PO-Freigabe am <Datum> für <Änderung>". So bleibt die Entscheidungskette auditierbar, **ohne dass der PO etwas schreibt.**
 
@@ -88,7 +90,7 @@ Sonderfälle: kein klarer nächster Schritt → Optionen vorschlagen. Drift *wä
 
 ## 4. Änderungs-Lebenszyklus
 
-`Vorschlag → (ADR falls nötig, §5) → PO-Freigabe → Umsetzung → Tests → Doku-Update (§6) → Gate PASS → Commit (auf Freigabe) → ggf. „fertig" (🔴, PO)`
+`Vorschlag → (ADR falls nötig, §5) → PO-Freigabe des Arbeitspakets → Umsetzung → Tests → Doku-Update (§6) → Gate PASS → Commit (autonom bei 🟢; 🔴-Änderungen mit ausdrücklicher Commit-Freigabe) → ggf. „fertig" (🔴, PO)`
 
 ### Entscheidungs-Prozeduren
 - **30-Minuten-Regel:** Wird über eine Frage länger als ~30 Minuten diskutiert, prüfe *„Kann ein kleiner Prototyp sie schneller beantworten?"* (Ausnahme: grundlegende Architekturentscheidungen dürfen länger reifen).
@@ -195,7 +197,7 @@ stand: <YYYY-MM-DD>
 
 - Auf dem Default-Branch nur mit Bedacht; sonst Branch. (Aktuelle Praxis des Projekts beachten.)
 - **Kleine, für sich lauffähige Commits** — kein roter Zwischenstand.
-- **Commit nur nach Freigabe** (🟡), nachdem das Gate PASST.
+- **Commit nach der PO-Freigabe des Arbeitspakets** (§3): Der mechanische Commit läuft autonom, sobald Selbstprüfung und Pre-Commit-Hook grün sind — keine separate Commit-Freigabe nötig. *Ausnahme:* 🔴-Änderungen brauchen die ausdrückliche Commit-Freigabe des PO.
 - Commit-Message: prägnant, mit Präfix nach Art der Änderung (`feat:` · `fix:` · `docs:` · `refactor:` · `test:`), referenziert die **PO-Freigabe** und ggf. die ADR.
 - Abschluss der Commit-Message mit der Co-Author-Zeile des jeweiligen Engineers.
 - Keine Secrets in Git (Handbook/ADR-018). Kein `--no-verify`, kein Umgehen von Hooks.
