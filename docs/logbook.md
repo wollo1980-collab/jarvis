@@ -12,6 +12,8 @@
 
 **Lessons Learned:** Gute Governance scheitert selten an der Einsicht, sondern an der letzten mechanischen Leitplanke. Sobald Commit-Hygiene nur als Dokumentregel lebt, faellt sie im Nutzungstempo zurueck. Ein kleiner Hook ist hier wertvoller als eine weitere Mahnung. Und: Review ist erst dann auditierbar, wenn sein Ergebnis im Repo selbst auffindbar ist.
 
+**Review (ChatGPT, 2026-07-06):** Freigeben - die Umsetzung bleibt innerhalb des freigegebenen Scopes, die Audit-Follow-ups wurden sauber umgesetzt, keine zusaetzlichen Baustellen eroeffnet. Beobachtungspunkt: das Hook-Verhalten wird in den naechsten Commits im Dogfooding beobachtet. **PO-Freigabe des Commits `3ed4473` am 2026-07-06.** Damit ist der erste vollstaendige Durchlauf des Vier-Rollen-Modells dokumentiert: Implementierung (Claude in Codex-Rolle), Audit (Claude), Review (ChatGPT), Entscheidung (PO).
+
 ## 2026-07-06 - Web v1 als zweiter Connector integriert
 
 **Kontext:** Nach Mail war der naechste kleine Nutzwert-Baustein nicht noch mehr Struktur, sondern eine reale Alltagshilfe fuer aktuelle Informationen. Wolfgangs Auftrag war direkt: `web v1 integrieren`. Gleichzeitig war das die erste Stelle, an der Jarvis' Modellneutralitaet praktisch zaehlt: Web durfte nicht still an OpenAI-Tooling gekettet werden, nur weil es technisch bequem waere.
