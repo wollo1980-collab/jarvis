@@ -1,5 +1,17 @@
 # Logbook
 
+## 2026-07-06 - Machbarkeits-Check Agenten-Delegation + ADR-034 (vorgeschlagen)
+
+**Machbarkeits-Check (PO-freigegeben, read-only, kostengedeckelt):** Geprüft, ob Claude Code als erstes Delegations-Backend headless nutzbar ist. Ergebnis positiv: `claude -p` läuft als Subprozess und liefert echte Antworten; **read-only nachweisbar** (Git-Status vor/nach leer, nur `Read`/`Grep`/`Glob` erlaubt); **Auth trägt über den Account-Login** (das anfängliche „Not logged in" lag nur am unfertigen Onboarding, in eigener Gegenprobe am normalen Terminal bestätigt und dann durch interaktiven Login gelöst). Kein zwingender bezahlter API-Key für den Grundlauf. Kosten praktisch null (winzige Prompts).
+
+**Offene Caveats (im ADR adressiert):** OAuth-Token laufen ab → für unbeaufsichtigten Remote-Betrieb ist ein dedizierter `ANTHROPIC_API_KEY` die robustere Auth (vorgemerkt); harte Kosten-/Turn-/Timeout-Limits bleiben Pflicht; vor Produktivbetrieb ist zu verifizieren, dass `claude -p` auch aus Jarvis' `pythonw`-Prozess angemeldet ist.
+
+**ADR-034 (vorgeschlagen):** Aufsatz auf ADR-033. Wählt Claude Code als erstes Backend und definiert die erste Fähigkeit: **read-only Repo-Analyse** — Command `delegate_analysis`, Sicherheitsstufe 0, Allowlist zunächst nur `C:\KI\jarvis`, lokal + Telegram, **asynchrone Übergabe** (Quittung → Hintergrundlauf → Ergebnis-Push + Artefakt), Auth zunächst über Account-Login (API-Key als Robustheits-Aufwertung vorgemerkt), Skizze eines `AgentBackend`-Kontrakts analog `LLMProvider`. `latest_adr` 33 → 34.
+
+**Governance:** Neue ADR = 🟡. Kein Code. Die **Umsetzung** ist ein eigenes, getrennt freizugebendes Arbeitspaket - dieser ADR ist nur die Entscheidung. Reibungsprotokoll auf ADR-034 aktualisiert. Kein Commit vor Review + PO-Freigabe.
+
+**Bewusst nicht:** Scheibe 2 (Schreiben/Fix), Multi-Agenten, Codex/GPT-Backends, Geräte-Ebene, jegliche Implementierung.
+
 ## 2026-07-06 - Modellunabhängiger Delegationsprozess entworfen (ADR-033, vorgeschlagen)
 
 **Kontext:** In der Nutzwert-Phase hat der PO die Vision geschärft: Jarvis als **Vermittlungsschicht** über drei Ebenen (Informationen · Agenten · Geräte) und als erste Richtung den **Agenten-Arm** gewählt („während ich unterwegs bin, delegiert Jarvis Arbeit an Claude/Codex/GPT, fertig zum Review bei Rückkehr"). Bewusste Reihenfolge (PO-Wunsch): erst der modellunabhängige Delegationsprozess, dann Agentenwahl und ADR-Umsetzung - damit Agenten austauschbare Backends bleiben (Modellneutralitäts-Invariante).

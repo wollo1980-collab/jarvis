@@ -2,7 +2,7 @@
 version: "v0.8 P1+2 (Multi-KI) abgeschlossen; Nutzwert-Phase gestartet"
 active_increment: nutzwert-phase
 tests: 373
-latest_adr: 33
+latest_adr: 34
 stand: 2026-07-06
 ---
 
@@ -90,7 +90,7 @@ Durable Sammlung der realen Nutzungserkenntnisse - Grundlage für die Auswahl de
 - **Reibung „Eingabe":** Tippen in Telegram mühsam (→ Sprache/STT); keine Desktop-Oberfläche. Beides betrifft nur den **Zugang**, nicht den Wert - bewusst nachgeordnet.
 - **Kandidat-Richtung „Fernsteuerung PC":** konkrete PO-Wünsche (Spiel remote laden/auf schnellste Platte installieren; „was kann weg" bei Platzmangel). Einzige Klasse **ohne** native Konkurrenz. Gemeinsamer harter Kern: **sichere Fernausführung von Stufe-2/3-Aktionen** = bewusste Erweiterung des Fernzugriff-Modells (ADR, aber intern - kein OAuth/keine IT-Sperre).
 - **Gewählte Richtung (PO, 2026-07-06): Agenten-Arm.** Vision-Modell (drei Ebenen): Jarvis = Vermittlungsschicht über **Informationen** (Outlook/Teams/Kalender/Browser/OneDrive/GitHub), **Agenten** (Claude/Codex/GPT) und **Geräte** (PC/NAS/Smartphone/Smart Home) — Kandidat für eine bewusste Handbook-Teil-2-Schärfung (🔴, später). Der Dienst-/Kalender-Arm ist bis dahin geparkt (Microsoft-Graph/OAuth + wahrscheinlich IT-gesperrter Arbeits-Tenant). Konkretes Ziel: „während ich unterwegs bin, Repo X analysieren / einen Fix vorbereiten, fertig zum Review bei Rückkehr" - zeitversetzt, Governance intakt (kein Commit auf `main` ohne menschliches Review).
-- **Delegationsprozess:** Der modellunabhängige 9-Schritte-Orchestrierungsprozess ist in **ADR-033** festgehalten (Stand: vorgeschlagen). Er legt nur den Prozess fest, noch keinen Agenten und keine erste Fähigkeit. Nächster Schritt nach Freigabe: Aufsatz-ADR mit Agentenwahl + erster Scheibe (read-only Analyse).
+- **Delegationsprozess:** Der modellunabhängige 9-Schritte-Orchestrierungsprozess ist in **ADR-033** (accepted) festgehalten. Der Aufsatz-ADR **ADR-034** (Stand: vorgeschlagen) wählt Claude Code als erstes Backend und definiert die erste Fähigkeit: read-only Repo-Analyse (Allowlist nur `C:\KI\jarvis`, lokal + Telegram, asynchrone Übergabe, Auth zunächst über Account-Login). Machbarkeits-Check 2026-07-06 bestanden (headless + read-only + Auth). Umsetzung ist ein eigenes, getrennt freizugebendes Arbeitspaket.
 
 ### Feature-TODOs & Backlog (nächste Bausteine, NICHT jetzt umsetzen)
 Roadmap und Backlog leben **hier** in PROJECT_STATE — die Verfassung (`HANDBOOK`) trägt keine Roadmap/Status; abgeschlossene Versionen stehen in `CHANGELOG`. Technische Detail-Notizen:
