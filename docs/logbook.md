@@ -1,5 +1,15 @@
 # Logbook
 
+## 2026-07-06 - ADR-035 (accepted): Scheibe 2 festgelegt (Async + Telegram-Push), kein Code
+
+**Kontext:** Scheibe 1 (ADR-034 A–D) ist umgesetzt und committet. Der PO hat gebeten, die **nächste Scheibe vorzubereiten - noch kein Code**. Zusätzlich festgehalten: es gibt aktuell **keinen** Jarvis-Befehl, der die laufende Runtime beendet (`shutdown_pc` = ganzer PC, `disable_jarvis_autostart` = nur Registry-Eintrag, Exit-Wörter nur in Konsolen-Session) → als Backlog-Eintrag `stop_jarvis`/Runtime-Kill-Switch in PROJECT_STATE aufgenommen.
+
+**Vorbereitung:** `docs/adr/ADR-035.md` (vorgeschlagen) rüstet die in ADR-034 bewusst zurückgestellten Teile **E (asynchrone Hintergrund-Ausführung)** und **F (Telegram-Intent + Ergebnis-Push)** nach. Kern der vorgeschlagenen Richtung: separater Hintergrund-Worker (Thread) getrennt vom seriellen Nachrichten-Worker (der darf nicht minutenlang blockieren); Runtime übernimmt Quittung → Hintergrundlauf → Push (Command bleibt kanal-/thread-frei, Muster wie `plan_filter`/ADR-027); `delegate_analysis` kontrolliert in die Telegram-Whitelist (Sicherheitsstufe 0, read-only); zunächst genau **1** gleichzeitige Delegation; Guardrails-Nachschärfung (Kostendeckel, Kill-Switch, sauberes Verhalten bei Kanal-Weg); Auth weiter über Account-Login; Konsole bleibt synchron. Fünf **offene PO-Entscheidungen** sind im ADR explizit gelistet.
+
+**Review + PO-Freigabe (2026-07-06):** Review empfiehlt Freigabe; PO gibt alle fünf Punkte frei (Q4: Account-Login vorerst beibehalten) und ergänzt drei Architektur-Vorgaben, die in den ADR eingearbeitet wurden: (1) **Thread-Eigentümerschaft** explizit bei der `JarvisRuntime` (Start/Shutdown/Cleanup dort, nicht Command/Kanal); (2) **Telegram bleibt reiner Transportkanal** (keine Hintergrundlogik/Steuerung — Kanal-Entkopplung ADR-027 gewahrt); (3) expliziter **Nicht-Ziele-Abschnitt** (keine Agenten-Parallelisierung, keine schreibenden Agenten, keine Änderung von Trust Boundary/Sicherheitsstufen, keine Runtime-Neustrukturierung). Status → **Accepted**.
+
+**Governance:** ADR-Lebenszyklus 🟡 → accepted. `latest_adr` 34 → 35; Reibungsprotokoll/Backlog in PROJECT_STATE mitgezogen. Weiterhin **kein Code** — die Umsetzung ist ein eigenes, getrennt freizugebendes Arbeitspaket. Zusätzlich als Backlog festgehalten: `stop_jarvis`/Runtime-Kill-Switch (kein bestehender Befehl beendet die laufende Runtime).
+
 ## 2026-07-06 - Umsetzung ADR-034 Scheibe 1: read-only Repo-Analyse (lokal-synchron)
 
 **Kontext:** ADR-033 (Delegationsprozess) und ADR-034 (erstes Backend + erste Fähigkeit) sind Accepted; ihre **Umsetzung** ist laut ADR-034 ein eigenes, getrennt freizugebendes Arbeitspaket. PO-Entscheidung zum Schnitt dieser Session: **nur Teil A–D, lokal & synchron** - der riskanteste Teil des ADR (asynchrone Hintergrund-Ausführung + Telegram-Push, Teil E/F) wird bewusst als Folge-Arbeitspaket zurückgestellt (ADR-033 „kleine, reviewbare Pakete"; ADR-034-Risiko „erster langlaufender Hintergrund-Task"). Diese Scheibe liefert echten Wert bei null Async-Risiko.

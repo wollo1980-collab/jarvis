@@ -2,7 +2,7 @@
 version: "v0.8 P1+2 (Multi-KI) abgeschlossen; Nutzwert-Phase gestartet"
 active_increment: nutzwert-phase
 tests: 391
-latest_adr: 34
+latest_adr: 35
 stand: 2026-07-06
 ---
 
@@ -92,7 +92,7 @@ Durable Sammlung der realen Nutzungserkenntnisse - Grundlage für die Auswahl de
 - **Reibung „Eingabe":** Tippen in Telegram mühsam (→ Sprache/STT); keine Desktop-Oberfläche. Beides betrifft nur den **Zugang**, nicht den Wert - bewusst nachgeordnet.
 - **Kandidat-Richtung „Fernsteuerung PC":** konkrete PO-Wünsche (Spiel remote laden/auf schnellste Platte installieren; „was kann weg" bei Platzmangel). Einzige Klasse **ohne** native Konkurrenz. Gemeinsamer harter Kern: **sichere Fernausführung von Stufe-2/3-Aktionen** = bewusste Erweiterung des Fernzugriff-Modells (ADR, aber intern - kein OAuth/keine IT-Sperre).
 - **Gewählte Richtung (PO, 2026-07-06): Agenten-Arm.** Vision-Modell (drei Ebenen): Jarvis = Vermittlungsschicht über **Informationen** (Outlook/Teams/Kalender/Browser/OneDrive/GitHub), **Agenten** (Claude/Codex/GPT) und **Geräte** (PC/NAS/Smartphone/Smart Home) — Kandidat für eine bewusste Handbook-Teil-2-Schärfung (🔴, später). Der Dienst-/Kalender-Arm ist bis dahin geparkt (Microsoft-Graph/OAuth + wahrscheinlich IT-gesperrter Arbeits-Tenant). Konkretes Ziel: „während ich unterwegs bin, Repo X analysieren / einen Fix vorbereiten, fertig zum Review bei Rückkehr" - zeitversetzt, Governance intakt (kein Commit auf `main` ohne menschliches Review).
-- **Delegationsprozess:** Der modellunabhängige 9-Schritte-Orchestrierungsprozess ist in **ADR-033** (accepted) festgehalten. Der Aufsatz-ADR **ADR-034** (Stand: vorgeschlagen) wählt Claude Code als erstes Backend und definiert die erste Fähigkeit: read-only Repo-Analyse (Allowlist nur `C:\KI\jarvis`, lokal + Telegram, asynchrone Übergabe, Auth zunächst über Account-Login). Machbarkeits-Check 2026-07-06 bestanden (headless + read-only + Auth). Umsetzung ist ein eigenes, getrennt freizugebendes Arbeitspaket.
+- **Delegationsprozess:** Der modellunabhängige 9-Schritte-Orchestrierungsprozess ist in **ADR-033** (accepted) festgehalten. **ADR-034** (accepted) wählt Claude Code als erstes Backend und die erste Fähigkeit read-only Repo-Analyse; **Scheibe 1 (lokal-synchron, A–D) ist umgesetzt und committet** (`delegate_analysis`, `core/agent_backend.py`). **ADR-035 (accepted, PO-Freigabe 2026-07-06)** legt **Scheibe 2 (E/F: asynchrone Ausführung + Telegram-Push)** fest: Hintergrund-Worker im Besitz der `JarvisRuntime` (Start/Shutdown/Cleanup dort), Telegram bleibt reiner Transportkanal, genau 1 gleichzeitige Delegation, Auth vorerst über Account-Login. **Noch kein Code** — die Umsetzung ist ein eigenes, getrennt freizugebendes Arbeitspaket. Scheibe 3 (Schreiben/Fix) bleibt weiter tabu.
 
 ### Feature-TODOs & Backlog (nächste Bausteine, NICHT jetzt umsetzen)
 Roadmap und Backlog leben **hier** in PROJECT_STATE — die Verfassung (`HANDBOOK`) trägt keine Roadmap/Status; abgeschlossene Versionen stehen in `CHANGELOG`. Technische Detail-Notizen:
@@ -101,6 +101,7 @@ Roadmap und Backlog leben **hier** in PROJECT_STATE — die Verfassung (`HANDBOO
 - Den `preview()`-Hook (ADR-023) für weitere schreibende PC-Admin-Commands nutzen, sobald umgesetzt.
 
 **Backlog (zurückgestellte Ideen, kein aktueller Scope — Grund je Zeile):**
+- **`stop_jarvis` / Runtime-Kill-Switch (2026-07-06)** — es gibt aktuell keinen Jarvis-Befehl, der die laufende Runtime (`jarvis_runtime.py`, `pythonw`, headless) beendet: `shutdown_pc` fährt den ganzen PC herunter, `disable_jarvis_autostart` entfernt nur den Autostart-Registry-Eintrag (beendet den laufenden Prozess NICHT, siehe `commands/monitor.py`), Exit-Wörter greifen nur in einer Konsolen-Session. Kandidat für einen eigenen Command (Sicherheitsstufe 2 mit Bestätigung, sauberer Runtime-Stopp) — eigenes, getrennt freizugebendes Arbeitspaket, kein Teil von ADR-034/035.
 - **Spotify-/Medien-Steuerung** — kein echtes Arbeitsproblem.
 - **Wake-Word** (z. B. Porcupine) — aktuell reicht „jarvis" im Text; nach der Nutzwert-Phase erneut prüfen. (Lokale Modelle/Ollama siehe oben „Spätere v0.8-Phasen".)
 - **Power-BI-Integration** — liegt im Firmenumfeld/auf dem Firmenrechner; im privaten Jarvis-Rahmen aktuell nicht praktikabel.
