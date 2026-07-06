@@ -23,6 +23,37 @@ def test_load_resolves_relative_dirs_against_base_dir(tmp_path, monkeypatch):
     assert cfg.log_dir.is_dir()
 
 
+def test_load_reads_agent_repos_and_timeout(tmp_path, monkeypatch):
+    monkeypatch.setattr(config_module, "BASE_DIR", tmp_path)
+    config_path = tmp_path / "config.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "agent_repos": [{"alias": "jarvis", "path": "C:\\KI\\jarvis"}],
+                "agent_timeout": 120.0,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    cfg = Config.load(path=config_path)
+
+    assert cfg.agent_repos == [{"alias": "jarvis", "path": "C:\\KI\\jarvis"}]
+    assert cfg.agent_timeout == 120.0
+
+
+def test_agent_defaults_are_empty_and_safe(tmp_path, monkeypatch):
+    monkeypatch.setattr(config_module, "BASE_DIR", tmp_path)
+    config_path = tmp_path / "config.json"
+    config_path.write_text("{}", encoding="utf-8")
+
+    cfg = Config.load(path=config_path)
+
+    # Fail-closed by default: ohne Config-Eintrag ist kein Repo delegierbar.
+    assert cfg.agent_repos == []
+    assert cfg.agent_timeout == 300.0
+
+
 def test_load_keeps_absolute_dirs_unchanged(tmp_path, monkeypatch):
     monkeypatch.setattr(config_module, "BASE_DIR", tmp_path / "anderes-repo")
     memory_dir = tmp_path / "custom-memory"

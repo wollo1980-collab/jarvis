@@ -1,7 +1,7 @@
 ---
 version: "v0.8 P1+2 (Multi-KI) abgeschlossen; Nutzwert-Phase gestartet"
 active_increment: nutzwert-phase
-tests: 373
+tests: 391
 latest_adr: 34
 stand: 2026-07-06
 ---
@@ -56,6 +56,7 @@ Umgesetzt in der Nutzwert-Phase (Details: `docs/CHANGELOG.md`, ADR-031/032):
 - **Web v1** - `commands/web.py` (`search_web`, Sicherheitsstufe 0) und `core/web_search.py` (DuckDuckGo-Lite-Suche via stdlib, nur Titel/Snippet/URL). Jarvis gibt einen knappen Ueberblick und die Quellen immer sichtbar zurueck. DuckDuckGo-interne Werbe-/Hilfstreffer werden herausgefiltert; Preis-/Verfuegbarkeitsfragen sind promptseitig ausdruecklich mitgemeint. Falls der Planner bei solchen Fragen nur ein zu generisches Ziel liefert (z. B. Produktname ohne `Preis`), ergaenzt `commands/web.py` die fehlende Suchintention gezielt selbst. Verfuegbar ueber `main.py`, `telegram_main.py` und den Runtime-Telegram-Kanal. Retrieval bleibt modellneutral; `core/ai.py` erhielt nur eine kleine Intent-Klarstellung für Web-/Recherche-Anfragen.
 - **Runtime-/Autostart-Pfadfix** - `core/config.py` löst relative `memory_dir`-/`log_dir`-Werte aus `config.json` jetzt gegen `BASE_DIR` statt gegen das aktuelle Prozess-cwd auf. Damit schreiben `jarvis_runtime.py` und der Jarvis-Eigenstart bei relativer Standard-Config wieder repo-gebunden unter dem Installationspfad; absolute Pfade bleiben unverändert möglich.
 - **Konsolen-Härtung `main.py` (Live-Fund 2026-07-06)** - beim ersten echten „was liegt an?"-Lauf stürzte `main.py` an einem `UnicodeEncodeError` ab: Das Executor-Häkchen (U+2713) ließ sich auf einer cp1252-Konsole nicht ausgeben. `make_console_output_safe()` setzt `stdout`/`stderr` auf `errors="replace"` - nicht darstellbare Zeichen werden ersetzt statt zu crashen (auf UTF-8-Konsolen unverändert; das Häkchen erscheint auf reiner cp1252-Konsole als `?`).
+- **Agenten-Delegation, Scheibe 1 (ADR-033/034)** - erster Baustein des Agenten-Arms: Command `delegate_analysis` (`commands/delegate.py`, Sicherheitsstufe 0) delegiert eine **read-only** Repo-Analyse an das modellneutrale `AgentBackend` (`core/agent_backend.py`); erste Implementierung `ClaudeCodeBackend` (`claude -p --allowedTools Read Grep Glob`). Bewusst **lokal & synchron** geschnitten (PO-Entscheidung): Repo-Allowlist `agent_repos` fail-closed, harter Wall-Clock-Timeout, keine git-Operation, vollständiges Logging, reviewbares Artefakt unter `memory_data/delegations/`. **Bewusst noch nicht:** asynchrone Ausführung + Telegram-Push (`delegate_analysis` daher nicht in der Telegram-Whitelist, remote fail-closed) - eigenes Folge-Arbeitspaket.
 
 ## Tests
 Volle Suite grün. Autoritative Zahl (`tests`) und Datum (`stand`) stehen im Kopf.
@@ -75,6 +76,7 @@ Keiner aktuell.
 - **Live-Test Claude-Provider** mit echtem `ANTHROPIC_API_KEY` auf dem echten Windows-Rechner - bewusst verschobener manueller Verifikationsschritt (kein offener Implementierungsfehler). Pfad ist offline bis zur SDK-Grenze verifiziert; nur der bezahlte End-zu-End-Call steht aus.
 - Manueller Live-Test der übrigen Kernfunktionen mit echtem API-Key auf dem echten Windows-Rechner (Definition of Done, CONTRIBUTING §8) - bisher nur automatisiert/gemockt. `install_program` real ausführen ist ein bewusster, expliziter Schritt und sollte gezielt vom Product Owner freigegeben/begleitet werden.
 - **Smoke-Test der Jarvis-Runtime mit echtem Bot-Token (TelegramChannel): verifiziert (2026-07-06)** - das Mail-Briefing lief real über den Runtime-Telegram-Kanal end-to-end durch (PO-Gegencheck); zusammen mit dem bereits verifizierten Jarvis-Eigenstart nach Windows-Anmeldung ist der Runtime-/Bot-Betrieb damit live bestätigt.
+- **Live-/Rauchtest `delegate_analysis` (ADR-034 Scheibe 1): isoliert bestanden (2026-07-06)** - echter `claude -p`-Lauf über `main.py` (isolierter `memory_dir`, damit die laufende Live-Runtime unberührt bleibt): Planner erkennt den Intent, read-only Analyse + Artefakt korrekt, **Read-only nachgewiesen** (`git status` vor/nach identisch). Dabei ein cp1252-Encoding-Bug im Backend gefunden und behoben (UTF-8). **Offen bleibt nur:** derselbe Lauf über den echten `pythonw`-Runtime-Pfad mit Produktiv-`memory_dir` (ADR-034-Caveat, PO-begleitet - erfordert kurzes Pausieren der Live-Runtime).
 - Piper-Sprachmodell herunterladen und `tts_enabled: true` für einen Live-TTS-Test setzen.
 - **Restlicher DNA-Sprachdurchlauf** für `commands/monitor.py`, `commands/reports.py` und `commands/excel.py`: die erste Alltagsrunde ist angeglichen, diese drei Module bleiben bewusst als offene Sprachschuld sichtbar.
 - `anthropic` ist im `.venv` installiert (0.116.0); `requirements.txt` führt es bewusst optional/auskommentiert (lazy Import, ADR-029).

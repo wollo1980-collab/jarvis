@@ -45,6 +45,17 @@ class Config:
     # AUSSCHLIESSLICH in der genannten Umgebungsvariable (ADR-018), nie hier.
     mail_accounts: list = field(default_factory=list)
 
+    # Agenten-Delegation (ADR-034, Umsetzungs-Scheibe 1): Repo-Allowlist fuer
+    # die read-only Repo-Analyse. Config-getrieben wie mail_accounts, leerer
+    # Default (fail-closed: ohne Eintrag ist kein Repo delegierbar). Jeder
+    # Eintrag {"alias": "...", "path": "..."}; nicht gelistete/nicht
+    # existierende Pfade werden abgelehnt. Kein Secret hier.
+    agent_repos: list = field(default_factory=list)
+    # Harter Wall-Clock-Timeout eines Agentenlaufs in Sekunden (Kill-Switch,
+    # ADR-034 Guardrails) - bewusst getrennt vom kurzen LLM-`timeout` oben,
+    # da eine Repo-Analyse Minuten dauern darf.
+    agent_timeout: float = 300.0
+
     # Sprache / Stimme
     voice: str = "default"
     volume: float = 0.8
@@ -116,6 +127,8 @@ class Config:
             planning_provider=data.get("planning_provider", cls.planning_provider),
             answer_provider=data.get("answer_provider", cls.answer_provider),
             mail_accounts=data.get("mail_accounts", []),
+            agent_repos=data.get("agent_repos", []),
+            agent_timeout=data.get("agent_timeout", cls.agent_timeout),
             voice=data.get("voice", cls.voice),
             volume=data.get("volume", cls.volume),
             hotword=data.get("hotword", cls.hotword),

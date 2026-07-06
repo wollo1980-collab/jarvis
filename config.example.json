@@ -25,5 +25,12 @@
       "username": "dein.name@gmail.com",
       "password_env": "JARVIS_GMAIL_APP_PASSWORD"
     }
-  ]
+  ],
+  "agent_repos": [
+    {
+      "alias": "jarvis",
+      "path": "C:\\KI\\jarvis"
+    }
+  ],
+  "agent_timeout": 300.0
 }

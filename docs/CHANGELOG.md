@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026-07-06 - Repo-Analyse delegieren (ADR-034 Scheibe 1: read-only, lokal-synchron)
+
+### Neu
+- Neuer Command `delegate_analysis`: „analysiere `<repo>`: `<Frage>`" delegiert eine **read-only** Analyse eines lokalen Code-Repositorys an einen Agenten (erstes Backend: Claude Code CLI, `claude -p --allowedTools Read Grep Glob`). Die Analyse läuft synchron, das vollständige Ergebnis wird als reviewbares Artefakt unter `memory_data/delegations/<zeitstempel>.md` abgelegt; der Kanal bekommt eine Kurz-Zusammenfassung. Sicherheitsstufe 0 (keine System-/Repo-Änderung, keine git-Operation).
+- Neuer Baustein `core/agent_backend.py`: modellneutraler `AgentBackend`-Kontrakt (analog `LLMProvider`) + erste Implementierung `ClaudeCodeBackend`. Guardrails: read-only erzwungen, harter Wall-Clock-Timeout (Kill-Switch), Repo-Allowlist fail-closed, vollständiges Logging (Repo · Frage · Backend · Dauer · Status · Kosten).
+- Config: `agent_repos` (Repo-Allowlist, leerer Default = fail-closed) und `agent_timeout` (Standard 300 s). Beispiel in `config.example.json`.
+
+### Geaendert
+- `core/ai.py`: kurzer `WICHTIG zu delegate_analysis`-Block, damit der Planner Repo-Alias (target) und Frage (`parameters.question`) sauber trennt.
+- `main.py`/`jarvis_runtime.py`: `delegate_commands.configure(config)` in der Startkette.
+
+### Behoben
+- **Live-Fund Rauchtest (2026-07-06):** `ClaudeCodeBackend` dekodierte die UTF-8-Ausgabe von `claude -p` unter Windows mit der Locale-Codepage (cp1252) und zerschoss Umlaute/Pfeile im Artefakt (`ausführt` → `ausfÃ¼hrt`). `subprocess.run` bekommt jetzt explizit `encoding="utf-8"` (`errors="replace"`); durch Test abgesichert.
+
+### Bewusst nicht (Folge-Arbeitspaket)
+- Asynchrone Hintergrund-Ausführung und Telegram-Intent/Ergebnis-Push. `delegate_analysis` bleibt daher **nicht** in der Telegram-Whitelist und wird remote fail-closed abgelehnt (durch Test abgesichert).
+
+### Tests
+- 18 neue Tests (Backend-Vertrag inkl. read-only-Argv/UTF-8/Timeout/Fehlerpfade, Command inkl. Allowlist-fail-closed/Artefakt, Config-Felder, Telegram-Ablehnung). Vollsuite 391 grün, Gate PASS.
+- **Realer Rauchtest bestanden:** isolierter `main.py`-Lauf (eigener `memory_dir`, Live-Runtime unberührt) → Planner erkennt `delegate_analysis`, echter `claude -p` read-only (3 Turns, ~0,14 USD), korrektes Artefakt. **Read-only nachgewiesen:** `git status` vor/nach dem Lauf identisch.
+
 ## 2026-07-06 - Mail-Briefing über Telegram erreichbar (Arbeitspaket B, ADR-031-Nachtrag)
 
 ### Neu

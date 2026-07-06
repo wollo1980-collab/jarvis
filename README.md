@@ -147,6 +147,49 @@ werden dabei ausgefiltert.
 Artikel lesen, Login-geschuetzte Seiten, News-Speziallogik, generische
 Connector-Plattform.
 
+## Repo-Analyse delegieren (Agenten-Arm, Scheibe 1, ADR-033/034)
+
+Jarvis kann eine **read-only** Analyse eines lokalen Code-Repositorys an einen
+Agenten delegieren. Erstes Backend ist die Claude Code CLI, die als Subprozess
+im Print-Modus laeuft (`claude -p --allowedTools Read Grep Glob`). Die Analyse
+laeuft **lokal & synchron**; das vollstaendige Ergebnis wird als Markdown-
+Artefakt unter `memory_data/delegations/<zeitstempel>.md` abgelegt, im Kanal
+erscheint eine Kurz-Zusammenfassung.
+
+**Sicherheit (Sicherheitsstufe 0):** read-only erzwungen (nur Read/Grep/Glob -
+kein Schreiben/Ausfuehren, **keine git-Operation**), Repo-Allowlist fail-closed,
+harter Timeout (Kill-Switch), vollstaendiges Logging (Repo · Frage · Backend ·
+Dauer · Status · Kosten). Das Ergebnis ist rein informativ und loest nie selbst
+eine Aktion aus (Trust Boundary).
+
+**Voraussetzung:** Claude Code muss installiert und angemeldet sein (der
+Subprozess erbt den Account-Login). In `config.json` ein oder mehrere Repos
+freigeben:
+
+```json
+"agent_repos": [
+  { "alias": "jarvis", "path": "C:\\KI\\jarvis" }
+],
+"agent_timeout": 300.0
+```
+
+Nur ausdruecklich gelistete, real existierende Pfade sind analysierbar - alles
+andere wird abgelehnt (fail-closed).
+
+Beispiel:
+
+```text
+Du: analysiere jarvis: wie funktioniert der Executor?
+Jarvis: Analyse von 'jarvis' fertig:
+<kurzer Anriss>
+Vollstaendig abgelegt unter: .../memory_data/delegations/20260706-….md
+```
+
+**Bewusst noch nicht in dieser Scheibe:** asynchrone Hintergrund-Ausfuehrung und
+Auslösen ueber Telegram (Ergebnis-Push). `delegate_analysis` ist daher **nicht**
+in der Telegram-Whitelist und wird remote abgelehnt - das ist ein eigenes
+Folge-Arbeitspaket.
+
 ## Tests ausführen
 
 ```bash

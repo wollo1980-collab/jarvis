@@ -1,5 +1,23 @@
 # Logbook
 
+## 2026-07-06 - Umsetzung ADR-034 Scheibe 1: read-only Repo-Analyse (lokal-synchron)
+
+**Kontext:** ADR-033 (Delegationsprozess) und ADR-034 (erstes Backend + erste Fähigkeit) sind Accepted; ihre **Umsetzung** ist laut ADR-034 ein eigenes, getrennt freizugebendes Arbeitspaket. PO-Entscheidung zum Schnitt dieser Session: **nur Teil A–D, lokal & synchron** - der riskanteste Teil des ADR (asynchrone Hintergrund-Ausführung + Telegram-Push, Teil E/F) wird bewusst als Folge-Arbeitspaket zurückgestellt (ADR-033 „kleine, reviewbare Pakete"; ADR-034-Risiko „erster langlaufender Hintergrund-Task"). Diese Scheibe liefert echten Wert bei null Async-Risiko.
+
+**Umsetzung:** Neuer modellneutraler Kontrakt `core/agent_backend.py` (`AgentBackend`-Protokoll analog `LLMProvider`, `AgentLimits`/`AgentResult`) + erste Implementierung `ClaudeCodeBackend` (Subprozess `claude -p --allowedTools Read Grep Glob --output-format json`, cwd=Repo, harter Timeout). Neuer Command `commands/delegate.py::DelegateAnalysisCommand` (`delegate_analysis`, Sicherheitsstufe 0): Repo-Alias + Frage → Backend read-only → reviewbares Artefakt unter `memory_data/delegations/<zeitstempel>.md` + Kurz-Zusammenfassung im Kanal. Config: `agent_repos` (Allowlist, leerer Default = fail-closed) + `agent_timeout` (300 s). Verdrahtung in `commands/__init__.py`, `core/ai.py` (kurzer `WICHTIG`-Block für Repo/Frage-Trennung), `main.py`, `jarvis_runtime.py`, `config.example.json`.
+
+**Guardrails (ADR-034):** read-only erzwungen (nur Read/Grep/Glob → keine git-Op), Allowlist fail-closed (Backend wird bei unbekanntem/nicht existierendem Repo NIE aufgerufen), harter Wall-Clock-Timeout als Kill-Switch, vollständiges Logging (Repo · Frage · Backend · Dauer · Status · Kosten, ohne Analyse-/Code-Inhalt), Trust Boundary (Ergebnis rein informativ). Ein CLI-`--max-turns` existiert in `claude` 2.1.201 nicht → Turn-/Kostendeckel werden aus dem JSON nur protokolliert, der Timeout ist der erzwungene harte Guardrail (ehrlich im Code vermerkt).
+
+**Bewusst nicht (Folge-Arbeitspaket):** asynchrone Ausführung + Telegram-Intent/Ergebnis-Push. `delegate_analysis` bleibt daher **nicht** in `telegram_main.ALLOWED_INTENTS` und wird remote fail-closed abgelehnt - ein Test sichert genau das ab, bis das Async-Paket kommt.
+
+**Tests:** 18 neue Tests (Backend-Argv/read-only/Timeout/Fehlerpfade, Command inkl. Allowlist-fail-closed/Artefakt/Fallback-Frage, Config-Felder, Telegram-Ablehnung). Vollsuite 373 → **391 grün**, Konsistenz-Gate PASS (`tests`-Kopf mitgezogen).
+
+**Rauchtest bestanden (isoliert, PO-Weg):** Da die Live-Runtime (`pythonw jarvis_runtime.py`, PID 10896) den Single-Instance-Lock auf `memory_data/` hält, wurde der Lauf auf PO-Wunsch **isoliert** gefahren - `main.py` unverändert, aber mit temporärem eigenem `memory_dir` (eigener Lock, Live-Instanz unberührt). Ergebnis: Planner erkennt `delegate_analysis` (target=jarvis, Frage sauber getrennt), echter `claude -p` read-only (3 Turns, ~0,14 USD), inhaltlich korrekte Analyse, reviewbares Artefakt. **Read-only nachgewiesen:** `git status --porcelain` vor/nach dem Lauf identisch (zweimal). **Live-Fund + Fix:** `subprocess.run(text=True)` dekodierte `claude`-UTF-8 unter Windows als cp1252 → Umlaute/Pfeile zerschossen; behoben durch explizites `encoding="utf-8"` im Backend, per Test abgesichert, im zweiten Lauf mojibake-frei bestätigt.
+
+**Noch offen (Definition of Done):** Lauf über den echten **`pythonw`-Runtime-Pfad** mit Produktiv-`memory_dir` (ADR-034-Caveat: Anmeldung aus `pythonw` verifizieren) - bewusst nicht erzwungen, um die laufende Assistenz nicht zu stoppen.
+
+**Governance:** Umsetzung eines Accepted-ADR = Arbeitspaket nach Abschluss-Regel (Selbstprüfung → Status-Block → Review → PO-Freigabe). Kein Commit vor PO-Freigabe.
+
 ## 2026-07-06 - Machbarkeits-Check Agenten-Delegation + ADR-034 (vorgeschlagen)
 
 **Machbarkeits-Check (PO-freigegeben, read-only, kostengedeckelt):** Geprüft, ob Claude Code als erstes Delegations-Backend headless nutzbar ist. Ergebnis positiv: `claude -p` läuft als Subprozess und liefert echte Antworten; **read-only nachweisbar** (Git-Status vor/nach leer, nur `Read`/`Grep`/`Glob` erlaubt); **Auth trägt über den Account-Login** (das anfängliche „Not logged in" lag nur am unfertigen Onboarding, in eigener Gegenprobe am normalen Terminal bestätigt und dann durch interaktiven Login gelöst). Kein zwingender bezahlter API-Key für den Grundlauf. Kosten praktisch null (winzige Prompts).

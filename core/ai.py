@@ -94,6 +94,14 @@ aktueller Verfuegbarkeit oder heutigem Stand eines Produkts/Themas
 ohne die Trigger-Worte - bei "Suche im Web nach Nachrichten zu KI"
 ist target = "Nachrichten zu KI".
 
+WICHTIG zu delegate_analysis: Verwende delegate_analysis, wenn der Nutzer
+ausdruecklich die Analyse/Untersuchung eines lokalen Code-Repositorys
+delegieren moechte (z. B. "analysiere das Repo jarvis: wie funktioniert der
+Executor?", "lass X analysieren: ..."). target ist NUR der Repo-Alias (z. B.
+"jarvis"), NICHT die Frage. Lege die eigentliche Analysefrage in
+parameters.question ab (ohne Repo-Name und ohne Trigger-Worte). Nur bei einem
+klaren Analyse-/Delegations-Wunsch waehlen - eine normale Frage ist chat.
+
 Gib bei confidence an, wie sicher du dir beim erkannten Intent bist
 (1.0 = eindeutig, z. B. "öffne Excel"; niedrige Werte bei Mehrdeutigkeit,
 z. B. "mach das Ding auf")."""

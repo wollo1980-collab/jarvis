@@ -15,6 +15,7 @@ import logging
 import sys
 from datetime import date
 
+import commands.delegate as delegate_commands
 import commands.mail as mail_commands
 import commands.memory as memory_commands
 import commands.monitor as monitor_commands
@@ -107,6 +108,11 @@ def main() -> None:
         # config.mail_accounts + Env-Passwörtern und den lokalen Regel-Speicher.
         mail_commands.configure(config)
         web_commands.configure(ai, timeout_seconds=config.timeout)
+
+        # Agenten-Delegation (ADR-034, Scheibe 1): read-only Repo-Analyse.
+        # Baut die Repo-Allowlist aus config.agent_repos; Backend real
+        # (Claude Code CLI, ClaudeCodeBackend als Default in delegate.py).
+        delegate_commands.configure(config)
 
         logger.info("Jarvis v0.4 gestartet.")
         speech.say("Jarvis ist bereit.")

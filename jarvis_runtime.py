@@ -45,6 +45,7 @@ import threading
 from datetime import date
 from typing import Callable, Optional
 
+import commands.delegate as delegate_commands
 import commands.mail as mail_commands
 import commands.memory as memory_commands
 import commands.monitor as monitor_commands
@@ -107,6 +108,11 @@ class JarvisRuntime:
         monitor_commands.configure(self.ai)
         web_commands.configure(self.ai, timeout_seconds=config.timeout)
         mail_commands.configure(config)
+        # Agenten-Delegation (ADR-034, Scheibe 1): read-only Repo-Analyse.
+        # Lokal & synchron - delegate_analysis ist NICHT in Telegrams
+        # ALLOWED_INTENTS und wird ueber den Telegram-Kanal fail-closed
+        # abgelehnt (Async-/Telegram-Freischaltung ist ein Folge-Arbeitspaket).
+        delegate_commands.configure(config)
 
         self._queue: "queue.Queue" = queue.Queue()
         self._worker: Optional[threading.Thread] = None

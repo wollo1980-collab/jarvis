@@ -109,6 +109,16 @@ def test_rejection_reason_blocks_non_whitelisted_intent():
     assert "read_excel" in reason
 
 
+def test_delegate_analysis_stays_local_until_async_slice():
+    # ADR-034 Umsetzungs-Scheibe 1 ist bewusst lokal & synchron. Der Telegram-
+    # Intent + Ergebnis-Push ist ein Folge-Arbeitspaket; bis dahin darf
+    # delegate_analysis NICHT ueber Telegram erreichbar sein (fail-closed).
+    assert "delegate_analysis" not in ALLOWED_INTENTS
+    reason = rejection_reason(Plan(intent="delegate_analysis", target="jarvis"))
+    assert reason is not None
+    assert "delegate_analysis" in reason
+
+
 def test_mail_briefing_intents_are_whitelisted():
     # PO-Entscheidung 2026-07-06 (ADR-031-Nachtrag): das rein lesende
     # Mail-Briefing ist remote erreichbar.
