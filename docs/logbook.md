@@ -1,5 +1,17 @@
 # Logbook
 
+## 2026-07-06 - Modellunabhängiger Delegationsprozess entworfen (ADR-033, vorgeschlagen)
+
+**Kontext:** In der Nutzwert-Phase hat der PO die Vision geschärft: Jarvis als **Vermittlungsschicht** über drei Ebenen (Informationen · Agenten · Geräte) und als erste Richtung den **Agenten-Arm** gewählt („während ich unterwegs bin, delegiert Jarvis Arbeit an Claude/Codex/GPT, fertig zum Review bei Rückkehr"). Bewusste Reihenfolge (PO-Wunsch): erst der modellunabhängige Delegationsprozess, dann Agentenwahl und ADR-Umsetzung - damit Agenten austauschbare Backends bleiben (Modellneutralitäts-Invariante).
+
+**Umsetzung:** `docs/adr/ADR-033.md` (vorgeschlagen) hält den 9-Schritte-Lebenszyklus fest: Erfassen · Verstehen & Einstufen · **Priorisieren & Schneiden** · Zuordnen (modellneutral) · Eingrenzen & Freigeben · Ausführen & Beobachten · Verifizieren & Bewerten · Zurückgeben & Übergeben · Protokollieren & Abschließen. Der Schritt „Priorisieren & Schneiden" (auf PO-Wunsch ergänzt) zerlegt große/unklare Wünsche in kleine, reviewbare Arbeitspakete statt sie als Großauftrag zu delegieren. Kern-Erkenntnis: Der Prozess ist die **bestehende Pipeline verallgemeinert** - ein Agent ist eine neue Tool-Klasse, kein Parallelsystem (Evolution statt Revolution). Der ADR legt bewusst nur den Prozess fest, keinen Agenten und keine Fähigkeit.
+
+**Governance:** Neue ADR = 🟡 (vorschlagen → Review → PO-Freigabe → Umsetzung). `latest_adr` 32 → 33; Reibungsprotokoll um die gewählte Richtung und das Drei-Ebenen-Modell ergänzt. Kein Code. Reibungsprotokoll-Kandidat für spätere Handbook-Teil-2-Schärfung (🔴).
+
+**Bewusst nicht umgesetzt:** Agentenwahl, erste Fähigkeit/Scheibe, Backend-Protokoll als Code, Multi-Agenten, Geräte-Ebene. Kein Commit vor Review + PO-Freigabe.
+
+**Lessons Learned:** „Vision breit, Roadmap klein" (Handbook) hat sich hier bewährt: Der PO hat die Vision mehrfach geschärft, aber die Umsetzung bewusst auf eine kleine erste Scheibe eingegrenzt - der Delegationsprozess ist der Kompass, nicht der Bauauftrag.
+
 ## 2026-07-06 - Live-Verifikation: Mail-Briefing über Telegram bestanden
 
 **Kontext:** Der Telegram-Gegencheck aus Arbeitspaket B wurde vom PO durchgeführt: „was liegt an?" über Telegram funktioniert. Damit ist das Mail-Briefing jetzt **lokal (main.py) und remote (Runtime-Telegram-Kanal)** end-to-end real verifiziert.
