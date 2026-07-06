@@ -28,6 +28,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import threading
+from concurrent.futures import Future
 from typing import Optional
 
 from telegram import Update
@@ -39,6 +40,8 @@ from telegram_main import ALLOWED_INTENTS, filter_plan, is_authorized, rejection
 logger = logging.getLogger("jarvis.runtime.telegram")
 
 __all__ = ["TelegramChannel", "ALLOWED_INTENTS", "filter_plan", "rejection_reason", "is_authorized"]
+
+_MAX_TELEGRAM_TEXT = 4000
 
 
 class TelegramChannel:
@@ -105,6 +108,43 @@ class TelegramChannel:
         loop.call_soon_threadsafe(app.stop_running)
 
 
+def _message_chunks(text: str, limit: int = _MAX_TELEGRAM_TEXT) -> list[str]:
+    """Split long Telegram replies into safe chunks below the API limit."""
+    clean_text = text.strip()
+    if not clean_text:
+        return []
+    if len(clean_text) <= limit:
+        return [clean_text]
+
+    chunks: list[str] = []
+    start = 0
+    while start < len(clean_text):
+        end = min(start + limit, len(clean_text))
+        if end < len(clean_text):
+            split_at = clean_text.rfind("\n", start, end)
+            if split_at >= start:
+                end = split_at + 1
+        if end == start:
+            end = min(start + limit, len(clean_text))
+        chunks.append(clean_text[start:end])
+        start = end
+    return chunks
+
+
+async def _send_reply_chunks(bot, chat_id: int, text: str) -> None:
+    """Send one logical answer as one or more Telegram messages."""
+    for chunk in _message_chunks(text):
+        await bot.send_message(chat_id=chat_id, text=chunk)
+
+
+def _log_send_future(future: Future) -> None:
+    """Surface Telegram send failures instead of dropping them silently."""
+    try:
+        future.result()
+    except Exception:
+        logger.exception("Telegram-Antwort konnte nicht gesendet werden.")
+
+
 async def _on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     channel: TelegramChannel = context.application.bot_data["channel"]
     if update.effective_chat is None or update.message is None or not update.message.text:
@@ -119,8 +159,9 @@ async def _on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     loop = asyncio.get_running_loop()
 
     def reply_callback(text: str) -> None:
-        asyncio.run_coroutine_threadsafe(
-            context.bot.send_message(chat_id=chat_id, text=text), loop
+        future = asyncio.run_coroutine_threadsafe(
+            _send_reply_chunks(context.bot, chat_id=chat_id, text=text), loop
         )
+        future.add_done_callback(_log_send_future)
 
     channel.runtime.submit(user_input, reply_callback, plan_filter=filter_plan)

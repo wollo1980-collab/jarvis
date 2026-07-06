@@ -24,8 +24,8 @@ python scripts/gen_structure.py
 
 Grober Überblick der Bereiche:
 
-- **`core/`** — Kern: Config, Modelle, AI-Layer, Planner, Tool-Manager, Speech, Single-Instance, Provider/Mail-Reader.
-- **`commands/`** — Command-Registry + Commands (System, Memory, Monitor, Installer, Excel, Reports, Mail).
+- **`core/`** — Kern: Config, Modelle, AI-Layer, Planner, Tool-Manager, Speech, Single-Instance, Provider/Mail-Reader/Web-Search.
+- **`commands/`** — Command-Registry + Commands (System, Memory, Monitor, Installer, Excel, Reports, Mail, Web).
 - **`executor/`** — führt Pläne aus (Bestätigung, ✓/✗/?-Report).
 - **`memory/`** — Kurz-/Langzeitgedächtnis + Mail-Regeln.
 - **`scripts/`** — Werkzeuge: Konsistenz-Gate, Struktur-Generator.
@@ -110,6 +110,42 @@ zuerst Gmail nutzen und Hotmail bei Bedarf verifizieren.
 hören" (künftig immer zeigen). Die Regeln liegen menschenlesbar lokal
 (`memory_data/mail_rules.json`) und schlagen immer die automatische Erkennung.
 „zeig mir die Werbung" blendet die ausgeblendeten Mails einmalig ein.
+
+## Web v1 - read-only Websuche (Nutzwert-Phase, ADR-032)
+
+Jarvis kann auf ausdrueckliche Web-/Internet-/Recherche-Anfragen eine kleine,
+aktuelle Websuche ausfuehren und einen knappen Ueberblick mit Quellen liefern.
+Der Scope bleibt bewusst eng: **kein Browser**, **kein Oeffnen von Treffern**,
+**keine Aktionen**, **keine ganze Seitenextraktion**.
+
+Verfuegbar ist Web v1 lokal ueber `main.py`, ueber den separaten Telegram-Bot
+`telegram_main.py` und ueber den Runtime-Telegram-Kanal in `jarvis_runtime.py`.
+
+Beispiele:
+
+```text
+Du: Suche im Web nach aktuellen KI-Nachrichten
+Jarvis: <kurzer Ueberblick>
+
+Quellen:
+1. ...
+2. ...
+```
+
+```text
+Du: Was kostet die PS5?
+Jarvis: <knapper Preis-Ueberblick mit Quellen>
+```
+
+Technisch holt Jarvis nur die obersten Treffer (Titel, Snippet, URL) aus der
+DuckDuckGo-Lite-Suche und laesst daraus eine kurze Zusammenfassung formulieren.
+Die Quellen werden immer sichtbar mit ausgegeben, damit du wichtige Punkte
+selbst oeffnen und pruefen kannst. Offensichtliche DuckDuckGo-Werbe-/Hilfstreffer
+werden dabei ausgefiltert.
+
+**Bewusst nicht Teil von Web v1:** Treffer oeffnen, Browser steuern, ganze
+Artikel lesen, Login-geschuetzte Seiten, News-Speziallogik, generische
+Connector-Plattform.
 
 ## Tests ausführen
 
@@ -363,7 +399,7 @@ Kanal würde ohne `setx` beim Autostart stillschweigend nicht starten.
 demselben Grund ebenfalls per `setx` dauerhaft gesetzt werden.
 
 **Bewusst eingeschränkt (siehe `HANDBOOK.md` Teil 6 „Sicherheitsmodell" / ADR-019):**
-- Nur `chat`, `remember_fact`, `forget_fact`, `system_status` sind über
+- Nur `chat`, `remember_fact`, `forget_fact`, `system_status`, `search_web` sind über
   Telegram erreichbar (Sicherheitsstufe 0 und ausgewählte
   Speicher-Interaktionen der Stufe 1).
 - Kein `read_excel`/`analyze_report`/`calculate_kpi`, kein

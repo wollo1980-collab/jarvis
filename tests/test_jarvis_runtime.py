@@ -9,9 +9,11 @@ import threading
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import commands.web as web_commands
 import jarvis_runtime
 from core.config import Config
 from core.models import Plan
+from core.web_search import SearchResult
 from jarvis_runtime import ConsoleDummyChannel, JarvisRuntime, _RuntimeSpeech
 
 
@@ -19,8 +21,16 @@ class FakeAI:
     """Gleiches Muster wie tests/test_integration.py::FakeAI."""
 
     def get_plan(self, user_input, history):
-        if "kritisch" in user_input.lower():
+        text = user_input.lower()
+        if "kritisch" in text:
             return Plan(intent="shutdown_pc", raw_input=user_input, confidence=1.0)
+        if "web" in text or "internet" in text or "recherch" in text:
+            return Plan(
+                intent="search_web",
+                target="Wetter Berlin",
+                raw_input=user_input,
+                confidence=1.0,
+            )
         return Plan(intent="chat", raw_input=user_input, confidence=1.0)
 
     def answer(self, user_input, history, long_term_summary=""):
@@ -68,6 +78,38 @@ def test_submit_and_process_single_message(tmp_path):
         _wait(done)
 
         assert replies == ["Antwort auf: hallo"]
+    finally:
+        runtime.stop()
+
+
+def test_runtime_handles_search_web(tmp_path, monkeypatch):
+    config = _make_config(tmp_path)
+    runtime = JarvisRuntime(config, ai=FakeAI())
+    monkeypatch.setattr(
+        web_commands,
+        "_searcher",
+        lambda query, max_results, timeout_seconds: [
+            SearchResult(
+                title="Wetter Berlin",
+                url="https://example.com/wetter-berlin",
+                snippet="Mild und trocken.",
+            )
+        ],
+    )
+    runtime.start()
+    try:
+        done = threading.Event()
+        replies = []
+
+        def reply_callback(text):
+            replies.append(text)
+            done.set()
+
+        runtime.submit("suche im web nach wetter berlin", reply_callback)
+        _wait(done)
+
+        assert "Quellen:" in replies[0]
+        assert "https://example.com/wetter-berlin" in replies[0]
     finally:
         runtime.stop()
 

@@ -32,6 +32,7 @@ def test_remember_fact_stores_with_category(tmp_path: Path):
     )
 
     assert result.status == Status.SUCCESS
+    assert "Ich habe mir das gemerkt" in result.message
     facts = memory_commands._require_long_term().all_facts()
     assert facts[0].text == "macht montags Reports"
     assert facts[0].category == "gewohnheit"
@@ -64,6 +65,7 @@ def test_forget_fact_success(tmp_path: Path):
     result = cmd.execute(Plan(intent="forget_fact", target="montags Reports"))
 
     assert result.status == Status.SUCCESS
+    assert "Langzeitgedächtnis entfernt" in result.message
 
 
 def test_forget_fact_not_found(tmp_path: Path):

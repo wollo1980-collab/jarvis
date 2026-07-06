@@ -18,6 +18,7 @@ import commands.mail as mail_commands
 import commands.memory as memory_commands
 import commands.monitor as monitor_commands
 import commands.reports as reports_commands
+import commands.web as web_commands
 from core.ai import AIEngine
 from core.config import Config
 from core.models import Message
@@ -89,6 +90,7 @@ def main() -> None:
         # Mail-Briefing (Nutzwert-Phase, ADR-031): baut die Postfächer aus
         # config.mail_accounts + Env-Passwörtern und den lokalen Regel-Speicher.
         mail_commands.configure(config)
+        web_commands.configure(ai, timeout_seconds=config.timeout)
 
         logger.info("Jarvis v0.4 gestartet.")
         speech.say("Jarvis ist bereit.")

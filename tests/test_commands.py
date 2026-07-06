@@ -30,6 +30,7 @@ def test_open_program_success_posix():
     ), patch("commands.system.subprocess.Popen") as popen:
         result = cmd.execute(Plan(intent="open_program", target="foo"))
     assert result.status == Status.SUCCESS
+    assert result.message == "Ich habe foo geöffnet."
     popen.assert_called_once()
 
 
@@ -42,6 +43,7 @@ def test_open_program_success_windows_uses_startfile():
     ) as startfile:
         result = cmd.execute(Plan(intent="open_program", target="excel"))
     assert result.status == Status.SUCCESS
+    assert result.message == "Ich habe excel geöffnet."
     startfile.assert_called_once()
 
 
@@ -65,6 +67,7 @@ def test_shutdown_confirmed_runs_subprocess():
     with patch("commands.system.subprocess.run") as run:
         result = cmd.execute(Plan(intent="shutdown_pc", parameters={"confirmed": True}))
     assert result.status == Status.SUCCESS
+    assert result.message == "In Ordnung. Der PC wird jetzt heruntergefahren."
     run.assert_called_once()
 
 

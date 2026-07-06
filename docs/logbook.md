@@ -1,5 +1,53 @@
 # Logbook
 
+## 2026-07-06 - Web v1 als zweiter Connector integriert
+
+**Kontext:** Nach Mail war der naechste kleine Nutzwert-Baustein nicht noch mehr Struktur, sondern eine reale Alltagshilfe fuer aktuelle Informationen. Wolfgangs Auftrag war direkt: `web v1 integrieren`. Gleichzeitig war das die erste Stelle, an der Jarvis' Modellneutralitaet praktisch zaehlt: Web durfte nicht still an OpenAI-Tooling gekettet werden, nur weil es technisch bequem waere.
+
+**Umsetzung:** `core/web_search.py` fuehrt die eigentliche read-only Websuche lokal und provider-neutral ueber die DuckDuckGo-Lite-Suche aus. `commands/web.py` bildet daraus den neuen Command `search_web`, der Treffer holt, einen kurzen Ueberblick formulieren laesst und die Quellen immer sichtbar mitliefert. `main.py` verdrahtet den Connector, `commands/__init__.py` registriert ihn, `core/ai.py` bekam nur eine kleine Intent-Klarstellung fuer Web-/Recherche-Anfragen. Nach dem ersten Live-Check des Produktstands wurde der Connector direkt noch in die aktiven Fernzugriffspfade nachgezogen: `telegram_main.py` konfiguriert Web fuer den eigenstaendigen Bot, `jarvis_runtime.py` fuer den geteilten Runtime-Stack, und die Telegram-Whitelist erlaubt jetzt auch `search_web`. Spaeterer Live-Fund am echten Telegram-Pfad: Die urspruengliche DuckDuckGo-HTML-Route lieferte haeufig eine Bot-Challenge statt Trefferliste; deshalb wurde auf die funktionierende Lite-Suche umgestellt und die Challenge-Erkennung explizit als Webfehler verankert. Zweiter Live-Fund: Preisabfragen wie `PS5 Preis` zogen extrem lange DuckDuckGo-Werbe-/Tracking-URLs in die Quellenliste, wodurch Telegram-Antworten still scheitern konnten. Deshalb filtert `core/web_search.py` jetzt DuckDuckGo-interne Werbe-/Hilfstreffer aus der finalen Trefferliste, und `telegram_channel.py` zerlegt lange Antworten in sichere Teilnachrichten und loggt Sendefehler sichtbar. Dritter Live-Fund: Bei `Wie teuer ist die Switch 2 aktuell?` plante die KI nur `Switch 2` statt einer Preis-Suche. Deshalb ergaenzt `commands/web.py` fehlende Preis-/Verfuegbarkeits-Hinweise jetzt gezielt selbst und fokussiert die Zusammenfassung in solchen Faellen explizit auf Preis bzw. Verfuegbarkeit. Die Architektur blieb bewusst flach: kein Browser, keine generische Connector-Basis, keine neue KI-Methode.
+
+**Tests:** Neue Parser- und Command-Tests plus Prompt-Integrationstest. Nach der Telegram-/Runtime-Nachverdrahtung kamen noch zwei Kanal-Regressionsanker dazu. Geplanter Verifikationssatz: `tests/test_web_search.py`, `tests/test_commands_web.py`, relevanter `test_ai.py`-Ausschnitt, `tests/test_telegram_main.py`, `tests/test_jarvis_runtime.py` und Konsistenz-Gate.
+
+**Bewusst nicht umgesetzt:** Kein Oeffnen von Treffern, keine Browser-Steuerung, keine Extraktion ganzer Seiten, kein provider-spezifischer OpenAI-Web-Shortcut, keine Connector-Abstraktion trotz zweitem Dienst.
+
+**Lessons Learned:** Der zweite Connector erzwingt nicht automatisch die richtige Abstraktion. Entscheidend ist nicht die Anzahl der Dienste, sondern ob bereits ein belastbares gemeinsames Interface sichtbar ist. Bei Mail und Web war das noch nicht der Fall.
+
+## 2026-07-06 - Jarvis-DNA aus dem Prompt in die ersten Alltagsantworten gezogen
+
+**Kontext:** Nach der PO-Freigabe vom 2026-07-05 war die Produkt-DNA zwar in Verfassung und Chat-System-Prompt verankert, die konkret sichtbaren Antworten mehrerer Kern-Commands klangen aber weiterhin generisch-technisch. Damit bestand das Risiko, dass Jarvis in der Konversation ruhig und kontrolliert wirkt, im operativen Alltag jedoch wie ein uneinheitlicher Werkzeugkasten spricht.
+
+**Umsetzung:** Erste direkte Nutzerantworten in `commands/__init__.py`, `commands/memory.py`, `commands/system.py`, `commands/installer.py` und `commands/mail.py` wurden sprachlich an die definierte Haltung angeglichen: ruhiger, praeziser, kontrollierter, ohne Ueberschwang. Der Eingriff blieb bewusst oberflaechennah: keine neue Logik, keine Aenderung am Prompt, keine Architekturarbeit. Bestehende Tests wurden nur dort geschaerft, wo Formulierungen nun bewusst Teil des Produkts sind.
+
+**Tests:** Geplanter Verifikationssatz: gezielte Command-Tests plus Konsistenz-Gate. Testzaehler bleibt unveraendert, weil nur bestehende Tests erweitert wurden.
+
+**Bewusst nicht umgesetzt:** Kein Vollausbau ueber alle Commands. Vor allem `monitor.py`, `reports.py` und `excel.py` bleiben fuer einen spaeteren, getrennten Sprachdurchlauf offen. Keine TTS-/Stimmenarbeit, kein Wake-Word, kein Commit.
+
+**Lessons Learned:** Produktpersoenlichkeit wird erst dann glaubwuerdig, wenn sie an den banalen Stellen sichtbar wird: Rueckfragen, Erfolgsmeldungen, Fehlertexte. Ein guter System-Prompt allein reicht dafuer nicht.
+
+## 2026-07-05 - PO-Freigabe: Jarvis-DNA nicht als Prompt, sondern integriert
+
+**Kontext:** Wolfgang hat fuer Jarvis explizit eine Anlehnung an den Film-Jarvis gewuenscht - nicht als lose Prompt-Spielerei, sondern als integrierten Teil des Produkts. Der bestehende `CHAT_SYSTEM_PROMPT` enthielt bereits eine leichte Richtung (hoeflich, loyal, trockener Humor), die Verfassung trug diese Produkt-DNA jedoch noch nicht explizit genug. Dadurch blieb die Persoenlichkeit eher eine Implementierungsnotiz als eine stabile Produkteigenschaft. **Governance-Einordnung:** Rot, weil die Projektverfassung geaendert wird (`constitution_version` 4.0 -> 4.1); PO-Freigabe liegt vor.
+
+**Umsetzung:** `docs/handbook/HANDBOOK.md` beschreibt Auftreten und Tonfall jetzt ausdruecklich als Teil der Produktidentitaet: ruhig, praezise, souveraen, loyal, funktionale Eleganz statt Show, trockener Humor nur dezent, offene Benennung von Unsicherheit. `core/ai.py` wurde darauf angeglichen; der Chat-System-Prompt transportiert diese Haltung jetzt klarer und vermeidet explizit leere Begeisterung und Chatbot-Ueberschwang. Der bestehende Test in `tests/test_ai.py` wurde auf die geschaerfte DNA erweitert. `PROJECT_STATE.md` und `CHANGELOG.md` wurden auf den neuen Verfassungsstand nachgezogen.
+
+**Tests:** Geplanter Verifikationssatz: gezielter Lauf `tests/test_ai.py` plus Konsistenz-Gate. Keine neue Testfunktion, Testzaehler bleibt unveraendert.
+
+**Bewusst nicht umgesetzt:** Keine breitflaechige Umformulierung aller lokal erzeugten Nutzertexte, keine Aenderung an Mail-/Command-Templates, keine TTS-/Stimmenarbeit, kein Wake-Word, kein Commit.
+
+**Lessons Learned:** Produktpersoenlichkeit gehoert in die Verfassung und in die zentrale Antwortlogik - nicht als freistehender Prompt neben dem Produkt. Erst wenn Haltung und Implementierung dieselbe Quelle haben, wird Persoenlichkeit belastbar statt zufaellig.
+
+## 2026-07-05 - PO-Entscheidung: erste Nutzwert-Reibung abgeschlossen, naechste kleine Funktion darf kommen
+
+**Kontext:** Die erste reale Nutzwert-Reibung der Nutzwert-Phase war der nicht mehr funktionierende Jarvis-Autostart nach der Projektumstrukturierung. Nach Ursachenanalyse, minimalem Pfadfix und realem Live-Smoke-Test ist diese Reibung jetzt erfolgreich **end-to-end verifiziert**. Gleichzeitig zeigte der bewusste Nutzungslauf: Der aktuelle Funktionsumfang ist noch so begrenzt, dass aus der taeglichen Nutzung keine weitere grosse Reibung entstanden ist.
+
+**Umsetzung:** Die PO-Aussage wurde als Produkt-/Scope-Entscheidung fuer die laufende Nutzwert-Phase in `PROJECT_STATE.md` nachgezogen. Autostart gilt nicht mehr als offener Betriebs-TODO. Der Fokus wechselt von reiner Inbetriebnahme/Beobachtung auf die **Auswahl der naechsten kleinen Nutzwert-Funktion** innerhalb des bestehenden Blocks. **Governance-Einordnung:** keine ADR, weil keine Architekturentscheidung und kein neuer Increment-Rahmen, sondern eine dokumentierte Scope-Fortschreibung innerhalb der laufenden Nutzwert-Phase.
+
+**Tests:** Keine Code-Aenderung. Konsistenz-Gate nach Doku-Update: PASS.
+
+**Bewusst nicht umgesetzt:** Noch keine Auswahl oder Implementierung der naechsten Funktion, kein neuer Connector-Beschluss, kein Commit.
+
+**Lessons Learned:** Ein Nutzungslauf kann auch dann erfolgreich sein, wenn er *keine* neue grosse Reibung hervorbringt. In einer fruehen Produktphase ist das ein Signal fuer begrenzten Funktionsumfang - und rechtfertigt bewusst den naechsten kleinen Nutzwert-Baustein statt erzwungen weiterem Dogfooding ohne neues Material.
+
 ## 2026-07-05 - Bugfix: repo-gebundene Pfadauflösung fuer Runtime und Autostart
 
 **Kontext:** In der Nutzwert-Phase fiel im echten Benutzerkontext auf, dass die headless Runtime bei Autostart unter `C:\Users\wollo\logs` und `C:\Users\wollo\memory_data` schrieb. Die Ursachenanalyse zeigte: `config.json` wird zwar repo-gebunden geladen, aber `core/config.py` übernahm relative Werte fuer `memory_dir` und `log_dir` bisher unveraendert als `Path(...)`. Dadurch wurden sie implizit gegen das aktuelle Working Directory statt gegen `BASE_DIR` aufgeloest. **Governance-Einordnung:** gruener Bugfix, keine ADR (CONTRIBUTING §3/§5).

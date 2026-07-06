@@ -6,9 +6,11 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+import commands.web as web_commands
 import telegram_main
 from core.config import Config
 from core.models import Message, Plan
+from core.web_search import SearchResult
 from telegram_main import (
     ALLOWED_INTENTS,
     JarvisBridge,
@@ -53,6 +55,13 @@ class FakeAI:
                 intent="remember_fact",
                 target=fact,
                 parameters={"category": "gewohnheit"},
+                raw_input=user_input,
+                confidence=1.0,
+            )
+        if "web" in text or "internet" in text or "recherch" in text:
+            return Plan(
+                intent="search_web",
+                target="aktuelle KI Nachrichten",
                 raw_input=user_input,
                 confidence=1.0,
             )
@@ -164,6 +173,26 @@ def test_bridge_handles_remember_fact(tmp_path: Path):
         chat_id="12345", user_input="merk dir, dass ich montags Reports mache"
     )
     assert "montags Reports" in response
+
+
+def test_bridge_handles_search_web(tmp_path: Path, monkeypatch):
+    bridge = _make_bridge(tmp_path)
+    monkeypatch.setattr(
+        web_commands,
+        "_searcher",
+        lambda query, max_results, timeout_seconds: [
+            SearchResult(
+                title="KI Nachrichten",
+                url="https://example.com/ki",
+                snippet="Die Lage ist ruhig, aber aktiv.",
+            )
+        ],
+    )
+
+    response = bridge.handle_message(chat_id="12345", user_input="suche im web nach ki")
+
+    assert "Quellen:" in response
+    assert "https://example.com/ki" in response
 
 
 def test_bridge_rejects_forbidden_intent_without_executing(tmp_path: Path):

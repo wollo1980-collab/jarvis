@@ -3,7 +3,7 @@ Command Registry + minimaler Dispatch.
 
 Kein voller Executor mit State-Machine/Async (folgt in v0.3) - aber
 neue Commands brauchen nur eine Registrierung in ihrem Modul, keine
-Änderung an bestehendem Code. Der Dispatch selbst führt niemals
+Aenderung an bestehendem Code. Der Dispatch selbst fuehrt niemals
 eigene Business-Logik aus, er koordiniert nur.
 """
 from __future__ import annotations
@@ -32,7 +32,7 @@ def register(command: Command) -> None:
 
 
 def dispatch(plan: Plan) -> Result:
-    """Sucht den passenden Command über den Intent und führt ihn aus."""
+    """Sucht den passenden Command ueber den Intent und fuehrt ihn aus."""
     command = REGISTRY.get(plan.intent)
 
     if command is None:
@@ -42,20 +42,23 @@ def dispatch(plan: Plan) -> Result:
         logger.info("Unbekannter Intent: %s", plan.intent)
         return Result(
             status=Status.NEEDS_CLARIFICATION,
-            message=f"Ich kenne keinen Befehl für '{plan.intent}'.",
+            message=f"Dafür habe ich im Moment keinen passenden Befehl: '{plan.intent}'.",
         )
 
     try:
         return command.execute(plan)
     except Exception as e:
         logger.exception("Command '%s' fehlgeschlagen", plan.intent)
-        return Result(status=Status.FAILED, message=f"Fehler bei '{plan.intent}': {e}")
+        return Result(
+            status=Status.FAILED,
+            message=f"Bei '{plan.intent}' ist ein Fehler aufgetreten: {e}",
+        )
 
 
 def _register_all() -> None:
-    from commands import excel, installer, mail, memory, monitor, reports, system
+    from commands import excel, installer, mail, memory, monitor, reports, system, web
 
-    for module in (system, memory, monitor, installer, excel, reports, mail):
+    for module in (system, memory, monitor, installer, excel, reports, mail, web):
         for command in getattr(module, "COMMANDS", []):
             register(command)
 

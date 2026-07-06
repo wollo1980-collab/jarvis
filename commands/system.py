@@ -1,9 +1,9 @@
 """
-System-Commands: Programme öffnen, PC herunterfahren, etc.
+System-Commands: Programme oeffnen, PC herunterfahren, etc.
 
-Jeder Command prüft selbst seine Voraussetzungen (Existiert das
-Programm? Ist Bestätigung nötig?), bevor er etwas ausführt.
-Jarvis führt nie "blind" etwas aus.
+Jeder Command prueft selbst seine Voraussetzungen (Existiert das
+Programm? Ist Bestaetigung noetig?), bevor er etwas ausfuehrt.
+Jarvis fuehrt nie "blind" etwas aus.
 """
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from core.models import Plan, Result, Status
 
 logger = logging.getLogger("jarvis.commands.system")
 
-# Bekannte Programme -> tatsächlicher ausführbarer Name.
+# Bekannte Programme -> tatsaechlicher ausfuehrbarer Name.
 # Kein Freitext direkt an subprocess/os.startfile durchreichen.
 KNOWN_PROGRAMS = {
     "excel": "EXCEL.EXE" if platform.system() == "Windows" else "excel",
@@ -28,8 +28,8 @@ KNOWN_PROGRAMS = {
 
 class OpenProgramCommand:
     name = "open_program"
-    description = "Öffnet ein bekanntes Programm (z. B. Excel, Notepad, Browser)."
-    # Unkritische Aktion (Sicherheitsstufe 1) - keine Bestätigung nötig.
+    description = "Oeffnet ein bekanntes Programm (z. B. Excel, Notepad, Browser)."
+    # Unkritische Aktion (Sicherheitsstufe 1) - keine Bestaetigung noetig.
     requires_confirmation = False
 
     def execute(self, plan: Plan) -> Result:
@@ -38,7 +38,7 @@ class OpenProgramCommand:
         if not target:
             return Result(
                 status=Status.NEEDS_CLARIFICATION,
-                message="Welches Programm soll ich öffnen?",
+                message="Welches Programm soll ich für dich öffnen?",
             )
 
         executable = KNOWN_PROGRAMS.get(target, target)
@@ -48,9 +48,9 @@ class OpenProgramCommand:
         return self._open_posix(plan.target, executable)
 
     def _open_windows(self, display_name: str, executable: str) -> Result:
-        # os.startfile löst genauso auf wie das Startmenü/der
-        # Ausführen-Dialog (u. a. über die "App Paths"-Registry).
-        # shutil.which prüft NUR den PATH - dort steht z. B. Excel bei
+        # os.startfile loest genauso auf wie das Startmenue/der
+        # Ausfuehren-Dialog (u. a. ueber die "App Paths"-Registry).
+        # shutil.which prueft NUR den PATH - dort steht z. B. Excel bei
         # den meisten Installationen nicht drin, obwohl es vorhanden
         # ist. Lessons Learned siehe docs/logbook.md (2026-07-01).
         try:
@@ -58,44 +58,44 @@ class OpenProgramCommand:
         except OSError as e:
             return Result(
                 status=Status.FAILED,
-                message=f"{display_name} konnte nicht gefunden oder gestartet werden: {e}",
+                message=f"{display_name} konnte ich nicht finden oder starten: {e}",
             )
-        return Result(status=Status.SUCCESS, message=f"{display_name} wurde geöffnet.")
+        return Result(status=Status.SUCCESS, message=f"Ich habe {display_name} geöffnet.")
 
     def _open_posix(self, display_name: str, executable: str) -> Result:
         if shutil.which(executable) is None:
             return Result(
                 status=Status.FAILED,
-                message=f"{display_name} konnte nicht gefunden werden.",
+                message=f"{display_name} konnte ich nicht finden.",
             )
         try:
             subprocess.Popen([executable])
         except OSError as e:
             return Result(
                 status=Status.FAILED,
-                message=f"{display_name} konnte nicht gestartet werden: {e}",
+                message=f"{display_name} konnte ich nicht starten: {e}",
             )
-        return Result(status=Status.SUCCESS, message=f"{display_name} wurde geöffnet.")
+        return Result(status=Status.SUCCESS, message=f"Ich habe {display_name} geöffnet.")
 
 
 class ShutdownPcCommand:
     name = "shutdown_pc"
-    description = "Fährt den PC herunter (kritisch - nur bei eindeutiger, expliziter Aufforderung)."
+    description = "Faehrt den PC herunter (kritisch - nur bei eindeutiger, expliziter Aufforderung)."
     # Kritische Aktion, Sicherheitsstufe 3 (Handbook Kap. 10): braucht
-    # mehrfache/eindeutige Bestätigung, nicht nur ein einfaches "ja".
+    # mehrfache/eindeutige Bestaetigung, nicht nur ein einfaches "ja".
     # Der Executor verlangt deshalb das exakte Eintippen von
     # confirmation_phrase statt eines simplen Ja/Nein.
     requires_confirmation = True
     confirmation_phrase = "HERUNTERFAHREN"
 
     def execute(self, plan: Plan) -> Result:
-        # Destruktive Aktion -> erfordert explizite Bestätigung.
-        # main.py/Executor müssen parameters["confirmed"] erst
-        # über eine Rückfrage an den Nutzer einholen.
+        # Destruktive Aktion -> erfordert explizite Bestaetigung.
+        # main.py/Executor muessen parameters["confirmed"] erst
+        # ueber eine Rueckfrage an den Nutzer einholen.
         if not plan.parameters.get("confirmed"):
             return Result(
                 status=Status.NEEDS_CLARIFICATION,
-                message="Soll ich den PC wirklich herunterfahren? Bitte bestätigen.",
+                message="Soll ich den PC wirklich herunterfahren? Bitte bestätige das.",
             )
 
         system_name = platform.system()
@@ -107,12 +107,12 @@ class ShutdownPcCommand:
         except (subprocess.CalledProcessError, PermissionError) as e:
             return Result(
                 status=Status.FAILED,
-                message=f"Dafür benötige ich Administratorrechte oder es gab einen Fehler: {e}",
+                message=f"Dafür brauche ich Administratorrechte, oder es ist ein Fehler aufgetreten: {e}",
             )
 
-        return Result(status=Status.SUCCESS, message="PC wird heruntergefahren.")
+        return Result(status=Status.SUCCESS, message="In Ordnung. Der PC wird jetzt heruntergefahren.")
 
 
-# Registrierungspunkt für dieses Modul - commands/__init__.py liest
+# Registrierungspunkt fuer dieses Modul - commands/__init__.py liest
 # diese Liste beim Start ein. Neuer Command = neue Klasse + Eintrag hier.
 COMMANDS = [OpenProgramCommand(), ShutdownPcCommand()]

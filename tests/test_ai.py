@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 
 from commands.memory import ForgetFactCommand, RememberFactCommand
 from commands.system import OpenProgramCommand, ShutdownPcCommand
+from commands.web import SearchWebCommand
 from core.ai import (
     AIEngine,
     CHAT_SYSTEM_PROMPT,
@@ -294,10 +295,12 @@ def test_system_prompt_includes_command_descriptions():
 
 
 def test_chat_prompt_has_dezente_persoenlichkeit():
-    """Wolfgang-Wunsch (01.07.2026): dezenter trockener Humor im Stil
-    des Film-Jarvis, aber ausdruecklich nicht auf Kosten von Klarheit
-    oder Hilfsbereitschaft - siehe logbook.md."""
+    """Jarvis-DNA: ruhige, praezise, loyale Assistenz mit seltener,
+    trockener Note - lose an Film-Jarvis angelehnt, aber ohne Show."""
     assert "trocken" in CHAT_SYSTEM_PROMPT.lower()
+    assert "ruhig" in CHAT_SYSTEM_PROMPT.lower()
+    assert "loyal" in CHAT_SYSTEM_PROMPT.lower()
+    assert "praezise" in CHAT_SYSTEM_PROMPT.lower()
     assert "Wolfgang" in CHAT_SYSTEM_PROMPT
 
 
@@ -310,6 +313,15 @@ def test_system_prompt_mentions_memory_commands():
     assert RememberFactCommand.name in prompt
     assert ForgetFactCommand.name in prompt
     assert "category" in prompt
+
+
+def test_system_prompt_mentions_web_command():
+    prompt = build_system_prompt()
+
+    assert SearchWebCommand.name in prompt
+    assert SearchWebCommand.description in prompt
+    assert "aktuelle Informationen" in prompt
+    assert "Was kostet die PS5?" in prompt
 
 
 def test_build_chat_system_prompt_without_summary_unchanged():

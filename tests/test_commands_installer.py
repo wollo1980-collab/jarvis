@@ -39,6 +39,7 @@ def test_install_success_known_package_uses_exact_id():
     ), patch("commands.installer.subprocess.run", return_value=fake_proc) as run:
         result = cmd.execute(Plan(intent="install_program", target="vlc"))
     assert result.status == Status.SUCCESS
+    assert result.message == "Ich habe vlc installiert."
     called_cmd = run.call_args.args[0]
     assert "--id" in called_cmd
     assert "VideoLAN.VLC" in called_cmd

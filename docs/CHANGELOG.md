@@ -1,5 +1,67 @@
 # Changelog
 
+## 2026-07-06 - Web v1: read-only Websuche als zweiter Connector
+
+### Neu
+- `core/web_search.py`: kleiner, modellneutraler Web-Search-Baustein auf Basis der Python-Stdlib (`urllib`, `html.parser`). Holt nur Treffer-Titel, Snippets und URLs aus der DuckDuckGo-HTML-Suche - keine Browser-Steuerung, keine ganze Seitenextraktion.
+- `commands/web.py`: neuer Command `search_web` fuer Web-/Internet-/Recherche-Anfragen. Jarvis liefert einen knappen Ueberblick und zeigt die Quellen immer sichtbar an.
+- `docs/adr/ADR-032.md`: Scope, Grenzen, Risiken und Architekturentscheidung fuer Web v1 dokumentiert.
+- `tests/test_web_search.py`, `tests/test_commands_web.py`: Parser-, Fehler- und Command-Tests fuer den neuen Connector.
+
+### Geaendert
+- `commands/__init__.py`, `main.py`: Web-Command registriert und beim Start konfiguriert.
+- `telegram_main.py`, `jarvis_runtime.py`: `search_web` in die aktiven Telegram-/Runtime-Pfade verdrahtet. Telegram erlaubt jetzt auch read-only Websuche; die Runtime konfiguriert den Web-Connector fuer ihren geteilten Core-Stack mit.
+- `core/web_search.py`: DuckDuckGo-HTML-Route durch die stabile Lite-Suche ersetzt. Zusaetzlich erkennt Jarvis jetzt explizit Bot-/Captcha-Seiten des Suchanbieters und meldet sie als echten Webfehler statt still "keine Treffer".
+- `core/web_search.py`: DuckDuckGo-interne Werbe-/Hilfstreffer (`y.js`, Help-Pages) werden aus der finalen Trefferliste gefiltert, damit Produkt-/Preisabfragen nicht in Tracking-URLs ertrinken.
+- `telegram_channel.py`: lange Antworten werden jetzt in Telegram-sichere Teilnachrichten zerlegt; Sendefehler werden nicht mehr still verschluckt, sondern geloggt.
+- `core/ai.py`: kleine Intent-Klarstellung fuer `search_web`, damit Web-/Recherche-Anfragen sauber auf den neuen Command gemappt werden koennen.
+- `core/ai.py`, `commands/web.py`: Preis-/Verfuegbarkeitsfragen (z. B. "Was kostet die PS5?") werden klarer als Web-Fall beschrieben.
+- `commands/web.py`: Wenn der Planner bei einer Preis-/Verfuegbarkeitsfrage nur ein zu generisches Ziel liefert (z. B. `Switch 2` statt `Switch 2 Preis`), ergaenzt der Web-Command die fehlende Suchintention jetzt klein und gezielt selbst. Preis-Zusammenfassungen werden im Prompt zusaetzlich auf den eigentlichen Preis fokussiert.
+- `tests/test_ai.py`: bestaetigt, dass `search_web` automatisch im System-Prompt landet.
+- `tests/test_telegram_main.py`, `tests/test_jarvis_runtime.py`: regressionssichern, dass `search_web` ueber den eigenstaendigen Telegram-Bot und ueber die Runtime tatsaechlich antwortet statt an fehlender Verdrahtung zu scheitern.
+- `tests/test_telegram_channel.py`: regressionssichert Chunking langer Telegram-Antworten.
+
+### Bewusst nicht enthalten
+- Kein Oeffnen von Treffern, keine Browser-Steuerung, keine generische Connector-Abstraktion.
+- Keine provider-spezifische OpenAI-Webtool-Loesung; Retrieval bleibt modellneutral.
+
+### Tests
+- `tests/test_web_search.py`
+- `tests/test_commands_web.py`
+- `tests/test_ai.py`
+- `tests/test_telegram_main.py`
+- `tests/test_jarvis_runtime.py`
+- `python scripts/check_consistency.py`
+
+## 2026-07-06 - Jarvis-DNA: zentrale Nutzerantworten angeglichen
+
+### Geaendert
+- `commands/__init__.py`: Fallback- und Fehlermeldungen des Dispatchers sprachlich beruhigt; unbekannte Intents und Laufzeitfehler klingen jetzt kontrollierter und weniger technisch-roh.
+- `commands/memory.py`, `commands/system.py`, `commands/installer.py`, `commands/mail.py`: erste sichtbare Alltags-Responses an die verankerte Jarvis-DNA angeglichen. Fokus: kurze, ruhige, praezise Rueckmeldungen statt generischer Bot-Texte.
+- `tests/test_commands.py`, `tests/test_commands_installer.py`, `tests/test_commands_mail.py`, `tests/test_commands_memory.py`: bestehende Tests auf die neue Formulierungsebene erweitert; Testanzahl unveraendert.
+
+### Bewusst nicht enthalten
+- Kein vollflaechiger Sprachdurchlauf durch `commands/monitor.py`, `commands/reports.py` oder `commands/excel.py`.
+- Keine neue Funktionalitaet, keine Architektur- oder Prompt-Aenderung.
+
+### Tests
+- `tests/test_commands.py`
+- `tests/test_commands_installer.py`
+- `tests/test_commands_mail.py`
+- `tests/test_commands_memory.py`
+- `python scripts/check_consistency.py`
+
+## 2026-07-05 - Jarvis-DNA: Auftreten und Ton explizit integriert
+
+### Geaendert
+- `docs/handbook/HANDBOOK.md`: `constitution_version` 4.1. Auftreten und Tonfall von Jarvis jetzt explizit als Teil der Produkt-DNA beschrieben: ruhig, praezise, loyal, funktionale Eleganz statt Show, trockener Humor nur dezent, offene Benennung von Unsicherheit.
+- `core/ai.py`: `CHAT_SYSTEM_PROMPT` an die Verfassung angeglichen. Antworten sind jetzt ausdruecklich kurz, kontrolliert, loyal, nicht ueberbegeistert und bei kritischen oder unsicheren Themen knapper und formeller.
+- `tests/test_ai.py`: bestehender Prompt-Test auf die geschaerfte Jarvis-DNA erweitert; Testsuite-Zaehler unveraendert.
+
+### Tests
+- `tests/test_ai.py`
+- `python scripts/check_consistency.py`
+
 ## Nutzwert-Phase - Repo-gebundene Pfade fuer Runtime und Autostart (05.07.2026)
 
 ### Geaendert

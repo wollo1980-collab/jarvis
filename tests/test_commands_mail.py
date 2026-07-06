@@ -87,6 +87,7 @@ def test_briefing_collapses_advertising(tmp_path, monkeypatch):
     ads = [_hdr("Shop", "Sale"), _hdr("News", "Wochenrückblick")]
     text = mail._briefing(relevant, ads, [], show_ads=False)
     assert "PayPal: Zahlung erhalten" in text
+    assert "wichtig wirken" in text
     assert "2 Werbe-/Newsletter-Mail(s) ausgeblendet" in text
     assert "Sale" not in text  # zusammengefaltet, nicht gelistet
 
@@ -141,6 +142,7 @@ def test_hide_sender_command_persists_rule(tmp_path, monkeypatch):
     mail.configure(_config(tmp_path, monkeypatch), reader=lambda a: [])
     result = mail.MailHideSenderCommand().execute(Plan(intent="mail_hide_sender", target="Amazon"))
     assert result.status == Status.SUCCESS
+    assert result.message.startswith("Verstanden.")
     assert mail._require_configured().classify("Amazon <x@amazon.de>") == "hide"
 
 

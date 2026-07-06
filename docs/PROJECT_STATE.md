@@ -1,8 +1,8 @@
 ---
 version: "v0.8 P1+2 (Multi-KI) abgeschlossen; Nutzwert-Phase gestartet"
 active_increment: nutzwert-phase
-tests: 348
-latest_adr: 31
+tests: 367
+latest_adr: 32
 stand: 2026-07-05
 ---
 
@@ -18,7 +18,7 @@ Der maschinenlesbare Kopf (oben) ist die Single Source der Kern-Kennzahlen; das 
 
 Davor abgeschlossen und getaggt: `v0.7` "PC-Admin" (`v0.7` → `a7eb86d`); der **Infrastruktur-/Runtime-Baustein** (ADR-024 bis ADR-028, ohne eigene Versionsnummer/Tag), konsolidiert in Handbook v3.7. `v0.4`/`v0.5`/`v0.6`/`v0.7` sind alle abgeschlossen und getaggt.
 
-Verfassung: **`docs/handbook/HANDBOOK.md`** (`constitution_version 4.0`) — zeitlose Projektverfassung, Leitbild/DNA in Teil 1. Die früheren `.docx`-Handbücher (v3.2–v3.8) liegen als Historie unter `docs/handbook/archive/` (nicht maßgeblich).
+Verfassung: **`docs/handbook/HANDBOOK.md`** (`constitution_version 4.1`) — zeitlose Projektverfassung, Leitbild/DNA in Teil 1. Die früheren `.docx`-Handbücher (v3.2–v3.8) liegen als Historie unter `docs/handbook/archive/` (nicht maßgeblich).
 
 ## Status
 
@@ -34,23 +34,26 @@ Sicherheitsfixes (diese Session, ohne eigene Version):
 Handbook-Konsolidierungen seit v0.7:
 - **v3.7**: Infrastruktur-/Runtime-Baustein (ADR-024 bis ADR-028).
 - **v3.8**: **Leitbild / DNA** (Produktidentität, EBENE 1) - Kap. 0 Leitbild „Wofür Jarvis existiert" (Identität als Haltung) + 9 Produkt-Leitplanken; Angleichungen in Kap. 1/7/26/32; Mission unverändert. Bewusste, dokumentierte Governance-Ausnahme (reine EBENE-1-Konsolidierung mitten in v0.8, ohne Auswirkung auf die technische Code-Basis).
+- **constitution_version 4.1**: Auftreten und Tonfall von Jarvis explizit als Produkt-DNA verankert; Chat-System-Prompt und erste zentrale Alltagsantworten wurden daran angeglichen (ruhig, praezise, loyal, trockene Eleganz statt Show).
 
 Weiterhin gültig aus v0.7 und davor (Details in den jeweiligen ADRs): PC-Admin (ADR-020-023), Infrastruktur-/Runtime-Baustein (ADR-024-028), Telegram-Fernzugriff (ADR-018), Excel/Tabellen-Auswertung/KPI (ADR-014/015/016), Kurz-/Langzeitgedächtnis (ADR-009), PC-Grundsteuerung (ADR-011/012).
 
 ## Next Planned Version
 **Nutzwert-Phase „Mit Jarvis leben"** (PO-Entscheidung 03.07.2026). Bewusst **kein** weiterer v0.8-Phasenausbau (z. B. Routing-Intelligenz/Orchestrator) jetzt - stattdessen beweisen, dass das gelegte Fundament einem Menschen *täglich* Last abnimmt. Methode: **Dogfooding-Protokoll** sammeln („Warum muss ich dafür noch eine App öffnen?"), dann gemeinsam die größte Alltagsreibung **end-to-end** bauen, bis echte tägliche Verlässlichkeit. Erfolgsmarke: der erste echte „Ohne Jarvis würde mir das täglich 30 Minuten kosten"-Moment (HANDBOOK.md Teil 1 / Leitplanke 9 „Erfolg = weniger Last, nicht mehr Funktion"). Prozess bewusst **leichter** (keine neue Philosophie/Governance-Zeremonie).
 
-Die Nutzwert-Phase läuft als **benannter Block ohne eigene Versionsnummer** (Präzedenz: Runtime-Baustein; Versionsnummer ggf. später), **getrennt von v0.8**. **Baustein 1 umgesetzt: Mail-Briefing „Was liegt an?"** (ADR-031) - erster externer Connector, lokal-lesend, gelernte Absenderregeln.
+Die Nutzwert-Phase läuft als **benannter Block ohne eigene Versionsnummer** (Präzedenz: Runtime-Baustein; Versionsnummer ggf. später), **getrennt von v0.8**. **Baustein 1 umgesetzt: Mail-Briefing „Was liegt an?"** (ADR-031) - erster externer Connector, lokal-lesend, gelernte Absenderregeln. **Baustein 2 umgesetzt: Web v1** (ADR-032) - read-only Websuche mit kurzem Ueberblick und sichtbaren Quellen.
 
-**Präzisiert (PO-Entscheidung 04.07.2026): Inbetriebnahme vor Features.** Jarvis wird ab jetzt primär als Produkt behandelt, das in den Alltag kommt. Reihenfolge der Phase:
-1. **Live-Inbetriebnahme** der offenen realen Pfade (siehe „Technische TODOs": `setx`-Variablen, Autostart, Mail-Briefing real, Claude-Provider-Call, TTS).
-2. **Eine Woche echte Nutzung** mit Reibungsprotokoll - bewusst ohne neue Features.
-3. Danach Auswahl **genau einer** größten Reibung als nächstes Nutzwert-Inkrement (Feature-Entscheidung nach CONTRIBUTING §4; Nutzungslauf und bewusster Abschluss je Baustein).
+**Präzisiert (PO-Entscheidungen 04.07.2026 und 05.07.2026): Inbetriebnahme vor Features, dann bewusst klein weiterbauen.** Jarvis wird primär als Produkt behandelt, das in den Alltag kommt. Bisheriger Verlauf der Phase:
+1. **Live-Inbetriebnahme** der offenen realen Pfade.
+2. **Echte Nutzung / Reibungsprüfung** ohne vorschnellen Feature-Ausbau.
+3. **Ergebnis der ersten Reibung:** Der Autostart als erste reale Nutzwert-Reibung ist erfolgreich abgeschlossen und end-to-end verifiziert.
+4. **PO-Entscheidung 05.07.2026:** Da der aktuelle Funktionsumfang noch begrenzt ist und aus der täglichen Nutzung keine weitere relevante Reibung entsteht, darf als Nächstes **eine kleine Nutzwert-Funktion** umgesetzt werden.
 
-Bewusst nicht in dieser Phase: Framework-Ausbau, Architektur auf Vorrat, Feature-Breite. M3 (README-Body-Chunk) bleibt separates Hygiene-Paket. Nächster Schritt: Schritt 1 (Live-Inbetriebnahme).
+Bewusst nicht in dieser Phase: Framework-Ausbau, Architektur auf Vorrat, Feature-Breite. M3 (README-Body-Chunk) bleibt separates Hygiene-Paket. Nächster Schritt: Auswahl und Freigabe der nächsten kleinen Nutzwert-Funktion nach CONTRIBUTING §4.
 
-Umgesetzt in der Nutzwert-Phase (Details: `docs/CHANGELOG.md`, ADR-031):
+Umgesetzt in der Nutzwert-Phase (Details: `docs/CHANGELOG.md`, ADR-031/032):
 - **Mail-Briefing** - `commands/mail.py` (check_mail / show_mail_advertising / mail_hide_sender / mail_keep_sender, alle Sicherheitsstufe 0), `core/mail_reader.py` (imaplib/email stdlib, **read-only** via `select(readonly=True)`+`BODY.PEEK`, nur Kopfzeilen), `memory/mail_rules.py` (lokale, korrigierbare Absenderregeln - Regel schlägt Heuristik). `mail_accounts` in Config (Secrets per Env). Rein lokal, kein Mailinhalt an eine KI. `core/ai.py` unverändert.
+- **Web v1** - `commands/web.py` (`search_web`, Sicherheitsstufe 0) und `core/web_search.py` (DuckDuckGo-Lite-Suche via stdlib, nur Titel/Snippet/URL). Jarvis gibt einen knappen Ueberblick und die Quellen immer sichtbar zurueck. DuckDuckGo-interne Werbe-/Hilfstreffer werden herausgefiltert; Preis-/Verfuegbarkeitsfragen sind promptseitig ausdruecklich mitgemeint. Falls der Planner bei solchen Fragen nur ein zu generisches Ziel liefert (z. B. Produktname ohne `Preis`), ergaenzt `commands/web.py` die fehlende Suchintention gezielt selbst. Verfuegbar ueber `main.py`, `telegram_main.py` und den Runtime-Telegram-Kanal. Retrieval bleibt modellneutral; `core/ai.py` erhielt nur eine kleine Intent-Klarstellung für Web-/Recherche-Anfragen.
 - **Runtime-/Autostart-Pfadfix** - `core/config.py` löst relative `memory_dir`-/`log_dir`-Werte aus `config.json` jetzt gegen `BASE_DIR` statt gegen das aktuelle Prozess-cwd auf. Damit schreiben `jarvis_runtime.py` und der Jarvis-Eigenstart bei relativer Standard-Config wieder repo-gebunden unter dem Installationspfad; absolute Pfade bleiben unverändert möglich.
 
 ## Tests
@@ -65,9 +68,10 @@ Keiner aktuell.
 
 ### Technische TODOs (Definition of Done / Betrieb, kein neuer Scope)
 - **Live-Test Mail-Briefing (ADR-031)** auf dem echten Windows-Rechner: `mail_accounts` in `config.json` eintragen, Gmail-**App-Passwort** (2FA) als Env-Variable setzen, „was liegt an?" real testen - bisher nur gemockt. **Hotmail-Auth verifizieren** (Microsoft baut Basis-Auth/App-Passwörter ab; ggf. OAuth statt IMAP-Passwort).
+- **Live-Test Web v1 (ADR-032)** mit echter Internetverbindung auf dem Windows-Rechner: mehrere reale Suchanfragen prüfen (allgemein, aktuelle Themen, schwache Trefferlage, Offline-/Timeout-Fall), idealerweise einmal lokal und einmal über Telegram/Runtime - bisher nur gemockt.
 - **Live-Test Claude-Provider** mit echtem `ANTHROPIC_API_KEY` auf dem echten Windows-Rechner - bewusst verschobener manueller Verifikationsschritt (kein offener Implementierungsfehler). Pfad ist offline bis zur SDK-Grenze verifiziert; nur der bezahlte End-zu-End-Call steht aus.
 - Manueller Live-Test der übrigen Kernfunktionen mit echtem API-Key auf dem echten Windows-Rechner (Definition of Done, CONTRIBUTING §8) - bisher nur automatisiert/gemockt. `install_program` real ausführen ist ein bewusster, expliziter Schritt und sollte gezielt vom Product Owner freigegeben/begleitet werden.
-- Manueller Smoke-Test der Jarvis-Runtime mit echtem Bot-Token (TelegramChannel) sowie ein realer Jarvis-Eigenstart-Test nach Windows-Anmeldung mit dem korrigierten repo-gebundenen Pfadverhalten - der echte Login-Lauf steht weiter aus (Definition of Done, CONTRIBUTING §8).
+- Manueller Smoke-Test der Jarvis-Runtime mit echtem Bot-Token (TelegramChannel) - der allgemeine Runtime-/Bot-Betrieb steht als eigener Live-Schritt weiter aus; der Jarvis-Eigenstart nach Windows-Anmeldung ist als erste Nutzwert-Reibung inzwischen end-to-end verifiziert.
 - Piper-Sprachmodell herunterladen und `tts_enabled: true` für einen Live-TTS-Test setzen.
 - `anthropic` ist im `.venv` installiert (0.116.0); `requirements.txt` führt es bewusst optional/auskommentiert (lazy Import, ADR-029).
 - `.git_broken_5/` (Reste eines frühen, abgebrochenen git-init-Versuchs) liegt noch im Arbeitsordner, per `.gitignore` ausgeschlossen - bewusst nicht gelöscht (keine destruktive Aktion ohne Rückfrage).
@@ -75,7 +79,7 @@ Keiner aktuell.
 ### Feature-TODOs & Backlog (nächste Bausteine, NICHT jetzt umsetzen)
 Roadmap und Backlog leben **hier** in PROJECT_STATE — die Verfassung (`HANDBOOK`) trägt keine Roadmap/Status; abgeschlossene Versionen stehen in `CHANGELOG`. Technische Detail-Notizen:
 - Spätere v0.8-Phasen (nach der Nutzwert-Phase, falls fortgesetzt): aufgabenabhängiges Routing/Orchestrierung, ggf. `ANALYSIS`-Trennung (optionaler `task`-Parameter an `answer()`), lokale Modelle (Ollama). Bewusst NICHT jetzt (siehe ADR-030 „Bewusst NICHT Bestandteil von Phase 2").
-- Dritter KI-Verwender: `configure()`-Duplizierung (`reports.py`/`monitor.py`) zu einer gemeinsamen Abstraktion zusammenführen prüfen (Wolfgangs Entscheidung bei ADR-020).
+- Weiterer KI-Verwender: `configure()`-Duplizierung (`reports.py`/`monitor.py`/`web.py`) zu einer gemeinsamen Abstraktion zusammenführen prüfen, sobald daraus echter Strukturgewinn entsteht.
 - Den `preview()`-Hook (ADR-023) für weitere schreibende PC-Admin-Commands nutzen, sobald umgesetzt.
 
 **Backlog (zurückgestellte Ideen, kein aktueller Scope — Grund je Zeile):**
@@ -88,7 +92,7 @@ Roadmap und Backlog leben **hier** in PROJECT_STATE — die Verfassung (`HANDBOO
 Im Code wurden keine `TODO`-/`FIXME`-Marker gefunden.
 
 ## Latest Architecture Change
-**Erster externer Connector (ADR-031, Nutzwert-Phase):** neuer `commands/mail.py` mit read-only IMAP-Zugriff (`core/mail_reader.py`, stdlib) und einem lokalen, korrigierbaren Präferenzspeicher (`memory/mail_rules.py`). Bewusst noch KEINE generische Connector-Abstraktion (YAGNI - erst beim zweiten Dienst); der Command darf konkret sein. `core/ai.py`/Executor-Kern unverändert.
+**Zweiter externer Connector (ADR-032, Nutzwert-Phase):** neuer `commands/web.py` mit read-only Websuche über `core/web_search.py` (stdlib, DuckDuckGo-Lite-Suche) und sichtbaren Quellen. Der Connector ist jetzt in `main.py`, `telegram_main.py` und `jarvis_runtime.py` verdrahtet; Telegram erlaubt `search_web` als sicheren read-only Intent. Nach dem Live-Fund einer DuckDuckGo-Bot-Challenge auf der alten HTML-Route wurde bewusst auf die Lite-Suche umgestellt; Bot-/Captcha-Seiten werden jetzt explizit als Fehler gemeldet, und DuckDuckGo-interne Werbe-/Hilfstreffer werden aus der finalen Trefferliste gefiltert. `telegram_channel.py` zerlegt lange Antworten zusaetzlich in Telegram-sichere Teilnachrichten, statt bei ueberschiessender Laenge still zu scheitern. Trotz zweitem Dienst bewusst noch KEINE generische Connector-Abstraktion: Mail und Web teilen noch kein tragfähiges gemeinsames Interface. `core/ai.py` erhielt nur eine kleine Intent-Klarstellung für `search_web`; Executor-Kern und `AIEngine`-Schnittstelle bleiben unverändert.
 
 Davor - v0.8 „Multi-KI", Phase 1+2 (ADR-029/030): Die KI-Anbindung ist nicht mehr fest an OpenAI gebunden. `AIEngine` delegiert den rohen Modellaufruf an einen austauschbaren `LLMProvider` (`core/providers.py`, OpenAI/Claude), gewählt über `config.ai_provider`. Ein deterministischer `ProviderRouter` erlaubt pro Aufgabentyp (`get_plan`=PLANNING, `answer`=GENERATION) einen eigenen Provider (`planning_provider`/`answer_provider`, Rückfall auf `ai_provider`), mit Fallback auf den Standardprovider. Öffentliche `AIEngine`-Schnittstelle und alle Aufrufer unverändert; `confirmed`-Strip zentral. Details: ADR-029, ADR-030.
 
@@ -99,7 +103,8 @@ Davor - v0.8 „Multi-KI", Phase 1+2 (ADR-029/030): Die KI-Anbindung ist nicht m
 - Kokoro TTS unterstützt aktuell kein Deutsch.
 - `system_status`/`analyze_pc`: keine Temperatur (psutil-Limitierung unter Windows).
 - `read_excel`/`analyze_report`/`calculate_kpi`: nur `.xlsx`/`.xlsm`, nur Werte, 500 Zeilen/Blatt.
-- `telegram_main.py`: nur vier Intents erreichbar, kein gleichzeitiger Betrieb mit der Konsole, `TelegramSpeech.listen()` fail-closed (ADR-018).
+- `search_web` (ADR-032): hängt an einer externen Suchseite, liest nur Trefferlisten (keine ganzen Artikel) und kann bei Markup-Änderungen, Bot-/Captcha-Schutz des Anbieters oder fehlender Internetverbindung ausfallen.
+- `telegram_main.py`: nur fünf Intents erreichbar (`chat`, `remember_fact`, `forget_fact`, `system_status`, `search_web`), kein gleichzeitiger Betrieb mit der Konsole, `TelegramSpeech.listen()` fail-closed (ADR-018).
 - `analyze_pc`/`analyze_event_log`/`disable_/enable_autostart_entry`/`analyze_/clean_temp_files`: alle Windows-exklusiv, jeweiliger Scope siehe die jeweiligen ADRs (ADR-020–023).
 - `jarvis_runtime.py`: kein UI/Tray/Wake-Word, kein abstraktes Channel-Interface. `ConsoleDummyChannel` bleibt für unbeaufsichtigten Betrieb ungeeignet (blockiert auf `input()`) - wird beim Jarvis-Eigenstart (`pythonw.exe`) deshalb gar nicht erst gestartet; Telegram übernimmt die Erreichbarkeit.
 - Single-Instance-Schutz (ADR-026) schützt nur vor gleichzeitigem *Prozessstart* gegen dasselbe `memory_dir` - kein Schutz gegen externes Löschen der Lock-Datei, während eine Instanz läuft (bekanntes, akzeptiertes Restrisiko).

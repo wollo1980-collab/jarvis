@@ -13,8 +13,8 @@ from unittest.mock import MagicMock, patch
 from core.config import Config
 from core.models import Plan
 from jarvis_runtime import JarvisRuntime
-import telegram_main
 import telegram_channel
+import telegram_main
 from telegram_channel import TelegramChannel, _on_message, filter_plan
 
 
@@ -126,6 +126,52 @@ def test_reply_callback_delivers_message_from_worker_thread():
         loop.close()
 
 
+def test_reply_callback_splits_long_message_into_multiple_telegram_messages():
+    calls = []
+    done = threading.Event()
+
+    async def fake_send_message(**kwargs):
+        calls.append(kwargs)
+        if len(calls) == 2:
+            done.set()
+
+    channel = _make_channel()
+    captured = {}
+
+    def fake_submit(text, reply_callback, plan_filter=None):
+        captured["reply_callback"] = reply_callback
+
+    channel.runtime.submit.side_effect = fake_submit
+
+    update = _make_update(chat_id=111, text="hallo")
+    context = _make_context(channel)
+    context.bot.send_message = fake_send_message
+
+    loop = asyncio.new_event_loop()
+    loop_thread = threading.Thread(target=loop.run_forever, daemon=True)
+    loop_thread.start()
+    try:
+        fut = asyncio.run_coroutine_threadsafe(_on_message(update, context), loop)
+        fut.result(timeout=2.0)
+
+        reply_callback = captured["reply_callback"]
+        long_text = "A" * (telegram_channel._MAX_TELEGRAM_TEXT + 50)
+        worker_thread = threading.Thread(target=reply_callback, args=(long_text,))
+        worker_thread.start()
+        worker_thread.join()
+
+        assert done.wait(timeout=2.0)
+        assert len(calls) == 2
+        assert calls[0]["chat_id"] == 111
+        assert len(calls[0]["text"]) <= telegram_channel._MAX_TELEGRAM_TEXT
+        assert len(calls[1]["text"]) <= telegram_channel._MAX_TELEGRAM_TEXT
+        assert calls[0]["text"] + calls[1]["text"] == long_text
+    finally:
+        loop.call_soon_threadsafe(loop.stop)
+        loop_thread.join(timeout=2.0)
+        loop.close()
+
+
 def test_reply_callback_does_not_raise_when_send_message_fails():
     done = threading.Event()
 
@@ -172,6 +218,15 @@ def test_telegram_channel_reuses_security_logic_from_telegram_main():
     assert telegram_channel.rejection_reason is telegram_main.rejection_reason
     assert telegram_channel.is_authorized is telegram_main.is_authorized
     assert telegram_channel.ALLOWED_INTENTS is telegram_main.ALLOWED_INTENTS
+
+
+def test_message_chunks_respect_limit_and_reconstruct_text():
+    text = "Zeile 1\n" + ("B" * (telegram_channel._MAX_TELEGRAM_TEXT + 25))
+    chunks = telegram_channel._message_chunks(text)
+
+    assert len(chunks) >= 2
+    assert all(len(chunk) <= telegram_channel._MAX_TELEGRAM_TEXT for chunk in chunks)
+    assert "".join(chunks) == text
 
 
 class _FakeAI:

@@ -1,12 +1,12 @@
 """
-System-Installation: installiert Programme über winget (Windows
-Package Manager) - Sicherheitsstufe 2 (Handbook Kap. 10): Bestätigung
+System-Installation: installiert Programme ueber winget (Windows
+Package Manager) - Sicherheitsstufe 2 (Handbook Kap. 10): Bestaetigung
 erforderlich, aber (anders als shutdown_pc/Stufe 3) reicht ein
-einfaches Ja/Nein, keine exakte Bestätigungsphrase.
+einfaches Ja/Nein, keine exakte Bestaetigungsphrase.
 
 winget ist Windows-exklusiv - bewusst kein Posix-Fallback wie bei
 OpenProgramCommand, das Handbook (Kap. 17) nennt winget explizit als
-das Werkzeug für diese Fähigkeit. "Deinstallieren" ist NICHT enthalten
+das Werkzeug fuer diese Faehigkeit. "Deinstallieren" ist NICHT enthalten
 - Kap. 27 grenzt die v0.4-Priorisierung explizit auf "installieren"
 ein, siehe ADR-012.
 """
@@ -25,7 +25,7 @@ logger = logging.getLogger("jarvis.commands.installer")
 # vermeidet Mehrdeutigkeiten bei der Namenssuche (mehrere Treffer
 # lassen winget sonst ohne -e fehlschlagen). Unbekannte Ziele werden
 # als Freitext-Suchbegriff durchgereicht (Best-Effort, wie winget es
-# auch über die Kommandozeile anbietet).
+# auch ueber die Kommandozeile anbietet).
 KNOWN_PACKAGES = {
     "vlc": "VideoLAN.VLC",
     "7zip": "7zip.7zip",
@@ -34,7 +34,7 @@ KNOWN_PACKAGES = {
     "notepad++": "Notepad++.Notepad++",
 }
 
-# winget-Installationen (Download + Setup) können mehrere Minuten
+# winget-Installationen (Download + Setup) koennen mehrere Minuten
 # dauern - benannte, dokumentierte Konstante statt Magic Value direkt
 # in subprocess.run (Handbook Kap. 5: keine Magic Values).
 _INSTALL_TIMEOUT_SECONDS = 300
@@ -43,10 +43,10 @@ _INSTALL_TIMEOUT_SECONDS = 300
 class InstallProgramCommand:
     name = "install_program"
     description = (
-        "Installiert ein Programm über winget, z. B. VLC oder 7-Zip "
-        "(Systemänderung, Sicherheitsstufe 2 - Bestätigung erforderlich)."
+        "Installiert ein Programm ueber winget, z. B. VLC oder 7-Zip "
+        "(Systemaenderung, Sicherheitsstufe 2 - Bestaetigung erforderlich)."
     )
-    # Systemänderung (Sicherheitsstufe 2) - einfaches Ja/Nein reicht,
+    # Systemaenderung (Sicherheitsstufe 2) - einfaches Ja/Nein reicht,
     # kein confirmation_phrase (das ist Stufe 3, siehe ShutdownPcCommand).
     requires_confirmation = True
 
@@ -55,21 +55,21 @@ class InstallProgramCommand:
         if not target:
             return Result(
                 status=Status.NEEDS_CLARIFICATION,
-                message="Welches Programm soll ich installieren?",
+                message="Welches Programm soll ich für dich installieren?",
             )
 
         if platform.system() != "Windows":
             return Result(
                 status=Status.FAILED,
-                message="Programme installieren funktioniert aktuell nur unter Windows (winget).",
+                message="Programme kann ich aktuell nur unter Windows über winget installieren.",
             )
 
         if shutil.which("winget") is None:
             return Result(
                 status=Status.FAILED,
                 message=(
-                    "winget ist nicht verfügbar - bitte den 'App Installer' "
-                    "aus dem Microsoft Store installieren."
+                    "winget ist nicht verfügbar. Bitte installiere den 'App Installer' "
+                    "aus dem Microsoft Store."
                 ),
             )
 
@@ -96,24 +96,24 @@ class InstallProgramCommand:
             return Result(
                 status=Status.FAILED,
                 message=(
-                    f"Installation von {target} hat das Zeitlimit "
+                    f"Die Installation von {target} hat das Zeitlimit "
                     f"({_INSTALL_TIMEOUT_SECONDS}s) überschritten."
                 ),
             )
         except OSError as e:
-            return Result(status=Status.FAILED, message=f"winget konnte nicht gestartet werden: {e}")
+            return Result(status=Status.FAILED, message=f"winget konnte ich nicht starten: {e}")
 
         if proc.returncode != 0:
             detail_lines = (proc.stderr or proc.stdout or "").strip().splitlines()
             last_line = detail_lines[-1] if detail_lines else f"Exit-Code {proc.returncode}"
             return Result(
                 status=Status.FAILED,
-                message=f"{target} konnte nicht installiert werden: {last_line}",
+                message=f"{target} konnte ich nicht installieren: {last_line}",
             )
 
-        return Result(status=Status.SUCCESS, message=f"{target} wurde installiert.")
+        return Result(status=Status.SUCCESS, message=f"Ich habe {target} installiert.")
 
 
-# Registrierungspunkt für dieses Modul - commands/__init__.py liest
+# Registrierungspunkt fuer dieses Modul - commands/__init__.py liest
 # diese Liste beim Start ein.
 COMMANDS = [InstallProgramCommand()]

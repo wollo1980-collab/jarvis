@@ -48,6 +48,7 @@ from typing import Callable, Optional
 import commands.memory as memory_commands
 import commands.monitor as monitor_commands
 import commands.reports as reports_commands
+import commands.web as web_commands
 from core.ai import AIEngine
 from core.config import Config
 from core.models import Message, Plan
@@ -103,6 +104,7 @@ class JarvisRuntime:
         memory_commands.configure(config.memory_dir)
         reports_commands.configure(self.ai)
         monitor_commands.configure(self.ai)
+        web_commands.configure(self.ai, timeout_seconds=config.timeout)
 
         self._queue: "queue.Queue" = queue.Queue()
         self._worker: Optional[threading.Thread] = None

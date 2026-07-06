@@ -11,7 +11,7 @@ Sicherheitsmodell (Phase 1, Wolfgangs Entscheidungen):
   autorisierte Chat-ID wird verarbeitet - alle anderen werden stillschweigend
   ignoriert (kein Fehler, kein Hinweis nach außen).
 - Nur eine feste Intent-Whitelist (chat, remember_fact, forget_fact,
-  system_status) ist über Telegram erreichbar - Excel/Reports/KPI/
+  system_status, search_web) ist über Telegram erreichbar - Excel/Reports/KPI/
   install_program/shutdown_pc sind in Phase 1 NICHT erreichbar.
 - Zusätzliche, von der Whitelist unabhängige Sicherung: jeder Intent,
   dessen Command requires_confirmation=True setzt (Sicherheitsstufe 2/3),
@@ -42,6 +42,7 @@ from telegram import Update
 from telegram.ext import Application, ContextTypes, MessageHandler, filters
 
 import commands.memory as memory_commands
+import commands.web as web_commands
 from commands import REGISTRY
 from core.ai import AIEngine
 from core.config import Config
@@ -57,8 +58,9 @@ logger = logging.getLogger("jarvis.telegram")
 BOT_TOKEN_ENV = "JARVIS_TELEGRAM_BOT_TOKEN"
 ALLOWED_CHAT_ID_ENV = "JARVIS_TELEGRAM_ALLOWED_CHAT_ID"
 
-# Phase 1 (ADR-018): nur diese Intents sind per Telegram erreichbar.
-ALLOWED_INTENTS = {"chat", "remember_fact", "forget_fact", "system_status"}
+# Telegram bleibt bewusst eng freigeschaltet: nur sichere, bestaetigungsfreie
+# Alltags-Intents. Web v1 ist read-only und passt deshalb in dieselbe Whitelist.
+ALLOWED_INTENTS = {"chat", "remember_fact", "forget_fact", "system_status", "search_web"}
 
 
 class TelegramSpeech:
@@ -148,6 +150,7 @@ class JarvisBridge:
         self.memory = JsonMemoryStore(config.memory_dir, config.max_history_entries)
         self.long_term = LongTermMemory(config.memory_dir)
         memory_commands.configure(config.memory_dir)
+        web_commands.configure(self.ai, timeout_seconds=config.timeout)
 
     def handle_message(self, chat_id: object, user_input: str) -> str:
         """Verarbeitet eine eingehende Nachricht, gibt den Antworttext

@@ -1,6 +1,6 @@
 """
-Commands für das Langzeitgedächtnis (v0.4, ADR-009) - explizite
-Merk-/Vergiss-Befehle über memory/long_term.py::LongTermMemory.
+Commands fuer das Langzeitgedaechtnis (v0.4, ADR-009) - explizite
+Merk-/Vergiss-Befehle ueber memory/long_term.py::LongTermMemory.
 
 Die Command-Registry (commands/__init__.py) instanziiert alle
 Commands beim Modul-Import, VOR Config.load()/main() - deshalb kann
@@ -23,7 +23,7 @@ _long_term: Optional[LongTermMemory] = None
 
 def configure(memory_dir: Path) -> None:
     """Von main.py einmal beim Start aufgerufen. Tests rufen dies mit
-    tmp_path auf, bevor sie remember_fact/forget_fact ausführen."""
+    tmp_path auf, bevor sie remember_fact/forget_fact ausfuehren."""
     global _long_term
     _long_term = LongTermMemory(memory_dir)
 
@@ -31,7 +31,7 @@ def configure(memory_dir: Path) -> None:
 def _require_long_term() -> LongTermMemory:
     if _long_term is None:
         raise RuntimeError(
-            "Langzeitgedächtnis nicht konfiguriert - commands.memory.configure() "
+            "Langzeitgedaechtnis nicht konfiguriert - commands.memory.configure() "
             "muss beim Start aufgerufen werden (siehe main.py)."
         )
     return _long_term
@@ -40,11 +40,11 @@ def _require_long_term() -> LongTermMemory:
 class RememberFactCommand:
     name = "remember_fact"
     description = (
-        "Merkt sich dauerhaft einen Fakt - Projekt, Gewohnheit oder Präferenz "
-        "(nur auf ausdrücklichen Zuruf, z. B. 'Merk dir, dass ...')."
+        "Merkt sich dauerhaft einen Fakt - Projekt, Gewohnheit oder Praeferenz "
+        "(nur auf ausdruecklichen Zuruf, z. B. 'Merk dir, dass ...')."
     )
     # Unkritische Aktion (Sicherheitsstufe 1) - reiner Datenlayer, keine
-    # Systemaktion, deshalb keine Bestätigung nötig.
+    # Systemaktion, deshalb keine Bestaetigung noetig.
     requires_confirmation = False
 
     def execute(self, plan: Plan) -> Result:
@@ -52,17 +52,20 @@ class RememberFactCommand:
         if not text:
             return Result(
                 status=Status.NEEDS_CLARIFICATION,
-                message="Was genau soll ich mir merken?",
+                message="Was soll ich mir genau merken?",
             )
 
         category = plan.parameters.get("category", "allgemein")
         _require_long_term().remember(text, category=category)
-        return Result(status=Status.SUCCESS, message=f"Gemerkt: {text}")
+        return Result(
+            status=Status.SUCCESS,
+            message=f"Verstanden. Ich habe mir das gemerkt: {text}",
+        )
 
 
 class ForgetFactCommand:
     name = "forget_fact"
-    description = "Löscht einen zuvor gemerkten Fakt wieder (z. B. 'Vergiss, dass ...')."
+    description = "Loescht einen zuvor gemerkten Fakt wieder (z. B. 'Vergiss, dass ...')."
     requires_confirmation = False
 
     def execute(self, plan: Plan) -> Result:
@@ -70,17 +73,20 @@ class ForgetFactCommand:
         if not text:
             return Result(
                 status=Status.NEEDS_CLARIFICATION,
-                message="Was genau soll ich vergessen?",
+                message="Was soll ich genau vergessen?",
             )
 
         if _require_long_term().forget(text):
-            return Result(status=Status.SUCCESS, message=f"Vergessen: {text}")
+            return Result(
+                status=Status.SUCCESS,
+                message=f"In Ordnung. Das habe ich aus meinem Langzeitgedächtnis entfernt: {text}",
+            )
         return Result(
             status=Status.FAILED,
-            message=f"Dazu habe ich nichts in meinem Langzeitgedächtnis gefunden: {text}",
+            message=f"Dazu habe ich in meinem Langzeitgedächtnis nichts gefunden: {text}",
         )
 
 
-# Registrierungspunkt für dieses Modul - commands/__init__.py liest
+# Registrierungspunkt fuer dieses Modul - commands/__init__.py liest
 # diese Liste beim Start ein.
 COMMANDS = [RememberFactCommand(), ForgetFactCommand()]
