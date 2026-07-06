@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-07-07 - Feinschliff: Rückfragen in Jarvis' Stimme
+
+### Geaendert
+- DNA-Sprachdurchlauf für `monitor.py`/`reports.py`/`excel.py`: Rückfragen bei Mehrdeutigkeit *fragen* jetzt („Welche soll ich nehmen?", „Welchen meinst du genau?") statt zu befehlen; internes „Phase 1"-Vokabular aus einer Excel-Fehlermeldung entfernt. Reiner Wortlaut, kein Verhalten. Vollsuite 407 grün, Gate PASS.
+
 ## 2026-07-06 - Repo-Analyse asynchron über Telegram (ADR-035 Scheibe 2: Async + Push)
 
 ### Neu

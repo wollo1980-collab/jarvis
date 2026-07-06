@@ -1,5 +1,13 @@
 # Logbook
 
+## 2026-07-07 - DNA-Sprachdurchlauf monitor/reports/excel abgeschlossen
+
+**Kontext:** Während der Beobachtungswoche (Nutzwert-Phase, kein Feature-Ausbau) die letzte offene „Sprachschuld" abgetragen: die drei Tool-Module `commands/monitor.py`, `commands/reports.py`, `commands/excel.py` auf Jarvis' DNA-Stimme (Handbook Teil 1 / constitution 4.1) durchgesehen.
+
+**Befund:** Die Module waren bereits weitgehend in-voice - faktisch, ruhig, Grenzen offen benannt (passend zu „präzise vor charmant"). Kein großer Umbau nötig; das wäre gegen die DNA gewesen (keine Show, keine leere Dekoration). Angeglichen wurden nur die echten Ausreißer: drei Rückfragen bei Mehrdeutigkeit *fragen* jetzt („Welche soll ich nehmen?", „Welchen meinst du genau?") statt zu *befehlen* („Bitte eindeutig machen / genauer angeben") - konsistent mit den übrigen, bereits fragenden Rückfragen. Zusätzlich internes Entwickler-Vokabular („Phase 1") aus einer nutzerseitigen Excel-Fehlermeldung entfernt.
+
+**Umfang:** reine Wortlaut-Änderung an 3 Message-Strings, kein Verhalten, keine Logik. Vollsuite 407 unverändert grün, Gate PASS. Kein neuer Test (Wording-Pass, keine Verhaltensänderung); die zuvor ungetestete Suffix-Fehlermeldung bleibt als kleine Coverage-Lücke sichtbar.
+
 ## 2026-07-07 - Agenten-Delegation live in Betrieb (Scheibe 1 + 2 verifiziert)
 
 **Kontext:** Nach den Commits zu ADR-034/035 lief die Live-Runtime noch mit altem Code; beide vorher laufenden Runtime-Prozesse (10896/20824) waren zwischenzeitlich beendet (Rechner-Neustart). Ziel: neuen Code scharfschalten und die zwei offenen Betriebschecks abhaken.

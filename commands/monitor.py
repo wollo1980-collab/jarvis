@@ -738,7 +738,7 @@ class DisableAutostartEntryCommand:
         if len(live_matches) > 1:
             return Result(
                 status=Status.NEEDS_CLARIFICATION,
-                message=f"Mehrere Treffer für '{name}': {_candidate_list_text(live_matches)}. Bitte genauer angeben.",
+                message=f"Ich habe mehrere Treffer für '{name}': {_candidate_list_text(live_matches)}. Welchen meinst du genau?",
             )
 
         if len(live_matches) == 1:

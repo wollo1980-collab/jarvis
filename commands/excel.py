@@ -47,7 +47,7 @@ def read_workbook_sheets(
 
     if path.suffix.lower() not in _SUPPORTED_SUFFIXES:
         raise ExcelReadError(
-            f"Nur .xlsx/.xlsm werden unterstützt (Phase 1) - '{path.suffix}' ist nicht dabei."
+            f"Ich kann aktuell nur .xlsx/.xlsm lesen - '{path.suffix}' gehört nicht dazu."
         )
 
     workbook = openpyxl.load_workbook(path, read_only=True, data_only=True)
