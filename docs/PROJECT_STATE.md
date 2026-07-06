@@ -1,7 +1,7 @@
 ---
 version: "v0.8 P1+2 (Multi-KI) abgeschlossen; Nutzwert-Phase gestartet"
 active_increment: nutzwert-phase
-tests: 367
+tests: 369
 latest_adr: 32
 stand: 2026-07-06
 ---
@@ -55,6 +55,7 @@ Umgesetzt in der Nutzwert-Phase (Details: `docs/CHANGELOG.md`, ADR-031/032):
 - **Mail-Briefing** - `commands/mail.py` (check_mail / show_mail_advertising / mail_hide_sender / mail_keep_sender, alle Sicherheitsstufe 0), `core/mail_reader.py` (imaplib/email stdlib, **read-only** via `select(readonly=True)`+`BODY.PEEK`, nur Kopfzeilen), `memory/mail_rules.py` (lokale, korrigierbare Absenderregeln - Regel schlägt Heuristik). `mail_accounts` in Config (Secrets per Env). Rein lokal, kein Mailinhalt an eine KI. `core/ai.py` unverändert.
 - **Web v1** - `commands/web.py` (`search_web`, Sicherheitsstufe 0) und `core/web_search.py` (DuckDuckGo-Lite-Suche via stdlib, nur Titel/Snippet/URL). Jarvis gibt einen knappen Ueberblick und die Quellen immer sichtbar zurueck. DuckDuckGo-interne Werbe-/Hilfstreffer werden herausgefiltert; Preis-/Verfuegbarkeitsfragen sind promptseitig ausdruecklich mitgemeint. Falls der Planner bei solchen Fragen nur ein zu generisches Ziel liefert (z. B. Produktname ohne `Preis`), ergaenzt `commands/web.py` die fehlende Suchintention gezielt selbst. Verfuegbar ueber `main.py`, `telegram_main.py` und den Runtime-Telegram-Kanal. Retrieval bleibt modellneutral; `core/ai.py` erhielt nur eine kleine Intent-Klarstellung für Web-/Recherche-Anfragen.
 - **Runtime-/Autostart-Pfadfix** - `core/config.py` löst relative `memory_dir`-/`log_dir`-Werte aus `config.json` jetzt gegen `BASE_DIR` statt gegen das aktuelle Prozess-cwd auf. Damit schreiben `jarvis_runtime.py` und der Jarvis-Eigenstart bei relativer Standard-Config wieder repo-gebunden unter dem Installationspfad; absolute Pfade bleiben unverändert möglich.
+- **Konsolen-Härtung `main.py` (Live-Fund 2026-07-06)** - beim ersten echten „was liegt an?"-Lauf stürzte `main.py` an einem `UnicodeEncodeError` ab: Das Executor-Häkchen (U+2713) ließ sich auf einer cp1252-Konsole nicht ausgeben. `make_console_output_safe()` setzt `stdout`/`stderr` auf `errors="replace"` - nicht darstellbare Zeichen werden ersetzt statt zu crashen (auf UTF-8-Konsolen unverändert; das Häkchen erscheint auf reiner cp1252-Konsole als `?`).
 
 ## Tests
 Volle Suite grün. Autoritative Zahl (`tests`) und Datum (`stand`) stehen im Kopf.
@@ -69,8 +70,8 @@ Keiner aktuell.
 ## Offene Aufgaben
 
 ### Technische TODOs (Definition of Done / Betrieb, kein neuer Scope)
-- **Live-Test Mail-Briefing (ADR-031)** auf dem echten Windows-Rechner: `mail_accounts` in `config.json` eintragen, Gmail-**App-Passwort** (2FA) als Env-Variable setzen, „was liegt an?" real testen - bisher nur gemockt. **Hotmail-Auth verifizieren** (Microsoft baut Basis-Auth/App-Passwörter ab; ggf. OAuth statt IMAP-Passwort).
-- **Live-Test Web v1 (ADR-032)** mit echter Internetverbindung auf dem Windows-Rechner: allgemeine, Wetter- und Preisanfragen wurden bereits real über Telegram/Runtime geprüft; offen bleiben ein gezielter Offline-/Timeout-Fall, ein lokaler `main.py`-Live-Lauf und ein kurzer Restcheck auf schwache/mehrdeutige Treffer.
+- **Live-Test Mail-Briefing (ADR-031): Gmail real verifiziert (2026-07-06)** - echte IMAP-Verbindung, „was liegt an?" lokal über `main.py` real gelaufen (2 wichtige Mails erkannt, 48 Werbe-Mails ausgeblendet), Gmail-App-Passwort per `setx JARVIS_GMAIL_APP_PASSWORD` gesetzt. **Offen bleibt nur: Hotmail-Auth verifizieren** (Microsoft baut Basis-Auth/App-Passwörter ab; ggf. OAuth statt IMAP-Passwort) sowie der Nutzer-Gegencheck über Telegram.
+- **Live-Test Web v1 (ADR-032): real verifiziert (2026-07-06)** - lokaler `main.py`-Lauf (5 echte Treffer + Überblick mit sichtbaren Quellen), allgemeine/Wetter-/Preisanfragen über Telegram/Runtime, Timeout-/Nichterreichbar-Fall (sauberer `WebSearchError`) und schwache Trefferlage geprüft. Kein offener Restfall.
 - **Live-Test Claude-Provider** mit echtem `ANTHROPIC_API_KEY` auf dem echten Windows-Rechner - bewusst verschobener manueller Verifikationsschritt (kein offener Implementierungsfehler). Pfad ist offline bis zur SDK-Grenze verifiziert; nur der bezahlte End-zu-End-Call steht aus.
 - Manueller Live-Test der übrigen Kernfunktionen mit echtem API-Key auf dem echten Windows-Rechner (Definition of Done, CONTRIBUTING §8) - bisher nur automatisiert/gemockt. `install_program` real ausführen ist ein bewusster, expliziter Schritt und sollte gezielt vom Product Owner freigegeben/begleitet werden.
 - Manueller Smoke-Test der Jarvis-Runtime mit echtem Bot-Token (TelegramChannel) - der allgemeine Runtime-/Bot-Betrieb steht als eigener Live-Schritt weiter aus; der Jarvis-Eigenstart nach Windows-Anmeldung ist als erste Nutzwert-Reibung inzwischen end-to-end verifiziert.

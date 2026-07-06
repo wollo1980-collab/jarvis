@@ -1,5 +1,21 @@
 # Logbook
 
+## 2026-07-06 - Mail-Briefing in Betrieb genommen (Arbeitspaket A, Nutzwert-Phase)
+
+**Kontext:** Baustein 1 der Nutzwert-Phase (Mail-Briefing „Was liegt an?", ADR-031) war seit dem 03.07. implementiert und getestet, aber nie real gelaufen - das Gmail-App-Passwort fehlte. PO-Auftrag: das Briefing in echten Betrieb nehmen und dabei die drei offenen Web-v1-Restfälle mit abhaken. Bewusster Scope: Inbetriebnahme, keine neuen Features.
+
+**Umsetzung:** `mail_accounts` in `config.json` (nur nicht-geheime Felder; App-Passwort ausschließlich per `setx JARVIS_GMAIL_APP_PASSWORD`). End-to-End-Lauf über `main.py`: **Mail-Briefing lief zum ersten Mal live** - echte Gmail-IMAP-Verbindung (read-only), 2 wichtige Mails erkannt, 48 Werbe-/Newsletter-Mails ausgeblendet. Direkt anschließend `search_web` live: 5 echte Treffer, KI-Überblick mit sichtbaren Quellen.
+
+**Live-Fund + Fix:** Der erste echte Lauf stürzte an einem `UnicodeEncodeError` ab - das Executor-Häkchen U+2713 ist auf einer cp1252-Konsole nicht kodierbar, und `core/speech.py::say()` gibt die Antwort per `print()` aus. Minimal behoben mit `main.make_console_output_safe()` (stdout/stderr auf `errors="replace"`), zwei neue Tests in `tests/test_main.py`. Bewusst klein: keine Änderung an `speech.py`, kein erzwungenes UTF-8 (auf reiner cp1252-Konsole erscheint das Häkchen jetzt als `?` statt zu crashen).
+
+**Web-v1-Restfälle (ADR-032) abgeschlossen:** lokaler `main.py`-Lauf (vorher nur Telegram/Runtime), Timeout-/Nichterreichbar-Fall (sauberer `WebSearchError` verifiziert), schwache Trefferlage (DuckDuckGo liefert selbst für Unsinns-Queries Treffer - die Ehrlichkeit liegt korrekt beim Zusammenfassungs-Prompt).
+
+**Tests:** Vollsuite 369/369 grün (2 neue Konsolen-Härtungstests), Konsistenz-Gate PASS. Runtime nach dem Test wieder headless gestartet (PID-Wechsel, Telegram-Kanal aktiv), damit der Nutzer-Gegencheck über Telegram möglich ist.
+
+**Bewusst nicht umgesetzt:** Hotmail-Auth (erst wenn Gmail im Alltag trägt), Claude-Live-Call, TTS, neue Funktionen. Kein Commit vor Review/Freigabe (Arbeitspaket-Regel).
+
+**Lessons Learned:** Ein Feature gilt erst als in Betrieb, wenn es einmal an der Realität war - nicht wenn seine Tests grün sind. Der Unicode-Crash war in 346+ gemockten Tests unsichtbar und trat in der ersten echten Sekunde auf. Genau dafür ist die Inbetriebnahme-vor-Features-Reihenfolge da.
+
 ## 2026-07-06 - Audit-Follow-up: Commit-Leitplanken, Review-Spur und Doku-Nachzug
 
 **Kontext:** Ein externes Jarvis-Audit auf Stand `d63c2e6` bescheinigte dem Produkt einen starken Realzustand, markierte aber eine klare Governance-Luecke auf Git-/Commit-Ebene: vier getrennte Arbeitspakete waren in einem Sammelcommit gelandet, obwohl das logbook die Entscheidungs- und Freigabekette sauber vorbereitet hatte. Dazu kamen kleinere Doku-Inkonsistenzen (ADR-032 ohne Fernzugriffs-Nachtrag, Web-Live-Test-TODO zu pauschal, offene Sprachschuld ohne Heimat, `stand` nicht nachgezogen). **Audit (Claude, 2026-07-06):** Befunde F1-F6, keine Blocker; Empfehlung GO fuer den Follow-up-Commit mit drei kleinen Auflagen (basetemp-Umlenkung fuer Sandbox-Umgebungen, datierter ADR-Status-Nachtrag, saubere Audit-/Review-Trennung in dieser Spur). PO-Freigabe fuer das Follow-up liegt vor. Fuer dieses Follow-up bewusst **kein** History-Rewrite des Sammelcommits `d63c2e6`, sondern nur Vorwaerts-Korrekturen. (Rollen-Hinweis: Reviews liefert ChatGPT, Audits liefert Claude; Umsetzung und Commit dieses Follow-ups erfolgen durch Claude in der Codex-Rolle - PO-Entscheidung 2026-07-06.)

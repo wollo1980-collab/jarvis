@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-07-06 - Mail-Briefing in Betrieb genommen (Nutzwert-Phase)
+
+### Neu
+- Mail-Briefing „Was liegt an?" (ADR-031) erstmals live in Betrieb: echte Gmail-IMAP-Verbindung (read-only), Trennung wichtig/Werbung real bestätigt. `mail_accounts` in `config.json` konfiguriert (App-Passwort nur per Umgebungsvariable).
+- `main.make_console_output_safe()`: härtet die Konsolenausgabe gegen nicht kodierbare Zeichen (z. B. das Häkchen U+2713 auf cp1252-Konsolen) - ersetzt statt zu crashen.
+
+### Geaendert
+- `docs/PROJECT_STATE.md`: Mail-Briefing (Gmail) und Web v1 als real verifiziert markiert; offene Live-Test-TODOs entsprechend reduziert.
+
+### Behoben
+- Live-Fund: `main.py` stürzte beim ersten echten „was liegt an?" an einem `UnicodeEncodeError` (Executor-Häkchen auf cp1252-Konsole) ab. Behoben durch Konsolen-Härtung; zwei neue Tests in `tests/test_main.py`.
+
+### Tests
+- Vollsuite 369/369 grün, Konsistenz-Gate PASS.
+
 ## 2026-07-06 - Audit-Follow-up: Commit-Leitplanken und Doku-Nachzug
 
 ### Neu

@@ -12,6 +12,7 @@ verdrahtet nur, die eigentliche Arbeit passiert in den Modulen.
 from __future__ import annotations
 
 import logging
+import sys
 from datetime import date
 
 import commands.mail as mail_commands
@@ -44,7 +45,22 @@ def setup_logging(config: Config) -> None:
     )
 
 
+def make_console_output_safe() -> None:
+    """Konsolenausgabe gegen nicht kodierbare Zeichen haerten.
+
+    Antworttexte enthalten Zeichen wie das Executor-Haekchen (U+2713), die
+    eine cp1252-Konsole nicht kodieren kann - ohne diese Haertung stirbt
+    main.py mitten in der Antwort an einem UnicodeEncodeError (Live-Fund
+    Nutzwert-Phase, 2026-07-06). Nicht darstellbare Zeichen werden ersetzt
+    statt zu crashen; an UTF-8-Konsolen aendert sich nichts.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        if stream is not None and hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace")
+
+
 def main() -> None:
+    make_console_output_safe()
     config = Config.load()
     setup_logging(config)
     logger = logging.getLogger("jarvis.main")
