@@ -1,5 +1,17 @@
 # Logbook
 
+## 2026-07-06 - Audit-Follow-up: Commit-Leitplanken, Review-Spur und Doku-Nachzug
+
+**Kontext:** Ein externes Jarvis-Audit auf Stand `d63c2e6` bescheinigte dem Produkt einen starken Realzustand, markierte aber eine klare Governance-Luecke auf Git-/Commit-Ebene: vier getrennte Arbeitspakete waren in einem Sammelcommit gelandet, obwohl das logbook die Entscheidungs- und Freigabekette sauber vorbereitet hatte. Dazu kamen kleinere Doku-Inkonsistenzen (ADR-032 ohne Fernzugriffs-Nachtrag, Web-Live-Test-TODO zu pauschal, offene Sprachschuld ohne Heimat, `stand` nicht nachgezogen). **Audit (Claude, 2026-07-06):** Befunde F1-F6, keine Blocker; Empfehlung GO fuer den Follow-up-Commit mit drei kleinen Auflagen (basetemp-Umlenkung fuer Sandbox-Umgebungen, datierter ADR-Status-Nachtrag, saubere Audit-/Review-Trennung in dieser Spur). PO-Freigabe fuer das Follow-up liegt vor. Fuer dieses Follow-up bewusst **kein** History-Rewrite des Sammelcommits `d63c2e6`, sondern nur Vorwaerts-Korrekturen. (Rollen-Hinweis: Reviews liefert ChatGPT, Audits liefert Claude; Umsetzung und Commit dieses Follow-ups erfolgen durch Claude in der Codex-Rolle - PO-Entscheidung 2026-07-06.)
+
+**Umsetzung:** Die mechanische Leitplanke aus der Charter wurde eingelöst: `pytest.ini` setzt ein repo-lokales `--basetemp`, und `.githooks/pre-commit` fuehrt vor jedem Commit das Konsistenz-Gate plus Vollsuite aus. `README.md` dokumentiert den vereinfachten Testlauf und die Hook-Aktivierung. `ADR-032` traegt jetzt explizit nach, dass `search_web` als read-only Intent ueber Telegram/Runtime freigeschaltet ist. `PROJECT_STATE.md` hebt `stand` auf den aktuellen Commit-Tag, praezisiert den Web-Live-Test auf die real offenen Restfaelle und fuehrt die offene Sprachschuld (`monitor.py`, `reports.py`, `excel.py`) sichtbar. `commands/web.py` bekam zusaetzlich eine kleine Prompt-Haertung: Web-Treffer werden explizit als Daten, nicht als Anweisungen markiert. Fuer den Framework-Rueckfluss ergaenzt `docs/framework_feedback.md` jetzt die zwei gelebten Pattern „Nutzungslauf vor Abschluss" und „Bewusster Abschluss vor Ausbau" als n=2-Datenpunkt.
+
+**Tests:** Geplanter Verifikationssatz: `.\.venv\Scripts\python.exe -m pytest -q`, `.\.venv\Scripts\python.exe scripts\check_consistency.py` und ein direkter Lauf des neuen `.githooks/pre-commit`.
+
+**Bewusst nicht umgesetzt:** Kein Rewrite oder Split des historischen Sammelcommits `d63c2e6`. Keine Charter-Aenderung fuer eine neue Review-Regel - das logbook dient hier bewusst als erste feste Review-Spur, ohne gleich die Governance erneut aufzuschrauben. Kein Live-Mail-Test; der bleibt weiterhin der aelteste echte Betriebsrest.
+
+**Lessons Learned:** Gute Governance scheitert selten an der Einsicht, sondern an der letzten mechanischen Leitplanke. Sobald Commit-Hygiene nur als Dokumentregel lebt, faellt sie im Nutzungstempo zurueck. Ein kleiner Hook ist hier wertvoller als eine weitere Mahnung. Und: Review ist erst dann auditierbar, wenn sein Ergebnis im Repo selbst auffindbar ist.
+
 ## 2026-07-06 - Web v1 als zweiter Connector integriert
 
 **Kontext:** Nach Mail war der naechste kleine Nutzwert-Baustein nicht noch mehr Struktur, sondern eine reale Alltagshilfe fuer aktuelle Informationen. Wolfgangs Auftrag war direkt: `web v1 integrieren`. Gleichzeitig war das die erste Stelle, an der Jarvis' Modellneutralitaet praktisch zaehlt: Web durfte nicht still an OpenAI-Tooling gekettet werden, nur weil es technisch bequem waere.

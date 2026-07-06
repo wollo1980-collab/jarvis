@@ -1,9 +1,28 @@
 # Changelog
 
+## 2026-07-06 - Audit-Follow-up: Commit-Leitplanken und Doku-Nachzug
+
+### Neu
+- `.githooks/pre-commit`: repo-getrackter Pre-Commit-Hook, der vor jedem Commit das Konsistenz-Gate und die Vollsuite ausführt. Für Sandbox-Umgebungen kann das pytest-Temp-Verzeichnis per `JARVIS_PYTEST_BASETEMP` umgelenkt werden (siehe README).
+- `pytest.ini`: standardisiert den bekannten Testlauf über ein repo-lokales `--basetemp`, sodass `python -m pytest -q` als stabiler Standardbefehl genügt.
+
+### Geaendert
+- `README.md`: Testbefehl vereinfacht und Hook-Aktivierung dokumentiert.
+- `docs/adr/ADR-032.md`: Fernzugriffs-Freischaltung von `search_web` für Telegram/Runtime ausdrücklich nachgetragen.
+- `docs/PROJECT_STATE.md`: `stand` auf 2026-07-06 gehoben; Web-Live-Test-TODO auf den realen Reststand präzisiert; offene Sprachschuld für `monitor.py`/`reports.py`/`excel.py` sichtbar gemacht.
+- `docs/logbook.md`: externes Audit und dessen Befunde/Follow-ups als Review-Artefakt nachgezogen.
+- `docs/framework_feedback.md`: die in Jarvis gelebten Muster „Nutzungslauf vor Abschluss" und „Bewusster Abschluss vor Ausbau" als Framework-Rückfluss ergänzt.
+- `commands/web.py`: Web-Zusammenfassungen trennen Trefferdaten explizit von Anweisungen.
+
+### Tests
+- `.\.venv\Scripts\python.exe -m pytest -q`
+- `.\.venv\Scripts\python.exe scripts\check_consistency.py`
+- `.githooks/pre-commit`
+
 ## 2026-07-06 - Web v1: read-only Websuche als zweiter Connector
 
 ### Neu
-- `core/web_search.py`: kleiner, modellneutraler Web-Search-Baustein auf Basis der Python-Stdlib (`urllib`, `html.parser`). Holt nur Treffer-Titel, Snippets und URLs aus der DuckDuckGo-HTML-Suche - keine Browser-Steuerung, keine ganze Seitenextraktion.
+- `core/web_search.py`: kleiner, modellneutraler Web-Search-Baustein auf Basis der Python-Stdlib (`urllib`, `html.parser`). Holt nur Treffer-Titel, Snippets und URLs aus der DuckDuckGo-Lite-Suche - keine Browser-Steuerung, keine ganze Seitenextraktion.
 - `commands/web.py`: neuer Command `search_web` fuer Web-/Internet-/Recherche-Anfragen. Jarvis liefert einen knappen Ueberblick und zeigt die Quellen immer sichtbar an.
 - `docs/adr/ADR-032.md`: Scope, Grenzen, Risiken und Architekturentscheidung fuer Web v1 dokumentiert.
 - `tests/test_web_search.py`, `tests/test_commands_web.py`: Parser-, Fehler- und Command-Tests fuer den neuen Connector.
@@ -31,6 +50,7 @@
 - `tests/test_ai.py`
 - `tests/test_telegram_main.py`
 - `tests/test_jarvis_runtime.py`
+- `tests/test_telegram_channel.py`
 - `python scripts/check_consistency.py`
 
 ## 2026-07-06 - Jarvis-DNA: zentrale Nutzerantworten angeglichen

@@ -151,12 +151,31 @@ Connector-Plattform.
 
 ```bash
 pip install -r requirements.txt
-PYTHONPATH=. pytest tests/ -v
+.\.venv\Scripts\python.exe -m pytest -q
 ```
 
 Alle Tests laufen ohne echten API-Key (der jeweilige SDK-Client wird gemockt;
 `anthropic` wird für die Provider-Tests über `sys.modules` simuliert und muss
-nicht installiert sein).
+nicht installiert sein). `pytest.ini` setzt ein repo-lokales `--basetemp`,
+damit `tmp_path` nicht am System-Temp der Sandbox scheitert.
+
+## Git-Hooks aktivieren
+
+Für diese Working Copy kann der mitgelieferte Pre-Commit-Hook einmalig so
+aktiviert werden:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+Danach laufen vor jedem Commit automatisch das Konsistenz-Gate und die
+Vollsuite.
+
+In Sandbox-Umgebungen (z. B. KI-Agenten), in denen Datei-Operationen im
+repo-lokalen `.pytest_tmp` blockiert sind, kann das Temp-Verzeichnis per
+Umgebungsvariable `JARVIS_PYTEST_BASETEMP` umgelenkt werden - der Hook
+reicht sie als `--basetemp` an pytest weiter. Die Prüfungen selbst bleiben
+dabei vollständig; `--no-verify` bleibt tabu (CONTRIBUTING §10).
 
 ## Piper TTS einrichten (optional, nur Windows)
 

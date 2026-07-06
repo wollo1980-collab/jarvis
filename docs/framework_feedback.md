@@ -15,3 +15,9 @@ Rückfluss-Sammlung von Jarvis an das AI Project Framework (CONTRIBUTING §15). 
 - Herkunftsprojekt: `jarvis`
 - Konkreter Beleg: Das Framework hat den Verfassungs-Reinheits-Check zweimal bewusst nicht übernommen (Evidenz-Argument, zuletzt ADR-006). Jarvis betreibt den Check seit dem Governance-Umbau produktiv (`scripts/check_consistency.py`, Prüfung auf Status-Tokens im Handbook) — er hat dort historisch echte Verstöße verhindert, seit der Handbook-Konsolidierung aber nicht mehr angeschlagen.
 - Vorgeschlagene Änderung: Keine sofortige — Jarvis liefert als Betreiber des Checks fortlaufend den Datenpunkt für die offene Framework-Frage. Schlägt der Check in Jarvis erneut real an, wird das hier als Beleg nachgetragen; bleibt er über längere Zeit stumm, stützt das die Framework-Position.
+
+### FF-J-003 - Nutzungslauf vor Abschluss / bewusster Abschluss vor Ausbau
+
+- Herkunftsprojekt: `jarvis`
+- Konkreter Beleg: In der Nutzwert-Phase wurden drei reale Live-Funde nicht als Anlass für Scope-Ausbau genommen, sondern als minimale Produktkorrekturen innerhalb des bereits freigegebenen Web-v1-Bausteins behandelt (DuckDuckGo-Bot-Challenge -> Lite-Route + Fehlererkennung, überlange Werbe-URLs -> Trefferfilter + Telegram-Chunking, generische Preisfrage -> gezielte Query-Ergänzung). Direkt davor wurde die erste reale Reibung (Autostart nach Umstrukturierung) erst end-to-end verifiziert und sauber abgeschlossen, bevor der nächste Baustein begonnen wurde.
+- Vorgeschlagene Änderung: Die zwei Pattern sollten im Framework als explizit benennbare Abschluss-/Qualitätsmuster geprüft werden: **"Nutzungslauf vor Abschluss"** (Live-Funde eines bereits begonnenen Bausteins zuerst absorbieren) und **"Bewusster Abschluss vor Ausbau"** (eine behobene reale Reibung sichtbar abschließen, bevor der nächste Scope beginnt). Jarvis liefert dafür jetzt einen n=2-Datenpunkt.

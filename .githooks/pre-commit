@@ -1,0 +1,20 @@
+#!/bin/sh
+set -eu
+
+repo_root="$(git rev-parse --show-toplevel)"
+python_bin="$repo_root/.venv/Scripts/python.exe"
+
+if [ ! -x "$python_bin" ]; then
+  echo "Jarvis pre-commit: Python aus .venv nicht gefunden: $python_bin" >&2
+  exit 1
+fi
+
+echo "Jarvis pre-commit: Konsistenz-Gate"
+"$python_bin" "$repo_root/scripts/check_consistency.py"
+
+echo "Jarvis pre-commit: Vollsuite"
+if [ -n "${JARVIS_PYTEST_BASETEMP:-}" ]; then
+  "$python_bin" -m pytest -q --basetemp "$JARVIS_PYTEST_BASETEMP"
+else
+  "$python_bin" -m pytest -q
+fi

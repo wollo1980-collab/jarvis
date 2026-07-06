@@ -3,7 +3,7 @@ version: "v0.8 P1+2 (Multi-KI) abgeschlossen; Nutzwert-Phase gestartet"
 active_increment: nutzwert-phase
 tests: 367
 latest_adr: 32
-stand: 2026-07-05
+stand: 2026-07-06
 ---
 
 # PROJECT STATE
@@ -59,7 +59,9 @@ Umgesetzt in der Nutzwert-Phase (Details: `docs/CHANGELOG.md`, ADR-031/032):
 ## Tests
 Volle Suite grün. Autoritative Zahl (`tests`) und Datum (`stand`) stehen im Kopf.
 
-Hinweis zum Testlauf: venv-Interpreter; für die volle Suite ist ein beschreibbares `--basetemp` nötig, da die Sandbox sonst den System-Temp der `tmp_path`-Fixture blockiert - kein Testdefekt.
+Bekannter Standardlauf: `C:\KI\jarvis\.venv\Scripts\python.exe -m pytest -q`
+(`pytest.ini` setzt ein repo-lokales `--basetemp`, damit `tmp_path` nicht am
+System-Temp der Sandbox scheitert).
 
 ### Known Failure
 Keiner aktuell.
@@ -68,11 +70,12 @@ Keiner aktuell.
 
 ### Technische TODOs (Definition of Done / Betrieb, kein neuer Scope)
 - **Live-Test Mail-Briefing (ADR-031)** auf dem echten Windows-Rechner: `mail_accounts` in `config.json` eintragen, Gmail-**App-Passwort** (2FA) als Env-Variable setzen, „was liegt an?" real testen - bisher nur gemockt. **Hotmail-Auth verifizieren** (Microsoft baut Basis-Auth/App-Passwörter ab; ggf. OAuth statt IMAP-Passwort).
-- **Live-Test Web v1 (ADR-032)** mit echter Internetverbindung auf dem Windows-Rechner: mehrere reale Suchanfragen prüfen (allgemein, aktuelle Themen, schwache Trefferlage, Offline-/Timeout-Fall), idealerweise einmal lokal und einmal über Telegram/Runtime - bisher nur gemockt.
+- **Live-Test Web v1 (ADR-032)** mit echter Internetverbindung auf dem Windows-Rechner: allgemeine, Wetter- und Preisanfragen wurden bereits real über Telegram/Runtime geprüft; offen bleiben ein gezielter Offline-/Timeout-Fall, ein lokaler `main.py`-Live-Lauf und ein kurzer Restcheck auf schwache/mehrdeutige Treffer.
 - **Live-Test Claude-Provider** mit echtem `ANTHROPIC_API_KEY` auf dem echten Windows-Rechner - bewusst verschobener manueller Verifikationsschritt (kein offener Implementierungsfehler). Pfad ist offline bis zur SDK-Grenze verifiziert; nur der bezahlte End-zu-End-Call steht aus.
 - Manueller Live-Test der übrigen Kernfunktionen mit echtem API-Key auf dem echten Windows-Rechner (Definition of Done, CONTRIBUTING §8) - bisher nur automatisiert/gemockt. `install_program` real ausführen ist ein bewusster, expliziter Schritt und sollte gezielt vom Product Owner freigegeben/begleitet werden.
 - Manueller Smoke-Test der Jarvis-Runtime mit echtem Bot-Token (TelegramChannel) - der allgemeine Runtime-/Bot-Betrieb steht als eigener Live-Schritt weiter aus; der Jarvis-Eigenstart nach Windows-Anmeldung ist als erste Nutzwert-Reibung inzwischen end-to-end verifiziert.
 - Piper-Sprachmodell herunterladen und `tts_enabled: true` für einen Live-TTS-Test setzen.
+- **Restlicher DNA-Sprachdurchlauf** für `commands/monitor.py`, `commands/reports.py` und `commands/excel.py`: die erste Alltagsrunde ist angeglichen, diese drei Module bleiben bewusst als offene Sprachschuld sichtbar.
 - `anthropic` ist im `.venv` installiert (0.116.0); `requirements.txt` führt es bewusst optional/auskommentiert (lazy Import, ADR-029).
 - `.git_broken_5/` (Reste eines frühen, abgebrochenen git-init-Versuchs) liegt noch im Arbeitsordner, per `.gitignore` ausgeschlossen - bewusst nicht gelöscht (keine destruktive Aktion ohne Rückfrage).
 
