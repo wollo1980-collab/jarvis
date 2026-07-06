@@ -1,5 +1,17 @@
 # Logbook
 
+## 2026-07-07 - Agenten-Delegation live in Betrieb (Scheibe 1 + 2 verifiziert)
+
+**Kontext:** Nach den Commits zu ADR-034/035 lief die Live-Runtime noch mit altem Code; beide vorher laufenden Runtime-Prozesse (10896/20824) waren zwischenzeitlich beendet (Rechner-Neustart). Ziel: neuen Code scharfschalten und die zwei offenen Betriebschecks abhaken.
+
+**pythonw-Auth-Caveat abgehakt:** Der zentrale offene Punkt aus ADR-034/035 - läuft `claude -p` auch aus einem konsolenlosen `pythonw.exe`-Prozess (wie im Autostart) angemeldet? - wurde direkt verifiziert: `ClaudeCodeBackend.analyze()` aus `pythonw.exe` gegen das reale Repo lieferte `ok`, „OK", 1 Turn, read-only sauber (`git status` 0/0). Auth trägt über den Account-Login, kein `ANTHROPIC_API_KEY` nötig.
+
+**Runtime scharfgeschaltet:** verwaister Single-Instance-Lock (toter PID 20824) automatisch entfernt, Runtime mit neuem Code hochgefahren - Worker aktiv, TelegramChannel Long-Polling („Application started"), keine Fehler. (Prozessbild: ein `.venv`-Launcher-Prozess mit einem realen Interpreter-Kindprozess = eine logische Runtime; der verlässliche Dauerbetrieb kommt über den registrierten Autostart bei Login.)
+
+**Telegram-End-to-End bestätigt (PO, echtes Handy):** „analysiere jarvis: …" → sofortige Quittung → Ergebnis-Push. Damit ist der eigentliche „unterwegs"-Nutzwert real belegt, nicht nur gemockt.
+
+**Nächste Phase:** eine Woche echte Nutzung + Reibungsprotokoll (Nutzwert-Phase), bevor über Scheibe 3 (schreibende Agenten) entschieden wird - Vertrauen aus Nutzung vor Ausbau der Vollmacht.
+
 ## 2026-07-06 - Umsetzung ADR-035 Scheibe 2: asynchrone Repo-Analyse + Telegram-Push
 
 **Kontext:** ADR-035 (accepted) festgelegt, PO-Freigabe zur Umsetzung erteilt; vorab vier Review-Präzisierungen eingearbeitet (Busy-Flag als bewusst einfache Lösung dokumentieren; Abbruch-Präzedenz eindeutig; Regressionstest Busy-Flag-Reset nach Exception; History-Konsistenz im E2E prüfen).
