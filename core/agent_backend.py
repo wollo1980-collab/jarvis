@@ -33,6 +33,7 @@ from __future__ import annotations
 import json
 import logging
 import subprocess
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -48,12 +49,18 @@ CLAUDE_BINARY = "claude"
 # ist keine System-/Repo-Aenderung und keine git-Operation moeglich.
 READ_ONLY_TOOLS = ("Read", "Grep", "Glob")
 
+# Poll-Intervall der Warteschleife (Sekunden): so oft werden cancel_event und
+# das Gesamt-Timeout geprueft, waehrend der claude-Prozess laeuft. Klein genug
+# fuer einen zuegigen Abbruch, gross genug fuer vernachlaessigbare CPU-Last.
+_POLL_INTERVAL_SECONDS = 0.2
+
 
 @dataclass
 class AgentLimits:
-    """Harte Grenzen fuer einen Agentenlauf. In Scheibe 1 nur der
-    Wall-Clock-Timeout (Subprozess-Kill) - er ist der einzige vorab
-    erzwingbare Guardrail (kein CLI-Turn-/Kostendeckel verfuegbar)."""
+    """Harte Grenzen fuer einen Agentenlauf: der Wall-Clock-Timeout
+    (Subprozess-Kill) ist der einzige vorab erzwingbare Guardrail (kein
+    CLI-Turn-/Kostendeckel verfuegbar). Ergaenzt wird er zur Laufzeit durch
+    den optionalen cancel_event (Kill-Switch der Runtime, ADR-035)."""
 
     timeout_seconds: float = 300.0
 
@@ -76,21 +83,32 @@ class AgentResult:
 class AgentBackend(Protocol):
     """Rohschnittstelle der Delegation: Repo + Frage rein, Ergebnis raus.
     Read-only ist Teil des Vertrags - eine Implementierung MUSS das
-    Schreiben/Ausfuehren im Ziel-Repo ausschliessen."""
+    Schreiben/Ausfuehren im Ziel-Repo ausschliessen. cancel_event (optional,
+    ADR-035) erlaubt der Runtime, einen laufenden Agentenlauf hart
+    abzubrechen (Kill-Switch)."""
 
-    def analyze(self, repo: Path, question: str, limits: AgentLimits) -> AgentResult:
+    def analyze(
+        self,
+        repo: Path,
+        question: str,
+        limits: AgentLimits,
+        cancel_event: "Optional[threading.Event]" = None,
+    ) -> AgentResult:
         ...
 
 
 class ClaudeCodeBackend:
     """Erste AgentBackend-Implementierung: startet `claude -p` als
-    Subprozess im Ziel-Repo, read-only erzwungen. Der Runner ist
-    injizierbar (Default: subprocess.run), damit Tests ohne echten
-    `claude`-Aufruf/Netzwerk laufen (gleiches Muster wie ein injizierter
-    reader/searcher in den bestehenden Commands)."""
+    Subprozess im Ziel-Repo, read-only erzwungen. Statt `subprocess.run`
+    wird `subprocess.Popen` genutzt, damit ein laufender Prozess auf
+    cancel_event/Timeout hin hart beendet werden kann (Kill-Switch der
+    Runtime, ADR-035) - ohne Popen wuerde `runtime.stop()` bis zum Timeout
+    (bis 300 s) haengen. Die Popen-Factory ist injizierbar, damit Tests ohne
+    echten `claude`-Aufruf/Netzwerk laufen (gleiches Muster wie ein
+    injizierter reader/searcher in den bestehenden Commands)."""
 
-    def __init__(self, runner=subprocess.run, binary: str = CLAUDE_BINARY):
-        self._run = runner
+    def __init__(self, popen=subprocess.Popen, binary: str = CLAUDE_BINARY):
+        self._popen = popen
         self._binary = binary
 
     def _build_argv(self, repo: Path, question: str) -> list[str]:
@@ -108,14 +126,21 @@ class ClaudeCodeBackend:
             str(repo),
         ]
 
-    def analyze(self, repo: Path, question: str, limits: AgentLimits) -> AgentResult:
+    def analyze(
+        self,
+        repo: Path,
+        question: str,
+        limits: AgentLimits,
+        cancel_event: Optional[threading.Event] = None,
+    ) -> AgentResult:
         argv = self._build_argv(repo, question)
         started = time.monotonic()
         try:
-            completed = self._run(
+            proc = self._popen(
                 argv,
                 cwd=str(repo),
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
                 # claude -p gibt UTF-8 aus. Ohne explizites encoding dekodiert
                 # subprocess unter Windows mit der locale-Codepage (cp1252) und
@@ -124,45 +149,83 @@ class ClaudeCodeBackend:
                 # Leben, falls doch ein nicht dekodierbares Byte auftaucht.
                 encoding="utf-8",
                 errors="replace",
-                timeout=limits.timeout_seconds,
-            )
-        except subprocess.TimeoutExpired:
-            duration = time.monotonic() - started
-            logger.warning(
-                "Agentenlauf abgebrochen: Zeitlimit %.0fs ueberschritten (Repo %s).",
-                limits.timeout_seconds,
-                repo,
-            )
-            return AgentResult(
-                text="",
-                ok=False,
-                duration_seconds=duration,
-                detail=f"Zeitlimit ({limits.timeout_seconds:.0f}s) ueberschritten - Lauf abgebrochen.",
             )
         except FileNotFoundError:
-            duration = time.monotonic() - started
             return AgentResult(
                 text="",
                 ok=False,
-                duration_seconds=duration,
+                duration_seconds=time.monotonic() - started,
                 detail=(
                     f"Agenten-Backend '{self._binary}' nicht gefunden (nicht im PATH). "
                     "Claude Code muss installiert und angemeldet sein (ADR-034)."
                 ),
             )
 
-        duration = time.monotonic() - started
-        return self._parse(completed, duration)
+        return self._wait(proc, repo, limits, cancel_event, started)
 
-    def _parse(self, completed, duration: float) -> AgentResult:
+    def _wait(
+        self,
+        proc,
+        repo: Path,
+        limits: AgentLimits,
+        cancel_event: Optional[threading.Event],
+        started: float,
+    ) -> AgentResult:
+        """Wartet auf den Prozess und setzt die Abbruch-Praezedenz durch:
+        **natuerlicher Abschluss > Cancel > Timeout**. Ist der Prozess in
+        einer Iteration bereits fertig, gewinnt sein Ergebnis (die Arbeit ist
+        getan). Laeuft er noch, wird zuerst cancel_event, dann das
+        Gesamt-Timeout geprueft - jeweils genau ein gemeldeter Grund, kein
+        Zombie-Prozess."""
+        while True:
+            try:
+                stdout, stderr = proc.communicate(timeout=_POLL_INTERVAL_SECONDS)
+            except subprocess.TimeoutExpired:
+                # Prozess laeuft noch: Cancel hat Vorrang vor Timeout.
+                if cancel_event is not None and cancel_event.is_set():
+                    return self._terminate(
+                        proc, started, "Analyse abgebrochen - Lauf gestoppt."
+                    )
+                if (time.monotonic() - started) >= limits.timeout_seconds:
+                    logger.warning(
+                        "Agentenlauf abgebrochen: Zeitlimit %.0fs ueberschritten (Repo %s).",
+                        limits.timeout_seconds,
+                        repo,
+                    )
+                    return self._terminate(
+                        proc,
+                        started,
+                        f"Zeitlimit ({limits.timeout_seconds:.0f}s) ueberschritten - Lauf abgebrochen.",
+                    )
+                continue
+            # Natuerlicher Abschluss - gewinnt auch, falls gleichzeitig ein
+            # Cancel eintraf (das Ergebnis liegt bereits vor).
+            return self._parse_output(
+                proc.returncode, stdout, stderr, time.monotonic() - started
+            )
+
+    def _terminate(self, proc, started: float, detail: str) -> AgentResult:
+        """Killt den laufenden Prozess und leert die Pipes (kein Zombie)."""
+        try:
+            proc.kill()
+            proc.communicate(timeout=_POLL_INTERVAL_SECONDS)
+        except Exception:  # noqa: BLE001 - Aufraeumen darf nie selbst scheitern
+            logger.debug("Aufraeumen nach kill() unvollstaendig.", exc_info=True)
+        return AgentResult(
+            text="", ok=False, duration_seconds=time.monotonic() - started, detail=detail
+        )
+
+    def _parse_output(
+        self, returncode: int, stdout: str, stderr: str, duration: float
+    ) -> AgentResult:
         """Uebersetzt das Subprozess-Ergebnis in ein AgentResult. Keine
         stillen Fehler: Exit != 0, is_error und nicht parsebares JSON werden
         klar als ok=False mit `detail` gemeldet."""
-        stdout = (completed.stdout or "").strip()
-        stderr = (completed.stderr or "").strip()
+        stdout = (stdout or "").strip()
+        stderr = (stderr or "").strip()
 
-        if completed.returncode != 0:
-            detail = stderr or stdout or f"Exit-Code {completed.returncode}"
+        if returncode != 0:
+            detail = stderr or stdout or f"Exit-Code {returncode}"
             return AgentResult(
                 text=stdout,
                 ok=False,

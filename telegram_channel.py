@@ -39,9 +39,30 @@ from telegram_main import ALLOWED_INTENTS, filter_plan, is_authorized, rejection
 
 logger = logging.getLogger("jarvis.runtime.telegram")
 
-__all__ = ["TelegramChannel", "ALLOWED_INTENTS", "filter_plan", "rejection_reason", "is_authorized"]
+# Der Runtime-Kanal erlaubt zusaetzlich zur Standalone-Whitelist die
+# asynchrone Repo-Analyse (ADR-035): delegate_analysis laeuft hier im
+# Hintergrund-Worker der Runtime (Quittung -> Push), blockiert also NICHT den
+# Event-Loop. Der Standalone-Bot (telegram_main.py) bleibt bewusst ohne diesen
+# Intent - er hat keinen Async-Worker und wuerde bei einer Minuten-Analyse den
+# PTB-Loop blockieren.
+RUNTIME_ALLOWED_INTENTS = ALLOWED_INTENTS | {"delegate_analysis"}
+
+__all__ = [
+    "TelegramChannel",
+    "ALLOWED_INTENTS",
+    "RUNTIME_ALLOWED_INTENTS",
+    "filter_plan",
+    "rejection_reason",
+    "is_authorized",
+]
 
 _MAX_TELEGRAM_TEXT = 4000
+
+
+def _runtime_filter_plan(steps):
+    """Whitelist-Filter des Runtime-Kanals: wie filter_plan, aber mit dem um
+    delegate_analysis erweiterten Set (ADR-035)."""
+    return filter_plan(steps, RUNTIME_ALLOWED_INTENTS)
 
 
 class TelegramChannel:
@@ -164,4 +185,10 @@ async def _on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         )
         future.add_done_callback(_log_send_future)
 
-    channel.runtime.submit(user_input, reply_callback, plan_filter=filter_plan)
+    # allow_async=True: die Runtime darf delegate_analysis in ihren
+    # Hintergrund-Worker auslagern (Quittung sofort, Ergebnis-Push spaeter
+    # ueber denselben reply_callback). Telegram bleibt reiner Transportkanal
+    # (ADR-035) - die gesamte Async-Orchestrierung liegt in der Runtime.
+    channel.runtime.submit(
+        user_input, reply_callback, plan_filter=_runtime_filter_plan, allow_async=True
+    )

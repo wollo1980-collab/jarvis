@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -29,6 +30,15 @@ class JsonMemoryStore:
         self.memory_dir = memory_dir
         self.max_history_entries = max_history_entries
 
+        # Serialisiert die read-modify-write-Zugriffe auf die JSON-Dateien.
+        # Seit ADR-035 laeuft die asynchrone Repo-Analyse in einem eigenen
+        # Hintergrund-Thread NEBEN dem seriellen Nachrichten-Worker - beide
+        # koennen gleichzeitig history.json schreiben. Ohne dieses Lock ginge
+        # dabei ein Eintrag verloren oder die Datei wuerde beschaedigt. RLock,
+        # damit ein Aufrufer bei Bedarf mehrere Store-Methoden verschachteln
+        # koennte, ohne sich selbst zu blockieren.
+        self._lock = threading.RLock()
+
         self.preferences_path = memory_dir / "preferences.json"
         self.history_path = memory_dir / "history.json"
         self.context_path = memory_dir / "context.json"
@@ -41,30 +51,34 @@ class JsonMemoryStore:
     # -- Preferences / Context -------------------------------------------
 
     def get(self, key: str) -> Any:
-        prefs = self._read(self.preferences_path)
-        return prefs.get(key)
+        with self._lock:
+            prefs = self._read(self.preferences_path)
+            return prefs.get(key)
 
     def set(self, key: str, value: Any) -> None:
-        prefs = self._read(self.preferences_path)
-        prefs[key] = value
-        self._write(self.preferences_path, prefs)
+        with self._lock:
+            prefs = self._read(self.preferences_path)
+            prefs[key] = value
+            self._write(self.preferences_path, prefs)
 
     # -- Gesprächsgedächtnis (history) -------------------------------------
 
     def append_history(self, message: Message) -> None:
-        history = self._read(self.history_path)
-        history.append(
-            {"role": message.role, "content": message.content, "timestamp": message.timestamp}
-        )
+        with self._lock:
+            history = self._read(self.history_path)
+            history.append(
+                {"role": message.role, "content": message.content, "timestamp": message.timestamp}
+            )
 
-        # History-Limit: verhindert unbegrenztes Wachstum von history.json.
-        if len(history) > self.max_history_entries:
-            history = history[-self.max_history_entries:]
+            # History-Limit: verhindert unbegrenztes Wachstum von history.json.
+            if len(history) > self.max_history_entries:
+                history = history[-self.max_history_entries:]
 
-        self._write(self.history_path, history)
+            self._write(self.history_path, history)
 
     def get_history(self, limit: int | None = None) -> list[Message]:
-        history = self._read(self.history_path)
+        with self._lock:
+            history = self._read(self.history_path)
         if limit:
             history = history[-limit:]
         return [

@@ -1,5 +1,17 @@
 # Logbook
 
+## 2026-07-06 - Umsetzung ADR-035 Scheibe 2: asynchrone Repo-Analyse + Telegram-Push
+
+**Kontext:** ADR-035 (accepted) festgelegt, PO-Freigabe zur Umsetzung erteilt; vorab vier Review-Präzisierungen eingearbeitet (Busy-Flag als bewusst einfache Lösung dokumentieren; Abbruch-Präzedenz eindeutig; Regressionstest Busy-Flag-Reset nach Exception; History-Konsistenz im E2E prüfen).
+
+**Umsetzung:** Erste asynchrone Hintergrund-Ausführung im Projekt. `jarvis_runtime.py` bekommt einen von der Runtime besessenen Hintergrund-Worker: `submit(..., allow_async=True)` (nur Telegram-Runtime-Kanal), `_process` erkennt einen einzelnen `long_running`-Command (Attribut am `DelegateAnalysisCommand`, kein hartkodierter Name), quittiert sofort, startet `_run_delegation` in einem Non-Daemon-Thread, pusht das Ergebnis über denselben `reply_callback` (Telegram bleibt reiner Transportkanal). Nebenläufigkeit = 1 über `_delegation_active` unter einem Lock; `stop()` setzt den Kill-Switch und joint den Thread. `core/agent_backend.py` von `subprocess.run` auf `Popen` + `cancel_event` umgestellt (Abbruch-Präzedenz **natürlich > Cancel > Timeout**, genau ein Grund, kein Zombie). `commands/delegate.py`: `long_running=True` + `run_async(plan, cancel_event)` (Konsole/`execute` bleiben synchron). `memory/store.py` per RLock thread-sicher (Delegations-Thread + Nachrichten-Worker schreiben parallel). `telegram_main.filter_plan/rejection_reason` bekommen ein optionales `allowed`-Set; `telegram_channel.RUNTIME_ALLOWED_INTENTS` schaltet `delegate_analysis` nur im Runtime-Kanal frei - der Standalone-Bot bleibt bewusst ohne (kein Async-Worker → würde den Event-Loop blockieren).
+
+**Tests:** 16 neue (Backend cancel/Popen/Präzedenz, `run_async`/`long_running`, Runtime Quittung+Push/Message-Worker-frei/Busy-Ablehnung/`stop`-Cancel/Busy-Reset-nach-Exception/History-Konsistenz/Sync-Regression, Runtime-Whitelist, paralleles History-Schreiben ohne Verlust). Threaded Tests 3× wiederholt - keine Flakiness. Vollsuite 391 → **407 grün**, Gate PASS.
+
+**Rauchtest bestanden (isoliert, PO-begleitet):** echter Runtime-Lauf mit eigenem `memory_dir` (Live-Runtime unberührt), `runtime.submit(..., allow_async=True)` gegen das reale Repo. Belegt: sofortige Quittung → echter `claude`-Lauf (17,8 s, 3 Turns, ~0,11 USD) → Ergebnis-Push; zweite Anfrage währenddessen korrekt als Busy abgelehnt (Backend nur 1×); `stop()` beendet den Delegations-Thread sauber; History exakt `[user, assistant]` (Quittung nicht persistiert); Artefakt UTF-8-korrekt (`✓ success`). **Read-only nachgewiesen** (`git status` vor/nach identisch). **Wichtig:** Der einzige Fehler lag im lokalen **Test-Harness** beim Konsolendruck eines Unicode-Zeichens (✓ auf cp1252) — **nicht im Produkt**; der Push selbst wurde korrekt zugestellt (auf Telegram/`reply_callback` ohne Konsolen-Encoding-Problem).
+
+**Governance:** Umsetzung eines accepted-ADR = Arbeitspaket nach Abschluss-Regel; Review empfiehlt Freigabe, PO-Freigabe 2026-07-06.
+
 ## 2026-07-06 - ADR-035 (accepted): Scheibe 2 festgelegt (Async + Telegram-Push), kein Code
 
 **Kontext:** Scheibe 1 (ADR-034 A–D) ist umgesetzt und committet. Der PO hat gebeten, die **nächste Scheibe vorzubereiten - noch kein Code**. Zusätzlich festgehalten: es gibt aktuell **keinen** Jarvis-Befehl, der die laufende Runtime beendet (`shutdown_pc` = ganzer PC, `disable_jarvis_autostart` = nur Registry-Eintrag, Exit-Wörter nur in Konsolen-Session) → als Backlog-Eintrag `stop_jarvis`/Runtime-Kill-Switch in PROJECT_STATE aufgenommen.

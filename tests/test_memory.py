@@ -2,6 +2,7 @@
 keine Berührung des echten memory_data-Ordners."""
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 
 from core.models import Message
@@ -55,3 +56,30 @@ def test_get_history_with_limit(tmp_path: Path):
 
     history = store.get_history(limit=3)
     assert [m.content for m in history] == ["7", "8", "9"]
+
+
+def test_parallel_append_history_loses_no_entries(tmp_path: Path):
+    """ADR-035: seit der asynchronen Repo-Analyse schreiben Delegations-Thread
+    und Nachrichten-Worker gleichzeitig History. Das RLock im Store muss die
+    read-modify-write-Zugriffe serialisieren - kein Eintrag darf verloren
+    gehen."""
+    store = JsonMemoryStore(tmp_path, max_history_entries=1000)
+    threads_count = 8
+    per_thread = 25
+    start = threading.Event()
+
+    def worker(tid: int) -> None:
+        start.wait()
+        for i in range(per_thread):
+            store.append_history(Message(role="user", content=f"{tid}-{i}"))
+
+    threads = [threading.Thread(target=worker, args=(t,)) for t in range(threads_count)]
+    for t in threads:
+        t.start()
+    start.set()
+    for t in threads:
+        t.join()
+
+    history = store.get_history()
+    assert len(history) == threads_count * per_thread
+    assert len({m.content for m in history}) == threads_count * per_thread

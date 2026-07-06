@@ -48,7 +48,10 @@ def test_authorized_message_is_forwarded_with_filter_plan():
     channel.runtime.submit.assert_called_once()
     args, kwargs = channel.runtime.submit.call_args
     assert args[0] == "hallo"
-    assert kwargs["plan_filter"] is filter_plan
+    # ADR-035: der Runtime-Kanal nutzt das erweiterte Whitelist-Set und
+    # erlaubt der Runtime die asynchrone Auslagerung (allow_async=True).
+    assert kwargs["plan_filter"] is telegram_channel._runtime_filter_plan
+    assert kwargs["allow_async"] is True
 
 
 def test_unauthorized_message_is_ignored_without_submit():
@@ -97,7 +100,7 @@ def test_reply_callback_delivers_message_from_worker_thread():
     channel = _make_channel()
     captured = {}
 
-    def fake_submit(text, reply_callback, plan_filter=None):
+    def fake_submit(text, reply_callback, plan_filter=None, allow_async=False):
         captured["reply_callback"] = reply_callback
 
     channel.runtime.submit.side_effect = fake_submit
@@ -138,7 +141,7 @@ def test_reply_callback_splits_long_message_into_multiple_telegram_messages():
     channel = _make_channel()
     captured = {}
 
-    def fake_submit(text, reply_callback, plan_filter=None):
+    def fake_submit(text, reply_callback, plan_filter=None, allow_async=False):
         captured["reply_callback"] = reply_callback
 
     channel.runtime.submit.side_effect = fake_submit
@@ -182,7 +185,7 @@ def test_reply_callback_does_not_raise_when_send_message_fails():
     channel = _make_channel()
     captured = {}
 
-    def fake_submit(text, reply_callback, plan_filter=None):
+    def fake_submit(text, reply_callback, plan_filter=None, allow_async=False):
         captured["reply_callback"] = reply_callback
 
     channel.runtime.submit.side_effect = fake_submit
@@ -209,6 +212,18 @@ def test_reply_callback_does_not_raise_when_send_message_fails():
         loop.call_soon_threadsafe(loop.stop)
         loop_thread.join(timeout=2.0)
         loop.close()
+
+
+def test_runtime_whitelist_allows_delegate_analysis():
+    """ADR-035: delegate_analysis ist im Runtime-Set freigeschaltet, im
+    Standalone-Set aber bewusst nicht (kein Async-Worker dort)."""
+    assert "delegate_analysis" in telegram_channel.RUNTIME_ALLOWED_INTENTS
+    assert "delegate_analysis" not in telegram_main.ALLOWED_INTENTS
+    steps, rejection = telegram_channel._runtime_filter_plan(
+        [Plan(intent="delegate_analysis", target="jarvis")]
+    )
+    assert rejection is None
+    assert len(steps) == 1
 
 
 def test_telegram_channel_reuses_security_logic_from_telegram_main():

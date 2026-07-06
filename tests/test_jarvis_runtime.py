@@ -6,11 +6,14 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import commands.delegate as delegate_commands
 import commands.web as web_commands
 import jarvis_runtime
+from core.agent_backend import AgentResult
 from core.config import Config
 from core.models import Plan
 from core.web_search import SearchResult
@@ -333,11 +336,11 @@ def test_worker_does_not_die_on_unexpected_exception(tmp_path):
     original_process = runtime._process
     call_count = {"n": 0}
 
-    def flaky_process(text, reply_callback, plan_filter=None):
+    def flaky_process(text, reply_callback, plan_filter=None, allow_async=False):
         call_count["n"] += 1
         if call_count["n"] == 1:
             raise RuntimeError("simulierter Absturz")
-        original_process(text, reply_callback, plan_filter)
+        original_process(text, reply_callback, plan_filter, allow_async)
 
     runtime._process = flaky_process
     runtime.start()
@@ -483,3 +486,280 @@ def test_dampen_http_loggers_protects_token_by_setting_warning():
     finally:
         for lg, lvl in zip(loggers, orig):
             lg.setLevel(lvl)
+
+
+# --- Asynchrone Repo-Analyse (ADR-035) -------------------------------------
+
+
+class DelegatingFakeAI:
+    """Wie FakeAI, erkennt aber 'analysiere ...' als delegate_analysis."""
+
+    def get_plan(self, user_input, history):
+        if user_input.lower().startswith("analysiere"):
+            return Plan(
+                intent="delegate_analysis",
+                target="jarvis",
+                parameters={"question": "frage"},
+                raw_input=user_input,
+                confidence=1.0,
+            )
+        return Plan(intent="chat", raw_input=user_input, confidence=1.0)
+
+    def answer(self, user_input, history, long_term_summary=""):
+        return f"Antwort auf: {user_input}"
+
+
+class RuntimeFakeBackend:
+    """AgentBackend-Ersatz fuer die Runtime-Tests. Kann blockieren (block),
+    auf den Cancel warten (wait_cancel) oder werfen (raises)."""
+
+    def __init__(self, *, result=None, block=None, raises=False, wait_cancel=False):
+        self.result = result or AgentResult(text="Analyse fertig.", ok=True, duration_seconds=0.1)
+        self.block = block
+        self.raises = raises
+        self.wait_cancel = wait_cancel
+        self.calls = 0
+        self.started = threading.Event()
+
+    def analyze(self, repo, question, limits, cancel_event=None):
+        self.calls += 1
+        self.started.set()
+        if self.raises:
+            raise RuntimeError("backend boom")
+        if self.wait_cancel and cancel_event is not None:
+            cancel_event.wait(timeout=5.0)
+            return AgentResult(text="", ok=False, duration_seconds=0.1, detail="abgebrochen")
+        if self.block is not None:
+            self.block.wait(timeout=5.0)
+        return self.result
+
+
+def _delegation_runtime(tmp_path: Path, backend) -> JarvisRuntime:
+    """Runtime mit freigegebenem Repo 'jarvis' und injiziertem Backend.
+    configure() laeuft NACH der Runtime-Konstruktion (die den echten Backend
+    verdrahtet) und ueberschreibt ihn mit dem Fake."""
+    repo = tmp_path / "jarvis"
+    repo.mkdir(exist_ok=True)
+    config = _make_config(tmp_path)
+    config.agent_repos = [{"alias": "jarvis", "path": str(repo)}]
+    runtime = JarvisRuntime(config, ai=DelegatingFakeAI())
+    delegate_commands.configure(config, backend=backend)
+    return runtime
+
+
+def test_async_delegation_sends_quittung_then_push(tmp_path):
+    backend = RuntimeFakeBackend(
+        result=AgentResult(text="Ergebnis XY.", ok=True, duration_seconds=0.1)
+    )
+    runtime = _delegation_runtime(tmp_path, backend)
+    runtime.start()
+    try:
+        replies = []
+        lock = threading.Lock()
+        two = threading.Event()
+
+        def cb(text):
+            with lock:
+                replies.append(text)
+                if len(replies) == 2:
+                    two.set()
+
+        runtime.submit("analysiere jarvis: frage", cb, allow_async=True)
+        assert two.wait(timeout=5.0)
+        assert replies[0].startswith("Verstanden")  # sofortige Quittung
+        assert "Ergebnis XY." in replies[1]          # spaeterer Ergebnis-Push
+    finally:
+        runtime.stop()
+
+
+def test_message_worker_free_during_delegation(tmp_path):
+    """Der Nachrichten-Worker darf waehrend einer laufenden Delegation NICHT
+    blockieren - ein normaler Chat muss sofort beantwortet werden."""
+    block = threading.Event()
+    backend = RuntimeFakeBackend(block=block)
+    runtime = _delegation_runtime(tmp_path, backend)
+    runtime.start()
+    try:
+        chat_done = threading.Event()
+        replies = []
+        lock = threading.Lock()
+
+        def cb(text):
+            with lock:
+                replies.append(text)
+            if "Antwort auf: hallo" in text:
+                chat_done.set()
+
+        runtime.submit("analysiere jarvis: frage", cb, allow_async=True)
+        assert backend.started.wait(timeout=5.0)  # Delegation laeuft (blockiert)
+        runtime.submit("hallo", cb)                # normaler Chat
+        assert chat_done.wait(timeout=5.0)         # trotz laufender Delegation
+    finally:
+        block.set()
+        runtime.stop()
+
+
+def test_second_delegation_while_busy_is_rejected(tmp_path):
+    block = threading.Event()
+    backend = RuntimeFakeBackend(block=block)
+    runtime = _delegation_runtime(tmp_path, backend)
+    runtime.start()
+    try:
+        replies = []
+        lock = threading.Lock()
+        busy = threading.Event()
+
+        def cb(text):
+            with lock:
+                replies.append(text)
+            if "läuft bereits" in text:
+                busy.set()
+
+        runtime.submit("analysiere jarvis: frage1", cb, allow_async=True)
+        assert backend.started.wait(timeout=5.0)
+        runtime.submit("analysiere jarvis: frage2", cb, allow_async=True)
+        assert busy.wait(timeout=5.0)
+        assert backend.calls == 1  # zweite Delegation erreicht das Backend nicht
+    finally:
+        block.set()
+        runtime.stop()
+
+
+def test_stop_cancels_running_delegation(tmp_path):
+    backend = RuntimeFakeBackend(wait_cancel=True)
+    runtime = _delegation_runtime(tmp_path, backend)
+    runtime.start()
+
+    runtime.submit("analysiere jarvis: frage", lambda t: None, allow_async=True)
+    assert backend.started.wait(timeout=5.0)
+
+    runtime.stop()  # setzt Kill-Switch -> Backend kehrt zurueck -> Thread endet
+
+    assert runtime._delegation_thread is not None
+    assert runtime._delegation_thread.is_alive() is False
+
+
+def test_delegation_without_allow_async_runs_synchronously(tmp_path):
+    """Regressionsanker (ADR-035 Entscheidung 5): ohne allow_async laeuft die
+    Analyse synchron im Nachrichten-Worker - genau eine Antwort, keine
+    separate Quittung."""
+    backend = RuntimeFakeBackend(
+        result=AgentResult(text="Sync-Ergebnis.", ok=True, duration_seconds=0.1)
+    )
+    runtime = _delegation_runtime(tmp_path, backend)
+    runtime.start()
+    try:
+        replies = []
+        done = threading.Event()
+
+        def cb(text):
+            replies.append(text)
+            done.set()
+
+        runtime.submit("analysiere jarvis: frage", cb)  # allow_async=False (Default)
+        assert done.wait(timeout=5.0)
+        assert len(replies) == 1
+        assert "Sync-Ergebnis." in replies[0]
+    finally:
+        runtime.stop()
+
+
+def test_busy_flag_reset_after_background_exception(tmp_path):
+    """Wirft der Hintergrundlauf, muss der Busy-Slot im finally freigegeben
+    werden - eine nachfolgende Delegation darf nicht dauerhaft 'busy' sein."""
+    backend = RuntimeFakeBackend(raises=True)
+    runtime = _delegation_runtime(tmp_path, backend)
+    runtime.start()
+    try:
+        replies = []
+        lock = threading.Lock()
+
+        def cb(text):
+            with lock:
+                replies.append(text)
+
+        runtime.submit("analysiere jarvis: frage1", cb, allow_async=True)
+        assert backend.started.wait(timeout=5.0)
+        # Erster Hintergrund-Thread (wirft) sauber abwarten.
+        runtime._delegation_thread.join(timeout=5.0)
+
+        backend.started.clear()
+        runtime.submit("analysiere jarvis: frage2", cb, allow_async=True)
+        # Zweite Delegation wird angenommen und erreicht das Backend erneut.
+        assert backend.started.wait(timeout=5.0)
+        deadline = time.time() + 5.0
+        while backend.calls < 2 and time.time() < deadline:
+            time.sleep(0.02)
+        assert backend.calls == 2
+        assert not any("läuft bereits" in r for r in replies)
+    finally:
+        runtime.stop()
+
+
+def test_async_delegation_writes_consistent_history(tmp_path):
+    backend = RuntimeFakeBackend(
+        result=AgentResult(text="Ergebnis.", ok=True, duration_seconds=0.1)
+    )
+    runtime = _delegation_runtime(tmp_path, backend)
+    runtime.start()
+    try:
+        replies = []
+        lock = threading.Lock()
+        two = threading.Event()
+
+        def cb(text):
+            with lock:
+                replies.append(text)
+                if len(replies) == 2:
+                    two.set()
+
+        runtime.submit("analysiere jarvis: frage", cb, allow_async=True)
+        assert two.wait(timeout=5.0)
+
+        history = runtime.memory.get_history()
+        assert [m.role for m in history] == ["user", "assistant"]
+        assert history[0].content == "analysiere jarvis: frage"
+        assert "Ergebnis." in history[1].content
+        # Die transiente Quittung wird NICHT persistiert.
+        assert all("Verstanden" not in m.content for m in history)
+    finally:
+        runtime.stop()
+
+
+def test_async_and_sync_history_not_lost_under_concurrency(tmp_path):
+    """RLock im MemoryStore: Delegations-Thread und Nachrichten-Worker
+    schreiben gleichzeitig History - kein Eintrag darf verloren gehen."""
+    block = threading.Event()
+    backend = RuntimeFakeBackend(
+        block=block, result=AgentResult(text="Analyse.", ok=True, duration_seconds=0.1)
+    )
+    runtime = _delegation_runtime(tmp_path, backend)
+    runtime.start()
+    try:
+        replies = []
+        lock = threading.Lock()
+        push = threading.Event()
+        chat = threading.Event()
+
+        def cb(text):
+            with lock:
+                replies.append(text)
+            if "Analyse." in text:
+                push.set()
+            if "Antwort auf: hallo" in text:
+                chat.set()
+
+        runtime.submit("analysiere jarvis: frage", cb, allow_async=True)
+        assert backend.started.wait(timeout=5.0)  # Delegation laeuft (blockiert)
+        runtime.submit("hallo", cb)                # paralleler Chat schreibt History
+        assert chat.wait(timeout=5.0)
+        block.set()                                # Delegation abschliessen
+        assert push.wait(timeout=5.0)
+
+        contents = [m.content for m in runtime.memory.get_history()]
+        assert len(contents) == 4  # 2x Chat + 2x Delegation, nichts verloren
+        assert "analysiere jarvis: frage" in contents
+        assert "hallo" in contents
+    finally:
+        block.set()
+        runtime.stop()

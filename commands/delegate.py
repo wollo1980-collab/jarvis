@@ -30,6 +30,7 @@ automatisch fail-closed abgelehnt.
 from __future__ import annotations
 
 import logging
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -161,8 +162,22 @@ class DelegateAnalysisCommand:
         "Analyse mit vollstaendigem Artefakt zum Review."
     )
     requires_confirmation = False  # Sicherheitsstufe 0 (reine Analyse, read-only)
+    # Langlaufend (Minuten): die Runtime fuehrt diesen Command asynchron im
+    # Hintergrund aus und pusht das Ergebnis (ADR-035). Auf der Konsole und
+    # ueber execute() laeuft er weiterhin synchron.
+    long_running = True
 
     def execute(self, plan: Plan) -> Result:
+        """Synchroner Einstieg (Konsole/Executor) - kein Abbruch-Kanal."""
+        return self._analyze(plan, cancel_event=None)
+
+    def run_async(self, plan: Plan, cancel_event: Optional[threading.Event] = None) -> Result:
+        """Asynchroner Einstieg der Runtime (ADR-035): identische Logik wie
+        execute(), reicht aber den Kill-Switch (cancel_event) bis zum Backend
+        durch. Die Runtime besitzt den Hintergrund-Thread und das Event."""
+        return self._analyze(plan, cancel_event=cancel_event)
+
+    def _analyze(self, plan: Plan, cancel_event: Optional[threading.Event]) -> Result:
         _require_configured()
 
         if not _allowlist:
@@ -203,7 +218,7 @@ class DelegateAnalysisCommand:
             )
 
         logger.info("Repo-Analyse gestartet: repo=%s frage=%r backend=claude", repo_alias, question)
-        result = _backend.analyze(repo, question, _limits)
+        result = _backend.analyze(repo, question, _limits, cancel_event)
         artifact = _write_artifact(repo_alias, question, result)
 
         logger.info(

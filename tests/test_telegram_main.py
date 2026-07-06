@@ -109,14 +109,27 @@ def test_rejection_reason_blocks_non_whitelisted_intent():
     assert "read_excel" in reason
 
 
-def test_delegate_analysis_stays_local_until_async_slice():
-    # ADR-034 Umsetzungs-Scheibe 1 ist bewusst lokal & synchron. Der Telegram-
-    # Intent + Ergebnis-Push ist ein Folge-Arbeitspaket; bis dahin darf
-    # delegate_analysis NICHT ueber Telegram erreichbar sein (fail-closed).
+def test_delegate_analysis_rejected_on_standalone_bot():
+    # ADR-035: die asynchrone Repo-Analyse ist NUR ueber den Runtime-Kanal
+    # erreichbar (der hat den Hintergrund-Worker). Der aeltere synchrone
+    # Standalone-Bot (telegram_main.py) hat keinen Async-Worker und wuerde bei
+    # einer Minuten-Analyse den Event-Loop blockieren - deshalb bleibt
+    # delegate_analysis hier bewusst NICHT in der Whitelist.
     assert "delegate_analysis" not in ALLOWED_INTENTS
     reason = rejection_reason(Plan(intent="delegate_analysis", target="jarvis"))
     assert reason is not None
     assert "delegate_analysis" in reason
+
+
+def test_filter_plan_allowed_override_lets_intent_through():
+    # ADR-035: filter_plan/rejection_reason akzeptieren ein erweitertes Set;
+    # damit schaltet der Runtime-Kanal delegate_analysis gezielt frei, ohne das
+    # Standalone-Verhalten (Default-Set) zu aendern.
+    extended = ALLOWED_INTENTS | {"delegate_analysis"}
+    assert rejection_reason(Plan(intent="delegate_analysis", target="jarvis"), extended) is None
+    steps, rejection = filter_plan([Plan(intent="delegate_analysis", target="jarvis")], extended)
+    assert rejection is None
+    assert len(steps) == 1
 
 
 def test_mail_briefing_intents_are_whitelisted():

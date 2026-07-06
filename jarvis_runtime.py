@@ -51,12 +51,13 @@ import commands.memory as memory_commands
 import commands.monitor as monitor_commands
 import commands.reports as reports_commands
 import commands.web as web_commands
+from commands import REGISTRY
 from core.ai import AIEngine
 from core.config import Config
 from core.models import Message, Plan
 from core.planner import Planner
 from core.single_instance import InstanceAlreadyRunningError, SingleInstanceLock
-from executor.executor import Executor
+from executor.executor import ExecutionReport, Executor
 from memory.long_term import LongTermMemory
 from memory.store import JsonMemoryStore
 
@@ -66,6 +67,12 @@ logger = logging.getLogger("jarvis.runtime")
 # Objekt statt None/String, damit er nie versehentlich mit einer echten
 # Nachricht kollidiert.
 _STOP = object()
+
+# Hartes Zeitlimit (Sekunden), das stop() auf das Einsammeln eines laufenden
+# Delegations-Threads wartet, nachdem der Kill-Switch gesetzt wurde (ADR-035).
+# Da der Kill-Switch den claude-Prozess terminiert, endet der Thread praktisch
+# sofort; das Limit ist nur die Sicherung gegen einen Haenger.
+_DELEGATION_JOIN_TIMEOUT = 15.0
 
 EXIT_WORDS = {"exit", "quit", "beenden", "ende", "stop", "stopp", "tschuess", "tschüss", "bye"}
 
@@ -117,6 +124,17 @@ class JarvisRuntime:
         self._queue: "queue.Queue" = queue.Queue()
         self._worker: Optional[threading.Thread] = None
 
+        # Asynchrone Repo-Analyse (ADR-035): ein von der Runtime besessener
+        # Hintergrund-Worker fuer langlaufende (long_running) Commands, damit
+        # der serielle Nachrichten-Worker nicht minutenlang blockiert.
+        # Nebenlaeufigkeit bewusst = 1 (ADR-035): ein einzelnes Flag unter einem
+        # Lock, KEIN Scheduler/keine Warteschlange - deckt "genau eine
+        # gleichzeitige Delegation" exakt ab (erweiterbar, falls je noetig).
+        self._state_lock = threading.Lock()
+        self._delegation_active = False
+        self._delegation_thread: Optional[threading.Thread] = None
+        self._delegation_cancel: Optional[threading.Event] = None
+
     def start(self) -> None:
         """Startet den Worker-Thread. Nicht blockierend - Kanäle laufen
         unabhängig davon weiter."""
@@ -128,10 +146,25 @@ class JarvisRuntime:
 
     def stop(self) -> None:
         """Legt den Stop-Sentinel in die Queue und wartet, bis der
-        Worker sauber beendet ist."""
+        Worker sauber beendet ist. Beendet ausserdem eine ggf. laufende
+        Hintergrund-Delegation (ADR-035): Kill-Switch setzen (terminiert den
+        claude-Prozess) und den Thread mit hartem Zeitlimit einsammeln - so
+        haengt der Shutdown nicht bis zum Agenten-Timeout."""
         self._queue.put(_STOP)
         if self._worker is not None:
             self._worker.join()
+
+        cancel = self._delegation_cancel
+        if cancel is not None:
+            cancel.set()
+        thread = self._delegation_thread
+        if thread is not None and thread.is_alive():
+            thread.join(timeout=_DELEGATION_JOIN_TIMEOUT)
+            if thread.is_alive():
+                logger.warning(
+                    "Delegations-Thread nach %.0fs noch aktiv - Shutdown wird fortgesetzt.",
+                    _DELEGATION_JOIN_TIMEOUT,
+                )
         logger.info("Jarvis-Runtime gestoppt.")
 
     def submit(
@@ -139,6 +172,7 @@ class JarvisRuntime:
         text: str,
         reply_callback: Callable[[str], None],
         plan_filter: Optional[Callable[[list[Plan]], tuple[list[Plan], Optional[str]]]] = None,
+        allow_async: bool = False,
     ) -> None:
         """Von einem Kanal aufgerufen: legt eine Nachricht in die Queue.
         Blockiert den Aufrufer nicht - die Verarbeitung passiert
@@ -149,9 +183,17 @@ class JarvisRuntime:
         liefert (erlaubte_schritte, Ablehnungsgrund). Damit kann ein
         Kanal (z. B. Telegram) eine eigene Whitelist durchsetzen, ohne
         dass JarvisRuntime selbst irgendetwas ueber diese Whitelist
-        wissen muss. Ohne plan_filter (Default) verhaelt sich submit()
-        exakt wie in Runtime v1."""
-        self._queue.put((text, reply_callback, plan_filter))
+        wissen muss.
+
+        allow_async (optional, ADR-035): erlaubt der Runtime, einen
+        langlaufenden (long_running) Command - die Repo-Analyse - NICHT im
+        seriellen Nachrichten-Worker auszufuehren, sondern im Hintergrund
+        (sofortige Quittung, spaeter Ergebnis-Push ueber denselben
+        reply_callback). Nur Kanaele mit einem push-faehigen reply_callback
+        (Telegram-Runtime-Kanal) setzen True; die Konsole bleibt synchron.
+        Ohne die neuen Argumente (Default) verhaelt sich submit() exakt wie
+        in Runtime v1/v2."""
+        self._queue.put((text, reply_callback, plan_filter, allow_async))
 
     def _run_worker(self) -> None:
         while True:
@@ -159,9 +201,9 @@ class JarvisRuntime:
             if item is _STOP:
                 self._queue.task_done()
                 break
-            text, reply_callback, plan_filter = item
+            text, reply_callback, plan_filter, allow_async = item
             try:
-                self._process(text, reply_callback, plan_filter)
+                self._process(text, reply_callback, plan_filter, allow_async)
             except Exception:
                 # Der Worker darf bei Fehlern nicht still sterben - loggen
                 # und mit der naechsten Nachricht weitermachen.
@@ -174,6 +216,7 @@ class JarvisRuntime:
         text: str,
         reply_callback: Callable[[str], None],
         plan_filter: Optional[Callable[[list[Plan]], tuple[list[Plan], Optional[str]]]] = None,
+        allow_async: bool = False,
     ) -> None:
         history = self.memory.get_history(limit=20)
         steps = self.planner.plan(text, history)
@@ -184,12 +227,18 @@ class JarvisRuntime:
                 # Abgelehnt: Executor wird nicht aufgerufen, keine
                 # History-Schreibung - exakt wie telegram_main.py's
                 # JarvisBridge.handle_message() bei einer Ablehnung.
-                try:
-                    reply_callback(rejection)
-                except Exception:
-                    logger.exception(
-                        "reply_callback fehlgeschlagen fuer abgelehnte Anfrage: %r", text
-                    )
+                self._safe_reply(reply_callback, rejection, text)
+                return
+
+        # Asynchroner Zweig (ADR-035): ein einzelner langlaufender Command
+        # (Repo-Analyse) wird - wenn der Kanal es erlaubt - in den
+        # Hintergrund-Worker ausgelagert, damit der Nachrichten-Worker sofort
+        # frei ist. Sicherheitspruefung (plan_filter) ist zu diesem Zeitpunkt
+        # bereits erfolgt.
+        if allow_async:
+            command = self._async_command(steps)
+            if command is not None:
+                self._dispatch_delegation(text, steps[0], command, reply_callback)
                 return
 
         long_term_summary = self.long_term.summary_text()
@@ -198,13 +247,94 @@ class JarvisRuntime:
 
         self.memory.append_history(Message(role="user", content=text))
         self.memory.append_history(Message(role="assistant", content=response_text))
+        self._safe_reply(reply_callback, response_text, text)
 
+    def _safe_reply(
+        self, reply_callback: Callable[[str], None], message: str, source_text: str
+    ) -> None:
+        """Ruft den reply_callback und faengt Fehler ab - ein kaputter
+        Callback (z. B. Kanal bereits weg) darf weder den Worker noch den
+        Delegations-Thread mitreissen."""
         try:
-            reply_callback(response_text)
+            reply_callback(message)
         except Exception:
-            # Ein kaputter reply_callback (z. B. Kanal bereits weg) darf
-            # den Worker ebenfalls nicht mitreissen.
-            logger.exception("reply_callback fehlgeschlagen fuer: %r", text)
+            logger.exception("reply_callback fehlgeschlagen fuer: %r", source_text)
+
+    @staticmethod
+    def _async_command(steps: list[Plan]):
+        """Liefert den Command-Objekt, wenn der Plan genau ein Schritt ist,
+        dessen registrierter Command als long_running markiert ist - sonst
+        None. Kein hartkodierter Intent-Name: die Entscheidung haengt allein
+        am Command-Attribut (Muster wie requires_confirmation)."""
+        if len(steps) != 1:
+            return None
+        command = REGISTRY.get(steps[0].intent)
+        if command is not None and getattr(command, "long_running", False):
+            return command
+        return None
+
+    def _dispatch_delegation(
+        self, text: str, step: Plan, command, reply_callback: Callable[[str], None]
+    ) -> None:
+        """Belegt den (einzigen) Delegations-Slot, quittiert sofort und
+        startet den Hintergrund-Thread. Ist bereits eine Delegation aktiv,
+        wird die Anfrage hoeflich abgelehnt (Nebenlaeufigkeit = 1, ADR-035) -
+        ohne History-Schreibung, wie bei einer Ablehnung."""
+        with self._state_lock:
+            if self._delegation_active:
+                busy = True
+            else:
+                self._delegation_active = True
+                busy = False
+        if busy:
+            self._safe_reply(
+                reply_callback,
+                "Es läuft bereits eine Analyse - ich melde mich, sobald sie fertig ist.",
+                text,
+            )
+            return
+
+        self._safe_reply(
+            reply_callback,
+            f"Verstanden - ich analysiere '{step.target}' und melde mich, "
+            "sobald das Ergebnis da ist.",
+            text,
+        )
+        cancel_event = threading.Event()
+        self._delegation_cancel = cancel_event
+        thread = threading.Thread(
+            target=self._run_delegation,
+            args=(text, step, command, reply_callback, cancel_event),
+            name="jarvis-delegation",
+            daemon=False,
+        )
+        self._delegation_thread = thread
+        thread.start()
+
+    def _run_delegation(
+        self,
+        text: str,
+        step: Plan,
+        command,
+        reply_callback: Callable[[str], None],
+        cancel_event: threading.Event,
+    ) -> None:
+        """Laeuft im Hintergrund-Thread: fuehrt die Analyse cancelbar aus,
+        schreibt das Ergebnis (user + assistant) ins Gedaechtnis und pusht die
+        Antwort. Das Busy-Flag wird IMMER im finally freigegeben - auch bei
+        einer Exception im Hintergrund -, damit der Slot nie dauerhaft belegt
+        bleibt."""
+        try:
+            result = command.run_async(step, cancel_event)
+            response_text = "\n".join(ExecutionReport(results=[result]).summary_lines()) or "Alles klar."
+            self.memory.append_history(Message(role="user", content=text))
+            self.memory.append_history(Message(role="assistant", content=response_text))
+            self._safe_reply(reply_callback, response_text, text)
+        except Exception:
+            logger.exception("Hintergrund-Delegation fehlgeschlagen fuer: %r", text)
+        finally:
+            with self._state_lock:
+                self._delegation_active = False
 
 
 class ConsoleDummyChannel:

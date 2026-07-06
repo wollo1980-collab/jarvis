@@ -1,5 +1,27 @@
 # Changelog
 
+## 2026-07-06 - Repo-Analyse asynchron über Telegram (ADR-035 Scheibe 2: Async + Push)
+
+### Neu
+- Die read-only Repo-Analyse (`delegate_analysis`) ist jetzt **über den Telegram-Runtime-Kanal auslösbar**: Jarvis quittiert sofort („Verstanden - ich analysiere … und melde mich"), führt die Analyse im **Hintergrund** aus (blockiert den seriellen Nachrichten-Worker nicht) und **pusht** das Ergebnis inkl. Artefakt-Verweis, sobald es fertig ist.
+- **Hintergrund-Worker im Besitz der `JarvisRuntime`** (ADR-035): Start/Shutdown/Cleanup dort. `runtime.stop()` beendet einen laufenden Lauf über einen echten **Kill-Switch** (das Backend terminiert den `claude`-Prozess) statt bis zum Timeout zu hängen.
+- **Genau eine gleichzeitige Delegation** (bewusst einfaches Busy-Flag): eine zweite Anfrage wird höflich abgelehnt („Es läuft bereits eine Analyse …").
+
+### Geaendert
+- `core/agent_backend.py`: `analyze(..., cancel_event=None)` auf `subprocess.Popen` umgestellt (cancelbar). Abbruch-Präzedenz eindeutig: **natürlicher Abschluss > Cancel > Timeout**.
+- `commands/delegate.py`: `long_running = True` + `run_async(plan, cancel_event)` (Konsole/`execute` bleiben synchron).
+- `jarvis_runtime.py`: `submit(..., allow_async=False)`; nur der Telegram-Runtime-Kanal setzt `True`, die Konsole bleibt synchron.
+- `memory/store.py`: RLock — Delegations-Thread und Nachrichten-Worker schreiben History jetzt gefahrlos parallel.
+- `telegram_main.py`: `filter_plan`/`rejection_reason` akzeptieren ein optionales `allowed`-Set (Default unverändert). `telegram_channel.py` schaltet `delegate_analysis` nur im Runtime-Kanal frei (`RUNTIME_ALLOWED_INTENTS`).
+
+### Grenzen (bewusst)
+- Über den **Standalone-Bot** (`telegram_main.py`) bleibt `delegate_analysis` abgelehnt — er hat keinen Async-Worker und würde bei einer Minuten-Analyse den Event-Loop blockieren.
+- Telegram bleibt reiner Transportkanal (keine Hintergrundlogik dort).
+
+### Tests
+- 16 neue Tests (Backend cancel/Popen + Abbruch-Präzedenz, `run_async`/`long_running`, Runtime Quittung+Push/Busy-Ablehnung/`stop`-Cancel/Busy-Reset-nach-Exception/History-Konsistenz/Sync-Regression, Runtime-Whitelist, paralleles History-Schreiben). Vollsuite 407 grün, Gate PASS.
+- **Isolierter Runtime-Rauchtest bestanden** (echter `claude`-Lauf, Live-Runtime unberührt): Quittung → Push, Busy-Ablehnung, sauberer `stop()`, History `[user, assistant]`, Artefakt UTF-8-korrekt; **Read-only nachgewiesen** (`git status` vor/nach identisch). Der einzige Fehler lag im lokalen **Test-Harness** beim Konsolendruck eines Unicode-Zeichens (nicht im Produkt).
+
 ## 2026-07-06 - Repo-Analyse delegieren (ADR-034 Scheibe 1: read-only, lokal-synchron)
 
 ### Neu

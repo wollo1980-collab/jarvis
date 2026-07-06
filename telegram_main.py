@@ -101,10 +101,17 @@ def is_authorized(chat_id: object, allowed_chat_id: str) -> bool:
     return str(chat_id) == str(allowed_chat_id)
 
 
-def rejection_reason(step: Plan) -> Optional[str]:
+def rejection_reason(step: Plan, allowed: Optional[set] = None) -> Optional[str]:
     """Liefert einen Ablehnungsgrund, falls dieser Schritt per Telegram
-    (Phase 1) nicht erlaubt ist, sonst None."""
-    if step.intent not in ALLOWED_INTENTS:
+    nicht erlaubt ist, sonst None.
+
+    allowed (optional, ADR-035): erlaubte Intent-Menge. Default None ->
+    Auflösung auf das Modul-Set ALLOWED_INTENTS ZUR AUFRUFZEIT (damit Tests
+    ALLOWED_INTENTS weiterhin per monkeypatch ersetzen koennen). Der
+    Runtime-Telegram-Kanal reicht ein erweitertes Set (inkl. delegate_analysis)
+    durch, ohne das Standalone-Verhalten zu aendern."""
+    allowed_intents = ALLOWED_INTENTS if allowed is None else allowed
+    if step.intent not in allowed_intents:
         return f"'{step.intent}' ist per Telegram (Phase 1) nicht verfügbar."
 
     command = REGISTRY.get(step.intent)
@@ -116,12 +123,17 @@ def rejection_reason(step: Plan) -> Optional[str]:
     return None
 
 
-def filter_plan(steps: list[Plan]) -> tuple[list[Plan], Optional[str]]:
+def filter_plan(
+    steps: list[Plan], allowed: Optional[set] = None
+) -> tuple[list[Plan], Optional[str]]:
     """Prüft alle Schritte eines Plans. Ist auch nur einer nicht erlaubt,
     wird der GESAMTE Plan abgelehnt (Wolfgangs Entscheidung) - liefert
-    ([], Ablehnungsgrund). Sind alle Schritte erlaubt, liefert (steps, None)."""
+    ([], Ablehnungsgrund). Sind alle Schritte erlaubt, liefert (steps, None).
+
+    allowed (optional, ADR-035) wird an rejection_reason durchgereicht;
+    Default None -> Modul-ALLOWED_INTENTS (Standalone-Verhalten unveraendert)."""
     for step in steps:
-        reason = rejection_reason(step)
+        reason = rejection_reason(step, allowed)
         if reason:
             return [], f"Anfrage abgelehnt: {reason}"
     return steps, None

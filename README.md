@@ -176,7 +176,7 @@ freigeben:
 Nur ausdruecklich gelistete, real existierende Pfade sind analysierbar - alles
 andere wird abgelehnt (fail-closed).
 
-Beispiel:
+Beispiel (lokal, Konsole - synchron):
 
 ```text
 Du: analysiere jarvis: wie funktioniert der Executor?
@@ -185,10 +185,30 @@ Jarvis: Analyse von 'jarvis' fertig:
 Vollstaendig abgelegt unter: .../memory_data/delegations/20260706-….md
 ```
 
-**Bewusst noch nicht in dieser Scheibe:** asynchrone Hintergrund-Ausfuehrung und
-Auslösen ueber Telegram (Ergebnis-Push). `delegate_analysis` ist daher **nicht**
-in der Telegram-Whitelist und wird remote abgelehnt - das ist ein eigenes
-Folge-Arbeitspaket.
+### Asynchron über Telegram (Scheibe 2, ADR-035)
+
+Über den **Runtime-Telegram-Kanal** (`jarvis_runtime.py`) läuft die Analyse
+asynchron, damit du unterwegs nicht auf die Antwort warten musst:
+
+```text
+Du:     analysiere jarvis: wie funktioniert der Executor?
+Jarvis: Verstanden - ich analysiere 'jarvis' und melde mich, sobald das Ergebnis da ist.
+        (… Minuten später, als Push …)
+Jarvis: ✓ Analyse von 'jarvis' fertig: <kurzer Anriss>  (+ Artefakt-Verweis)
+```
+
+- Der serielle Nachrichten-Worker bleibt frei - normale Nachrichten werden
+  währenddessen sofort beantwortet.
+- **Genau eine** Analyse gleichzeitig: eine zweite Anfrage wird höflich
+  abgelehnt, bis die erste fertig ist.
+- Telegram ist dabei nur **Transportkanal**; die Hintergrund-Orchestrierung
+  (Thread, Quittung/Push, Kill-Switch beim Herunterfahren) liegt vollständig in
+  der Runtime.
+
+**Bewusst nicht:** Über den älteren **Standalone-Bot** (`telegram_main.py`)
+bleibt `delegate_analysis` abgelehnt - er hat keinen Hintergrund-Worker und
+würde bei einer Minuten-Analyse blockieren. Ebenfalls weiter tabu: **schreibende**
+Agenten (Fix/Branch, Scheibe 3), mehrere Agenten parallel.
 
 ## Tests ausführen
 
