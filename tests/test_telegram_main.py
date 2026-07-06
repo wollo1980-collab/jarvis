@@ -109,6 +109,33 @@ def test_rejection_reason_blocks_non_whitelisted_intent():
     assert "read_excel" in reason
 
 
+def test_mail_briefing_intents_are_whitelisted():
+    # PO-Entscheidung 2026-07-06 (ADR-031-Nachtrag): das rein lesende
+    # Mail-Briefing ist remote erreichbar.
+    assert rejection_reason(Plan(intent="check_mail")) is None
+    assert rejection_reason(Plan(intent="show_mail_advertising")) is None
+
+
+def test_mail_rule_writing_intents_stay_local():
+    # Bewusste Scope-Grenze: die schreibenden Regel-Lern-Intents bleiben
+    # der lokalen Konsole vorbehalten (kein reines Lesen mehr).
+    for intent in ("mail_hide_sender", "mail_keep_sender"):
+        reason = rejection_reason(Plan(intent=intent, target="amazon"))
+        assert reason is not None
+        assert intent in reason
+
+
+def test_bridge_configures_mail(tmp_path: Path, monkeypatch):
+    # Regressionsanker: das Mail-Briefing muss im Telegram-Pfad konfiguriert
+    # werden (fehlte urspruenglich - Whitelist allein liefe sonst ins Leere).
+    calls = []
+    monkeypatch.setattr(
+        telegram_main.mail_commands, "configure", lambda config: calls.append(config)
+    )
+    _make_bridge(tmp_path)
+    assert len(calls) == 1
+
+
 def test_rejection_reason_blocks_stufe2_even_if_hypothetically_whitelisted(monkeypatch):
     import telegram_main
 

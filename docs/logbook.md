@@ -1,5 +1,19 @@
 # Logbook
 
+## 2026-07-06 - Mail-Briefing über Telegram freigeschaltet (Arbeitspaket B, Nutzwert-Phase)
+
+**Kontext:** Der Telegram-Gegencheck aus Arbeitspaket A wurde abgelehnt („Anfrage abgelehnt wegen Phase 1") - korrektes Verhalten: `check_mail` war nie in der Telegram-Whitelist. Der PO hat daraufhin entschieden, das rein lesende Briefing remote freizuschalten (Nutzwert > Datenschutz-Trade-off), bewusst als eigenständiges Paket B statt als Nachtrag zu A. Scope + Intent-Auswahl vorab vorgelegt, von Reviewer und PO freigegeben.
+
+**Umsetzung:** `telegram_main.ALLOWED_INTENTS` um `check_mail` und `show_mail_advertising` erweitert (rein lesend, Stufe 0). Beim Check fiel auf: `mail_commands.configure()` lief bisher nur in `main.py` - eine reine Whitelist-Zeile wäre ins Leere gelaufen. Deshalb `mail_commands.configure(config)` in `telegram_main.py` (Bridge) und `jarvis_runtime.py` (Runtime-Stack) nachgezogen, analog zum Web-v1-Muster. `telegram_channel.py` importiert die Whitelist aus `telegram_main` (ADR-027) und propagiert automatisch. Die schreibenden Regel-Lern-Intents bleiben bewusst lokal.
+
+**Governance:** ADR-031-Nachtrag mit explizit abgewogenem Datenhoheit-Trade-off und PO-Freigabe. Bycatch dabei: Der ADR-031-Status stand noch auf „Vorgeschlagen (wartet auf Freigabe)", obwohl das Briefing seit 2026-07-03 umgesetzt und produktiv ist - auf `Accepted` korrigiert und im Status transparent vermerkt. Kein Handbook-Eingriff (Stufe 0 bleibt im Fernzugriff-Prinzip).
+
+**Tests:** 4 neue Tests - Whitelist-Grenze (Briefing-Intents erreichbar, Regel-Intents blockiert) und Verdrahtungs-Anker in beiden Remote-Pfaden. Die Briefing-Logik selbst bleibt in `test_commands_mail.py` abgedeckt und wird durch die Bridge unverändert genutzt; bewusst nicht dupliziert. Vollsuite 373/373 grün, Gate PASS.
+
+**Bewusst nicht umgesetzt:** Schreibende Mail-Intents remote, Hotmail, TTS. Live-Verifikation (Telegram-„was liegt an?") ist ein PO-Schritt nach dem Commit.
+
+**Lessons Learned:** Eine Whitelist-Freischaltung ohne die zugehörige `configure()`-Verdrahtung ist ein stiller Fehlschlag - der Scope-Check „wo wird der Command eigentlich konfiguriert?" hat das vor der Umsetzung sichtbar gemacht statt erst im Live-Test.
+
 ## 2026-07-06 - Mail-Briefing in Betrieb genommen (Arbeitspaket A, Nutzwert-Phase)
 
 **Kontext:** Baustein 1 der Nutzwert-Phase (Mail-Briefing „Was liegt an?", ADR-031) war seit dem 03.07. implementiert und getestet, aber nie real gelaufen - das Gmail-App-Passwort fehlte. PO-Auftrag: das Briefing in echten Betrieb nehmen und dabei die drei offenen Web-v1-Restfälle mit abhaken. Bewusster Scope: Inbetriebnahme, keine neuen Features.

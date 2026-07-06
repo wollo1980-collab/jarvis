@@ -45,6 +45,7 @@ import threading
 from datetime import date
 from typing import Callable, Optional
 
+import commands.mail as mail_commands
 import commands.memory as memory_commands
 import commands.monitor as monitor_commands
 import commands.reports as reports_commands
@@ -105,6 +106,7 @@ class JarvisRuntime:
         reports_commands.configure(self.ai)
         monitor_commands.configure(self.ai)
         web_commands.configure(self.ai, timeout_seconds=config.timeout)
+        mail_commands.configure(config)
 
         self._queue: "queue.Queue" = queue.Queue()
         self._worker: Optional[threading.Thread] = None

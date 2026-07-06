@@ -1,7 +1,7 @@
 ---
 version: "v0.8 P1+2 (Multi-KI) abgeschlossen; Nutzwert-Phase gestartet"
 active_increment: nutzwert-phase
-tests: 369
+tests: 373
 latest_adr: 32
 stand: 2026-07-06
 ---
@@ -108,7 +108,7 @@ Davor - v0.8 „Multi-KI", Phase 1+2 (ADR-029/030): Die KI-Anbindung ist nicht m
 - `system_status`/`analyze_pc`: keine Temperatur (psutil-Limitierung unter Windows).
 - `read_excel`/`analyze_report`/`calculate_kpi`: nur `.xlsx`/`.xlsm`, nur Werte, 500 Zeilen/Blatt.
 - `search_web` (ADR-032): hängt an einer externen Suchseite, liest nur Trefferlisten (keine ganzen Artikel) und kann bei Markup-Änderungen, Bot-/Captcha-Schutz des Anbieters oder fehlender Internetverbindung ausfallen.
-- `telegram_main.py`: nur fünf Intents erreichbar (`chat`, `remember_fact`, `forget_fact`, `system_status`, `search_web`), kein gleichzeitiger Betrieb mit der Konsole, `TelegramSpeech.listen()` fail-closed (ADR-018).
+- `telegram_main.py`: nur sieben rein lesende/bestätigungsfreie Intents erreichbar (`chat`, `remember_fact`, `forget_fact`, `system_status`, `search_web`, `check_mail`, `show_mail_advertising`), kein gleichzeitiger Betrieb mit der Konsole, `TelegramSpeech.listen()` fail-closed (ADR-018). Das Mail-Briefing ist seit 2026-07-06 remote freigeschaltet (ADR-031-Nachtrag, PO-Entscheidung); die schreibenden Mail-Regel-Intents (`mail_hide_sender`/`mail_keep_sender`) bleiben bewusst lokal.
 - `analyze_pc`/`analyze_event_log`/`disable_/enable_autostart_entry`/`analyze_/clean_temp_files`: alle Windows-exklusiv, jeweiliger Scope siehe die jeweiligen ADRs (ADR-020–023).
 - `jarvis_runtime.py`: kein UI/Tray/Wake-Word, kein abstraktes Channel-Interface. `ConsoleDummyChannel` bleibt für unbeaufsichtigten Betrieb ungeeignet (blockiert auf `input()`) - wird beim Jarvis-Eigenstart (`pythonw.exe`) deshalb gar nicht erst gestartet; Telegram übernimmt die Erreichbarkeit.
 - Single-Instance-Schutz (ADR-026) schützt nur vor gleichzeitigem *Prozessstart* gegen dasselbe `memory_dir` - kein Schutz gegen externes Löschen der Lock-Datei, während eine Instanz läuft (bekanntes, akzeptiertes Restrisiko).

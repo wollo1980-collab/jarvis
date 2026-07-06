@@ -62,6 +62,18 @@ def test_runtime_wires_core_stack(tmp_path):
     assert runtime.long_term is not None
 
 
+def test_runtime_configures_mail(tmp_path, monkeypatch):
+    # Regressionsanker: das Mail-Briefing muss auch im Runtime-Stack
+    # konfiguriert werden, damit check_mail ueber den Runtime-Telegram-Kanal
+    # nicht ins Leere laeuft (Arbeitspaket B, ADR-031-Nachtrag).
+    calls = []
+    monkeypatch.setattr(
+        jarvis_runtime.mail_commands, "configure", lambda config: calls.append(config)
+    )
+    JarvisRuntime(_make_config(tmp_path), ai=FakeAI())
+    assert len(calls) == 1
+
+
 def test_submit_and_process_single_message(tmp_path):
     config = _make_config(tmp_path)
     runtime = JarvisRuntime(config, ai=FakeAI())

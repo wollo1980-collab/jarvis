@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-07-06 - Mail-Briefing über Telegram erreichbar (Arbeitspaket B, ADR-031-Nachtrag)
+
+### Neu
+- Das rein lesende Mail-Briefing ist jetzt auch remote über Telegram/Runtime verfügbar: „was liegt an?" (`check_mail`) und „zeig die Werbung" (`show_mail_advertising`) sind in die Telegram-Whitelist aufgenommen (Sicherheitsstufe 0). PO-Entscheidung mit bewusst abgewogenem Datenhoheit-Trade-off (ADR-031-Nachtrag).
+
+### Geaendert
+- `telegram_main.py` und `jarvis_runtime.py` konfigurieren jetzt auch den Mail-Command (`mail_commands.configure`) - vorher nur `main.py`; ohne diese Verdrahtung wäre die Whitelist-Freischaltung wirkungslos gewesen.
+- Die schreibenden Mail-Regel-Intents (`mail_hide_sender`/`mail_keep_sender`) bleiben bewusst der lokalen Konsole vorbehalten.
+
+### Tests
+- 4 neue Tests (Whitelist-Grenze für Briefing- vs. Regel-Intents, Mail-Verdrahtung in Telegram- und Runtime-Pfad). Vollsuite 373 grün, Gate PASS.
+
 ## 2026-07-06 - Mail-Briefing in Betrieb genommen (Nutzwert-Phase)
 
 ### Neu

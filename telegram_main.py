@@ -41,6 +41,7 @@ from typing import Optional
 from telegram import Update
 from telegram.ext import Application, ContextTypes, MessageHandler, filters
 
+import commands.mail as mail_commands
 import commands.memory as memory_commands
 import commands.web as web_commands
 from commands import REGISTRY
@@ -60,7 +61,18 @@ ALLOWED_CHAT_ID_ENV = "JARVIS_TELEGRAM_ALLOWED_CHAT_ID"
 
 # Telegram bleibt bewusst eng freigeschaltet: nur sichere, bestaetigungsfreie
 # Alltags-Intents. Web v1 ist read-only und passt deshalb in dieselbe Whitelist.
-ALLOWED_INTENTS = {"chat", "remember_fact", "forget_fact", "system_status", "search_web"}
+# Das Mail-Briefing (check_mail/show_mail_advertising) ist ebenfalls rein lesend
+# (Sicherheitsstufe 0) und per PO-Entscheidung 2026-07-06 remote freigeschaltet
+# (ADR-031-Nachtrag); die schreibenden Regel-Lern-Intents bleiben bewusst lokal.
+ALLOWED_INTENTS = {
+    "chat",
+    "remember_fact",
+    "forget_fact",
+    "system_status",
+    "search_web",
+    "check_mail",
+    "show_mail_advertising",
+}
 
 
 class TelegramSpeech:
@@ -151,6 +163,7 @@ class JarvisBridge:
         self.long_term = LongTermMemory(config.memory_dir)
         memory_commands.configure(config.memory_dir)
         web_commands.configure(self.ai, timeout_seconds=config.timeout)
+        mail_commands.configure(config)
 
     def handle_message(self, chat_id: object, user_input: str) -> str:
         """Verarbeitet eine eingehende Nachricht, gibt den Antworttext
