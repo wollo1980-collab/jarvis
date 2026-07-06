@@ -1,5 +1,13 @@
 # Logbook
 
+## 2026-07-06 - Live-Verifikation: Mail-Briefing über Telegram bestanden
+
+**Kontext:** Der Telegram-Gegencheck aus Arbeitspaket B wurde vom PO durchgeführt: „was liegt an?" über Telegram funktioniert. Damit ist das Mail-Briefing jetzt **lokal (main.py) und remote (Runtime-Telegram-Kanal)** end-to-end real verifiziert.
+
+**Bedeutung:** Baustein 1 der Nutzwert-Phase ist nicht mehr nur implementiert und getestet, sondern nachweislich in Betrieb - auf beiden aktiven Kanälen. Die entsprechenden Live-Test-TODOs in PROJECT_STATE (Mail-Gegencheck Telegram, Runtime-/Bot-Smoke-Test) sind geschlossen. Reine Doku-Aktualisierung (🟢), kein Code; Gate PASS.
+
+**Lessons Learned:** Die Inbetriebnahme-vor-Features-Reihenfolge hat sich vollständig bewährt: Erst der Autostart-Fix, dann das Briefing lokal (Unicode-Fund), dann remote (Whitelist-/configure-Fund) - jeder Kanal deckte einen eigenen realen Defekt auf, den kein gemockter Test zeigen konnte.
+
 ## 2026-07-06 - Commit-Übergang 🟡 → 🟢 (Charter 1.3)
 
 **PO-Freigabe am 2026-07-06 für die Charter-Änderung** (🔴, Meta-Governance §12; `charter_version` 1.2 → 1.3). Entscheidungen A (🔴-Commits bleiben ausdrücklich freizugeben) und B (gilt nur für Jarvis) vom PO bestätigt.
