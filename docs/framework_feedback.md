@@ -10,6 +10,14 @@ Rückfluss-Sammlung von Jarvis an das AI Project Framework (CONTRIBUTING §15). 
 - Konkreter Beleg: Bei der Delta-Analyse von Jarvis gegen Framework v1.0 (04.07.2026) zeigte sich, dass `docs/PROJECT_INIT.md` ausschließlich den Greenfield-Start regelt. Für ein Bestandsprojekt mit eigener, gereifter Governance gibt es keinen definierten Adoptionsweg — die Migration musste als „assoziierte Angleichung" mit eigenem Abweichungsregister (Jarvis-CONTRIBUTING §15) improvisiert werden.
 - Vorgeschlagene Änderung: PROJECT_INIT (oder ein Folgeabschnitt) sollte neben dem Greenfield-Start einen Adoptionsmodus für Bestandsprojekte beschreiben: Delta-Analyse statt Ableitung, bewusste Einzelübernahmen per Freigabe, dokumentiertes Abweichungsregister statt erzwungener Konformität.
 
+#### Nachtrag 2026-07-06 zu FF-J-001 - Brownfield-Nachlauf nach erstem Jarvis-Test
+
+- Konkreter Beleg: Der neue Adoptionsmodus des Frameworks adressiert den Kern von FF-J-001 grundsaetzlich, laesst aber drei Punkte bewusst noch offen.
+- Brownfield: Bis zur bewussten Uebernahme bleibt die bestehende Projekt-Governance massgeblich; genau so lief Jarvis' assoziierte Angleichung ueber die eigene Charter und den eigenen Framework-Austauschkanal.
+- Brownfield: Die Onboarding-Stoppregel sollte den Adoptionsmodus ausdruecklich beruecksichtigen; beim Jarvis-Fall war die Delta-Analyse des Bestandsprojekts selbst der eigentliche Startpunkt der Angleichung.
+- Brownfield: Minimalvorgaben fuer Abweichungsregister und Gate-Einstiegspunkt sollten nach weiterer Bewaehrung praezisiert werden; Jarvis hatte dafuer bereits tragfaehige Orte, ein anderes Bestandsprojekt muesste hier voraussichtlich noch improvisieren.
+- Vorgeschlagene Aenderung: Keine sofortige Core-Uebernahme. Diese Punkte werden zunaechst als Brownfield-Nachlauf weiter per Dogfooding validiert und erst im naechsten Framework-Zyklus fuer eine moegliche Uebernahme bewertet.
+
 ### FF-J-002 - Handbook-Reinheits-Check: laufender Datenpunkt aus Jarvis
 
 - Herkunftsprojekt: `jarvis`
