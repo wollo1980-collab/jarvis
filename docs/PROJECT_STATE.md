@@ -2,8 +2,8 @@
 version: "v0.8 P1+2 (Multi-KI) abgeschlossen; Nutzwert-Phase gestartet"
 active_increment: nutzwert-phase
 tests: 407
-latest_adr: 35
-stand: 2026-07-06
+latest_adr: 36
+stand: 2026-07-07
 ---
 
 # PROJECT STATE
@@ -103,6 +103,7 @@ Roadmap und Backlog leben **hier** in PROJECT_STATE — die Verfassung (`HANDBOO
 
 **Backlog (zurückgestellte Ideen, kein aktueller Scope — Grund je Zeile):**
 - **`stop_jarvis` / Runtime-Kill-Switch (2026-07-06)** — es gibt aktuell keinen Jarvis-Befehl, der die laufende Runtime (`jarvis_runtime.py`, `pythonw`, headless) beendet: `shutdown_pc` fährt den ganzen PC herunter, `disable_jarvis_autostart` entfernt nur den Autostart-Registry-Eintrag (beendet den laufenden Prozess NICHT, siehe `commands/monitor.py`), Exit-Wörter greifen nur in einer Konsolen-Session. Kandidat für einen eigenen Command (Sicherheitsstufe 2 mit Bestätigung, sauberer Runtime-Stopp) — eigenes, getrennt freizugebendes Arbeitspaket, kein Teil von ADR-034/035.
+- **Backend-Entkopplung `commands/delegate.py` (ADR-036, 2026-07-07)** — einzige verbliebene Modellnamen-Leckstelle in der Fachlogik: der Command nennt `ClaudeCodeBackend` / „Claude Code" / „backend=claude" direkt. Soll das Backend über Config/Factory beziehen und den Backend-Namen aus dem Backend selbst ziehen. Kleines, getrennt freizugebendes Arbeitspaket; schließt die Modellunabhängigkeits-Invariante aus ADR-036.
 - **Spotify-/Medien-Steuerung** — kein echtes Arbeitsproblem.
 - **Wake-Word** (z. B. Porcupine) — aktuell reicht „jarvis" im Text; nach der Nutzwert-Phase erneut prüfen. (Lokale Modelle/Ollama siehe oben „Spätere v0.8-Phasen".)
 - **Power-BI-Integration** — liegt im Firmenumfeld/auf dem Firmenrechner; im privaten Jarvis-Rahmen aktuell nicht praktikabel.

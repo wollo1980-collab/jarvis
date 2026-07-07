@@ -1,5 +1,17 @@
 # Logbook
 
+## 2026-07-07 - ADR-036 (accepted): Fähigkeits-/Werkzeug-Orchestrierung als Invariante
+
+**Kontext:** Langfristige PO-Architektur-Vorgabe (keine Implementierung). Erster Entwurf war „Modellunabhängigkeit + AI-Dispatcher"; **im PO-Review geschärft**: Jarvis orchestriert langfristig nicht Modelle, sondern **Fähigkeiten und Werkzeuge**, um ein **Nutzerziel** zu erreichen. Modelle (GPT/Claude/Codex) sind nur *ein* Werkzeugtyp — gleichrangig mit Git/GitHub/Browser/Outlook/Gmail/PowerShell/lokalen Skripten.
+
+**Bestandsaufnahme (im Code verifiziert):** LLM-Pfad implementierungsfrei in der Fachlogik (`LLMProvider` 029 + `ProviderRouter` 030); Agenten-Kontrakt `AgentBackend` (034); Command/ToolManager-Registry als Proto-Fähigkeits-Router. **Eine Leckstelle**: `commands/delegate.py` nennt `ClaudeCodeBackend` direkt.
+
+**ADR-036 (vorgeschlagen, geschärft):** Schichtung **Nutzerziel → Workflow → Fähigkeit → Werkzeug/Spezialist → Implementierung**. Invariante: die oberen Schichten (Ziel/Workflow/Fähigkeitsauswahl) sind **implementierungsfrei**; Modellunabhängigkeit ist der erste erzwingbare Spezialfall. Ehrliche Abgrenzung: ein Command *darf* sein Werkzeug kennen (Adapter-Ebene) — verboten ist, dass die *Orchestrierung* sich festlegt. Der langfristige „Dispatcher" ist ein **Workflow-/Capability-Orchestrator** (Modellwahl nur ein Spezialfall). Auswahlkriterien inkl. **Vertrauensstufe** (gleichrangig zu Kosten/Verfügbarkeit): manche Schritte voll automatisiert, andere zwingend mit menschlicher Freigabe — Anbindung der bestehenden Sicherheitsstufen/Trust Boundary. **Kein Orchestrator auf Vorrat** (Regel 6). Vorgemerkt: `delegate.py`-Entkopplung. Starker Kandidat für eine Handbook-Invariante (Kernwesen: orchestrierender Assistent).
+
+**Review & Freigabe (2026-07-07):** Der PO gibt ADR-036 frei — für ihn beschreibt er inzwischen nicht mehr nur eine KI-Architektur, sondern das **Kernwesen von Jarvis als orchestrierenden Assistenten**; die Schichtung Nutzerziel→Workflow→Fähigkeit→Werkzeug/Spezialist→Implementierung ist der wichtigste Teil. Drei Beobachtungen ausdrücklich als „für die Evolution, nicht Änderungsforderung" festgehalten (im ADR): (1) „Werkzeug" nicht zu eng — Claude/Codex haben eigene Planungsfähigkeit, Doppelbegriff „Werkzeug/Spezialist" bevorzugt; (2) evtl. später eine Planungs-/Strategieebene zwischen Ziel und Workflow (heute YAGNI); (3) es ist eine allgemeine Orchestrierungsarchitektur, die auch ganz ohne KI trägt. Status → **Accepted**.
+
+**Governance:** ADR-Lebenszyklus 🟡 → accepted. `latest_adr` 35 → 36. Kein Code (reine Architektur-Invariante). Vorgemerkt: `delegate.py`-Entkopplung. Starker Kandidat für eine Handbook-Teil-2-Invariante.
+
 ## 2026-07-07 - DNA-Sprachdurchlauf monitor/reports/excel abgeschlossen
 
 **Kontext:** Während der Beobachtungswoche (Nutzwert-Phase, kein Feature-Ausbau) die letzte offene „Sprachschuld" abgetragen: die drei Tool-Module `commands/monitor.py`, `commands/reports.py`, `commands/excel.py` auf Jarvis' DNA-Stimme (Handbook Teil 1 / constitution 4.1) durchgesehen.
