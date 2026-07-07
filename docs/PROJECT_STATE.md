@@ -2,7 +2,7 @@
 version: "v0.8 P1+2 (Multi-KI) abgeschlossen; Nutzwert-Phase gestartet"
 active_increment: nutzwert-phase
 tests: 417
-latest_adr: 36
+latest_adr: 37
 stand: 2026-07-07
 ---
 
@@ -18,7 +18,7 @@ Der maschinenlesbare Kopf (oben) ist die Single Source der Kern-Kennzahlen; das 
 
 Davor abgeschlossen und getaggt: `v0.7` "PC-Admin" (`v0.7` → `a7eb86d`); der **Infrastruktur-/Runtime-Baustein** (ADR-024 bis ADR-028, ohne eigene Versionsnummer/Tag), konsolidiert in Handbook v3.7. `v0.4`/`v0.5`/`v0.6`/`v0.7` sind alle abgeschlossen und getaggt.
 
-Verfassung: **`docs/handbook/HANDBOOK.md`** (`constitution_version 4.2`) — zeitlose Projektverfassung, Leitbild/DNA in Teil 1. Die früheren `.docx`-Handbücher (v3.2–v3.8) liegen als Historie unter `docs/handbook/archive/` (nicht maßgeblich).
+Verfassung: **`docs/handbook/HANDBOOK.md`** (`constitution_version 4.3`) — zeitlose Projektverfassung, Leitbild/DNA in Teil 1. Die früheren `.docx`-Handbücher (v3.2–v3.8) liegen als Historie unter `docs/handbook/archive/` (nicht maßgeblich).
 
 ## Status
 
@@ -36,6 +36,7 @@ Handbook-Konsolidierungen seit v0.7:
 - **v3.8**: **Leitbild / DNA** (Produktidentität, EBENE 1) - Kap. 0 Leitbild „Wofür Jarvis existiert" (Identität als Haltung) + 9 Produkt-Leitplanken; Angleichungen in Kap. 1/7/26/32; Mission unverändert. Bewusste, dokumentierte Governance-Ausnahme (reine EBENE-1-Konsolidierung mitten in v0.8, ohne Auswirkung auf die technische Code-Basis).
 - **constitution_version 4.1**: Auftreten und Tonfall von Jarvis explizit als Produkt-DNA verankert; Chat-System-Prompt und erste zentrale Alltagsantworten wurden daran angeglichen (ruhig, praezise, loyal, trockene Eleganz statt Show).
 - **constitution_version 4.2**: **Governance-Invariante** in Teil 6 verankert (PO-Freigabe 2026-07-07) — Jarvis unterliegt derselben Governance wie jeder Beitragende (keine zweite Regelwelt): analysieren & vorschlagen, nie mehr als freigegeben, Freigabe nur für den konkreten Umfang, nach jedem relevanten Schritt anhalten, ehrlich berichten, Prozesse/Sicherheitsmechanismen nie umgehen. Zielbild zeitlos formuliert (keine Modell-/Produktnamen); Regeln werden im zunehmend unbeaufsichtigten Betrieb strukturell erzwungen. Konsolidiert die Richtung aus ADR-036.
+- **constitution_version 4.3**: Zwei gezielte Ergänzungen (PO-Freigabe 2026-07-07) aus der Produktvision — Teil 1: „mitdenkender Partner" (proaktiv im Denken, nie autonom im Handeln; COO als Arbeits-Bild) und Teil 2: „Jarvis ist die Maschine, nicht zwingend das Produkt". Bewusst minimal gehalten (keine Wunschliste in der Verfassung); Roadmap/Meilensteine leben im Nordstern (unten), die volle Vision in `docs/VISION.md`.
 
 Weiterhin gültig aus v0.7 und davor (Details in den jeweiligen ADRs): PC-Admin (ADR-020-023), Infrastruktur-/Runtime-Baustein (ADR-024-028), Telegram-Fernzugriff (ADR-018), Excel/Tabellen-Auswertung/KPI (ADR-014/015/016), Kurz-/Langzeitgedächtnis (ADR-009), PC-Grundsteuerung (ADR-011/012).
 
@@ -101,6 +102,19 @@ Roadmap und Backlog leben **hier** in PROJECT_STATE — die Verfassung (`HANDBOO
 - Spätere v0.8-Phasen (nach der Nutzwert-Phase, falls fortgesetzt): aufgabenabhängiges Routing/Orchestrierung, ggf. `ANALYSIS`-Trennung (optionaler `task`-Parameter an `answer()`), lokale Modelle (Ollama). Bewusst NICHT jetzt (siehe ADR-030 „Bewusst NICHT Bestandteil von Phase 2").
 - Weiterer KI-Verwender: `configure()`-Duplizierung (`reports.py`/`monitor.py`/`web.py`) zu einer gemeinsamen Abstraktion zusammenführen prüfen, sobald daraus echter Strukturgewinn entsteht.
 - Den `preview()`-Hook (ADR-023) für weitere schreibende PC-Admin-Commands nutzen, sobald umgesetzt.
+
+**Langfristige Produktvision — Nordstern & Ausbaustufen (aus `docs/VISION.md`; Richtung, kein Umsetzungsauftrag):**
+Jarvis als persönlicher **digitaler COO** — mitdenkender Sparringspartner, der Entscheidungen vorbereitet und die Umsetzung koordiniert; der Mensch bleibt CEO und entscheidet. Ausbaustufen:
+- **Phase 1 — Persönlicher Assistent.**
+- **Phase 2 — Digitaler COO** (Projekt-/Selbstanalyse, Priorisierung, Planung, Roadmaps, Verbesserungsvorschläge). **`plan_next_step` (2026-07-07) ist der erste Baustein.**
+- **Phase 3 — Spezialisierte Mitarbeiter** (SW-Entwicklung, Architektur, QA, Doku, Recherche, Marketing, Content, E-Commerce …), von Jarvis koordiniert.
+- **Self-Improvement-Meilenstein:** Jarvis analysiert sich selbst, schlägt priorisierte Verbesserungen vor, wir reviewen gemeinsam, ein Spezialist (Claude/Codex/…) setzt das **Freigegebene** um — Jarvis ändert sich nie eigenständig.
+- **Wirtschaftliches Nordstern-Ziel:** Jarvis trägt zuerst seine eigenen Betriebskosten (Claude, API, Hosting), danach baut er mit an Produkten/Unternehmen. *(Etappenziel, bewusst nicht in der Verfassung.)*
+- **Operative Leitfrage** für Roadmap-Entscheidungen: „Macht das Jarvis zu einem besseren digitalen COO?" (neben dem zeitlosen Verfassungsfilter „gibt das Souveränität zurück?").
+
+**Langfristige Produktziele / Leitplanken (ADR-037, accepted — kein Umsetzungsauftrag):**
+- **Distributierbarkeit:** Jarvis soll später als ZIP/Setup auf einem fremden Windows-Rechner laufen (z. B. der Bruder als Testnutzer), ohne die Entwicklungsumgebung des Autors — saubere Trennung Code/Konfig/Secrets/Nutzerdaten, portabler Start, API-Keys lokal eingerichtet. Künftige Entscheidungen dürfen nicht an die Autor-Umgebung binden.
+- **Namens-/Branding-Entkopplung:** Produktidentität (Anzeigename, Logo, Wakeword, Bot-Anzeigename, Fenstertitel) zentral konfigurierbar; „Jarvis" bleibt Code-/Projektname. Rebranding ohne Fachlogik-Änderung möglich halten.
 
 **Backlog (zurückgestellte Ideen, kein aktueller Scope — Grund je Zeile):**
 - **`stop_jarvis` / Runtime-Kill-Switch (2026-07-06)** — es gibt aktuell keinen Jarvis-Befehl, der die laufende Runtime (`jarvis_runtime.py`, `pythonw`, headless) beendet: `shutdown_pc` fährt den ganzen PC herunter, `disable_jarvis_autostart` entfernt nur den Autostart-Registry-Eintrag (beendet den laufenden Prozess NICHT, siehe `commands/monitor.py`), Exit-Wörter greifen nur in einer Konsolen-Session. Kandidat für einen eigenen Command (Sicherheitsstufe 2 mit Bestätigung, sauberer Runtime-Stopp) — eigenes, getrennt freizugebendes Arbeitspaket, kein Teil von ADR-034/035.

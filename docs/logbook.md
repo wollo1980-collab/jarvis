@@ -1,5 +1,26 @@
 # Logbook
 
+## 2026-07-07 - Produktvision integriert: Handbook 4.3, VISION.md, Nordstern (+ ADR-037 accepted)
+
+**Kontext:** Der PO hat (nach 2h Brainstorming mit seinem Bruder) eine ausformulierte langfristige Produktvision gebracht: Jarvis als persönlicher **digitaler COO**. Auftrag: gegenlesen, sauber integrieren, ohne die Verfassung zu einer Wunschliste aufzublähen. Gegenlese-Befund: kein Richtungswechsel — die Vision baut auf dem bestehenden Fundament auf (Governance-Invariante 4.2, ADR-033/036, `plan_next_step` = erster Phase-2-Baustein).
+
+**Saubere Drei-Ebenen-Aufteilung (PO-Freigabe 2026-07-07):**
+- **Handbook 4.3 — zwei gezielte Ergänzungen** (bewusst minimal): Teil 1 „mitdenkender Partner" (proaktiv im Denken, nie autonom im Handeln; „COO" als Arbeits-Bild, Identität bleibt die Haltung, nicht der Titel) und Teil 2 „Jarvis ist die Maschine, nicht zwingend das Produkt". Bewusst NICHT dupliziert, weil schon vorhanden: „ich entscheide/kein autonomes Handeln" (4.2), „Orchestrator" (ADR-036), „kein Mehrbenutzer" (Teil 7).
+- **PROJECT_STATE (Nordstern/Roadmap):** Phasen 1/2/3, Self-Improvement-Meilenstein, wirtschaftliches Nordstern-Ziel (Betriebskosten selbst tragen — bewusst NICHT in die Verfassung, es ist ein Etappenziel), operative Leitfrage „besserer digitaler COO?".
+- **`docs/VISION.md` (neu):** die volle, inspirierende Fassung — mit ausdrücklicher Präambel, dass sie **inspirieren darf** und **keinen** Anspruch auf zeitlose Stabilität wie die Verfassung hat (Nordstern, nicht Governance; darf sich in fünf Jahren ändern).
+
+**ADR-037 → accepted:** die zwei Architektur-Leitplanken (Distributierbarkeit für vertraute Tester/Mitstreiter — nicht Marktprodukt; Namens-/Branding-Entkopplung) gehören zum selben Vision-Paket und sind mitfreigegeben. Punkt 1 ist an „Maschine statt Produkt" angebunden.
+
+**Governance:** 🔴-Verfassungsänderung (4.2 → 4.3) + neue Vision-Doku + Roadmap, PO-Freigabe 2026-07-07. Kein Code. Gate prüft Handbook-Reinheit (Ergänzungen zeitlos, kein Verstoß).
+
+## 2026-07-07 - ADR-037 (vorgeschlagen): zwei langfristige Produktziele als Leitplanken
+
+**Kontext:** Der PO hält früh zwei langfristige Produktziele fest — ausdrücklich **keine** aktuellen Aufgaben, sondern Leitplanken, damit künftige Architekturentscheidungen ihnen nicht entgegenstehen.
+
+**ADR-037 (vorgeschlagen):** (1) **Distributierbarkeit** — Jarvis soll später per ZIP/Setup auf einem fremden Windows-Rechner laufen (Bruder als Testnutzer), ohne Autor-Entwicklungsumgebung: saubere Trennung Code/Konfig/Secrets/Nutzerdaten (weitgehend schon so — config.json, Secrets nur per Env/ADR-018, memory_dir), portabler Start (Autostart ADR-028), API-Keys lokal. (2) **Namens-/Branding-Entkopplung** — Produktidentität (Anzeigename/Logo/Wakeword/Bot-Name/Fenstertitel) zentral konfigurierbar; „Jarvis" bleibt Code-/Projektname (interne Bezeichner dürfen so bleiben), Rebranding ohne Fachlogik-Änderung. Analog ADR-036 (user-facing vs. intern). Wakeword ist bereits Config.
+
+**Governance:** Neue ADR = 🟡, reine Zielfestlegung, **kein Code** (Regel 6 — nichts auf Vorrat bauen). `latest_adr` 36 → 37; PROJECT_STATE-Leitplanken-Abschnitt ergänzt. Finale PO-Freigabe ausstehend (dann Status → „Accepted", committen). Kandidaten für Handbook-Konsolidierung nach Bewährung.
+
 ## 2026-07-07 - Umsetzung `plan_next_step`: erste Orchestrierungs-Kette
 
 **Kontext:** Nach der Vision-Schärfung die erste greifbare Scheibe gebaut, die Wolfgangs echten Alltag trifft („plane den nächsten Schritt / bereite die nächste Scheibe vor") - und die der read-only Analyse (ADR-034/035) endlich einen Zweck gibt: Analyse als Glied einer Kette mit Ziel. PO-Freigabe 2026-07-07 (Plan, inkl. drei Review-Präzisierungen: neutraler Name, ehrlicher „kein Schritt"-Fall, feste Artefakt-Struktur).
