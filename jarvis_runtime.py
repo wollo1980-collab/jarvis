@@ -49,9 +49,11 @@ import commands.delegate as delegate_commands
 import commands.mail as mail_commands
 import commands.memory as memory_commands
 import commands.monitor as monitor_commands
+import commands.plan as plan_commands
 import commands.reports as reports_commands
 import commands.web as web_commands
 from commands import REGISTRY
+from core.agent_backend import ClaudeCodeBackend
 from core.ai import AIEngine
 from core.config import Config
 from core.models import Message, Plan
@@ -116,10 +118,11 @@ class JarvisRuntime:
         web_commands.configure(self.ai, timeout_seconds=config.timeout)
         mail_commands.configure(config)
         # Agenten-Delegation (ADR-034, Scheibe 1): read-only Repo-Analyse.
-        # Lokal & synchron - delegate_analysis ist NICHT in Telegrams
-        # ALLOWED_INTENTS und wird ueber den Telegram-Kanal fail-closed
-        # abgelehnt (Async-/Telegram-Freischaltung ist ein Folge-Arbeitspaket).
         delegate_commands.configure(config)
+        # Nächsten Schritt planen (ADR-036 / Handbook 4.2): Backend in der
+        # Verdrahtungsschicht gewählt und injiziert (Fachlogik nennt kein
+        # konkretes Backend, Modellunabhängigkeit).
+        plan_commands.configure(config, ClaudeCodeBackend())
 
         self._queue: "queue.Queue" = queue.Queue()
         self._worker: Optional[threading.Thread] = None
@@ -294,10 +297,11 @@ class JarvisRuntime:
             )
             return
 
+        # Generische Quittung: die Runtime kennt den konkreten long_running-
+        # Command nicht (ADR-036) - kein hartkodiertes "analysiere '<repo>'".
         self._safe_reply(
             reply_callback,
-            f"Verstanden - ich analysiere '{step.target}' und melde mich, "
-            "sobald das Ergebnis da ist.",
+            "Verstanden - ich kümmere mich darum und melde mich, sobald das Ergebnis da ist.",
             text,
         )
         cancel_event = threading.Event()

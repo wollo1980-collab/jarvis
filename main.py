@@ -18,9 +18,11 @@ from datetime import date
 import commands.delegate as delegate_commands
 import commands.mail as mail_commands
 import commands.memory as memory_commands
+import commands.plan as plan_commands
 import commands.monitor as monitor_commands
 import commands.reports as reports_commands
 import commands.web as web_commands
+from core.agent_backend import ClaudeCodeBackend
 from core.ai import AIEngine
 from core.config import Config
 from core.models import Message
@@ -113,6 +115,12 @@ def main() -> None:
         # Baut die Repo-Allowlist aus config.agent_repos; Backend real
         # (Claude Code CLI, ClaudeCodeBackend als Default in delegate.py).
         delegate_commands.configure(config)
+
+        # Nächsten Schritt planen (erste Orchestrierungs-Kette, ADR-036 /
+        # Handbook 4.2). Das Backend wird hier in der Verdrahtungsschicht
+        # gewählt und injiziert - die Fachlogik (commands/plan.py) nennt
+        # bewusst kein konkretes Backend (Modellunabhängigkeit).
+        plan_commands.configure(config, ClaudeCodeBackend())
 
         logger.info("Jarvis v0.4 gestartet.")
         speech.say("Jarvis ist bereit.")

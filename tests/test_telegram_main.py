@@ -121,6 +121,16 @@ def test_delegate_analysis_rejected_on_standalone_bot():
     assert "delegate_analysis" in reason
 
 
+def test_plan_next_step_rejected_on_standalone_bot():
+    # Wie delegate_analysis: die langlaufende Planungs-Faehigkeit ist nur ueber
+    # den Runtime-Kanal (Async-Worker) erreichbar, nicht ueber den synchronen
+    # Standalone-Bot.
+    assert "plan_next_step" not in ALLOWED_INTENTS
+    reason = rejection_reason(Plan(intent="plan_next_step"))
+    assert reason is not None
+    assert "plan_next_step" in reason
+
+
 def test_filter_plan_allowed_override_lets_intent_through():
     # ADR-035: filter_plan/rejection_reason akzeptieren ein erweitertes Set;
     # damit schaltet der Runtime-Kanal delegate_analysis gezielt frei, ohne das

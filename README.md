@@ -210,6 +210,26 @@ bleibt `delegate_analysis` abgelehnt - er hat keinen Hintergrund-Worker und
 würde bei einer Minuten-Analyse blockieren. Ebenfalls weiter tabu: **schreibende**
 Agenten (Fix/Branch, Scheibe 3), mehrere Agenten parallel.
 
+## Nächsten Schritt planen (erste Orchestrierungs-Kette, ADR-036)
+
+Auf „**plane den nächsten Schritt**" / „**bereite die nächste Scheibe vor**" liest
+Jarvis **read-only** den eigenen Projektstand (PROJECT_STATE, Handbook, jüngste
+ADRs, CHANGELOG, logbook, offene TODOs), lässt einen Spezialisten **einen**
+konkreten, klein geschnittenen nächsten Schritt ableiten und legt einen Entwurf
+in fester Struktur unter `memory_data/proposals/` ab:
+
+```text
+Du:     plane den nächsten Schritt
+Jarvis: Vorschlag für den nächsten Schritt:
+        # <Titel>  ## Kurzfassung … ## Empfehlung …
+        Entwurf abgelegt unter: .../memory_data/proposals/20260707-….md
+```
+
+- **Jarvis schlägt nur vor — keine Umsetzung** (Governance-Invariante, Handbook Teil 6). Der Entwurf ist ein Vorschlag zur Freigabe.
+- **Ehrlich:** Findet sich kein klar begründbarer Schritt, sagt Jarvis das, statt einen zu erzwingen.
+- **Sicher by design:** der Agent bleibt strikt read-only; den Entwurf schreibt Jarvis selbst **additiv** (neue Datei, kein Überschreiben, kein Code, kein Git).
+- Async über den Telegram-Runtime-Kanal (Quittung → Push), lokal über die Konsole synchron.
+
 ## Tests ausführen
 
 ```bash

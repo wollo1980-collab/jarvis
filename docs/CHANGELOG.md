@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-07-07 - Jarvis plant den nächsten Schritt (erste Orchestrierungs-Kette)
+
+### Neu
+- Neuer Command **`plan_next_step`**: „plane den nächsten Schritt" / „bereite die nächste Scheibe vor" → Jarvis liest **read-only** den eigenen Projektstand (PROJECT_STATE, Handbook, jüngste ADRs, CHANGELOG, logbook, offene TODOs), lässt einen Spezialisten **einen** konkreten nächsten Schritt ableiten (feste Struktur: Titel · Kurzfassung · Warum jetzt? · Umfang · Begründung · Risiken · Governance-/ADR-Prüfung · Offene Fragen · Empfehlung) und legt den **Entwurf** unter `memory_data/proposals/` ab. Jarvis **schlägt nur vor** — keine Umsetzung (Handbook 4.2). Findet sich kein sinnvoller Schritt, sagt Jarvis das ehrlich, statt einen zu erzwingen.
+- Async über den Telegram-Runtime-Kanal (Quittung → Push, ADR-035 wiederverwendet); lokal über die Konsole synchron.
+
+### Architektur
+- **Erste echte Orchestrierungs-Kette:** die read-only Analyse (ADR-034/035) wird zum *Werkzeug in einer Kette mit Ziel*. Der Agent bleibt strikt read-only; den Entwurf schreibt Jarvis selbst **additiv** in ein isoliertes Verzeichnis (kein Überschreiben, kein Code, kein Git) — strukturell garantiert.
+- **ADR-036-sauber:** `commands/plan.py` nennt kein konkretes Backend; das Backend wird aus der Verdrahtungsschicht injiziert.
+- Runtime-Quittung generisch gemacht (kein hartkodiertes „analysiere '<repo>'") — trägt jeden `long_running`-Command.
+
+### Tests
+- 10 neue Tests (Command inkl. Schreib-Isolation/kein-Schritt-Prompt/feste Struktur, Runtime-Async-Wiederverwendung, Telegram-Whitelist). Vollsuite 417 grün, Gate PASS.
+
 ## 2026-07-07 - Feinschliff: Rückfragen in Jarvis' Stimme
 
 ### Geaendert

@@ -226,6 +226,16 @@ def test_runtime_whitelist_allows_delegate_analysis():
     assert len(steps) == 1
 
 
+def test_runtime_whitelist_allows_plan_next_step():
+    """plan_next_step ist async ueber den Runtime-Kanal erreichbar, aber
+    bewusst nicht ueber den synchronen Standalone-Bot."""
+    assert "plan_next_step" in telegram_channel.RUNTIME_ALLOWED_INTENTS
+    assert "plan_next_step" not in telegram_main.ALLOWED_INTENTS
+    steps, rejection = telegram_channel._runtime_filter_plan([Plan(intent="plan_next_step")])
+    assert rejection is None
+    assert len(steps) == 1
+
+
 def test_telegram_channel_reuses_security_logic_from_telegram_main():
     """Regressionsschutz gegen kuenftiges versehentliches Duplizieren
     (ADR-027 Punkt 7/8) - echte Identitaet, nicht nur gleicher Inhalt."""

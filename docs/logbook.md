@@ -1,5 +1,15 @@
 # Logbook
 
+## 2026-07-07 - Umsetzung `plan_next_step`: erste Orchestrierungs-Kette
+
+**Kontext:** Nach der Vision-Schärfung die erste greifbare Scheibe gebaut, die Wolfgangs echten Alltag trifft („plane den nächsten Schritt / bereite die nächste Scheibe vor") - und die der read-only Analyse (ADR-034/035) endlich einen Zweck gibt: Analyse als Glied einer Kette mit Ziel. PO-Freigabe 2026-07-07 (Plan, inkl. drei Review-Präzisierungen: neutraler Name, ehrlicher „kein Schritt"-Fall, feste Artefakt-Struktur).
+
+**Umsetzung:** Neuer Command `commands/plan.py::PlanNextStepCommand` (`plan_next_step`, Sicherheitsstufe 0, `long_running`). Er lässt den Agenten den eigenen Projektstand (PROJECT_STATE, Handbook, jüngste ADRs, CHANGELOG, logbook, TODOs) **selbst read-only lesen** und EINEN kleinen nächsten Schritt in fester Struktur vorschlagen (Titel · Kurzfassung · Warum jetzt? · Umfang · Begründung · Risiken · Governance-/ADR-Prüfung · Offene Fragen · Empfehlung); findet sich keiner, sagt er das ehrlich statt einen zu erzwingen. **Schlüssel-Vereinfachung:** der Agent bleibt strikt read-only; den Entwurf schreibt **Jarvis selbst** additiv nach `memory_dir/proposals/` - „kein Überschreiben, kein Code, kein Git" ist damit strukturell garantiert, ohne dem Agenten Schreibmacht zu geben (der Agenten-Schreib-Tier bleibt eine spätere Scheibe). **ADR-036 gelebt:** `commands/plan.py` nennt kein konkretes Backend - es wird aus der Verdrahtungsschicht (main.py/jarvis_runtime.py) injiziert (Vorbild für die vorgemerkte delegate.py-Entkopplung). Der Async-Pfad der Runtime (ADR-035) trägt automatisch einen zweiten `long_running`-Command; dabei die Quittung generisch gemacht (kein hartkodiertes „analysiere '<repo>'").
+
+**Tests:** 10 neu (Command inkl. Schreib-Isolation, „kein Schritt"-Prompt und feste Struktur; Runtime-Async-Wiederverwendung; Telegram-Whitelist Runtime vs. Standalone). Vollsuite 407 → **417 grün**, threaded Tests 3× ohne Flakiness, Gate PASS.
+
+**Offen (Definition of Done):** echter, dogfoodbarer Rauchtest (isoliert `execute` mit echtem Backend gegen das jarvis-Repo → ein realer „nächste Scheibe"-Vorschlag in `memory_data/proposals/`), inkl. Read-only-Nachweis - PO-begleitet.
+
 ## 2026-07-07 - Handbook 4.2: Governance-Invariante verankert (🔴 Verfassungsänderung)
 
 **Kontext:** In der Vision-Schärfung um Jarvis als orchestrierenden Assistenten kristallisierte sich ein Grundsatz heraus, den der PO ausdrücklich als **Produktphilosophie** (nicht als Architekturentscheidung) verstanden wissen will: *Jarvis unterliegt derselben Governance wie jeder Beitragende — keine zweite, Jarvis-eigene Regelwelt.* Damit wird der 🔴-Handbook-Kandidat aus ADR-036 eingelöst.

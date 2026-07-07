@@ -495,7 +495,8 @@ class DelegatingFakeAI:
     """Wie FakeAI, erkennt aber 'analysiere ...' als delegate_analysis."""
 
     def get_plan(self, user_input, history):
-        if user_input.lower().startswith("analysiere"):
+        text = user_input.lower()
+        if text.startswith("analysiere"):
             return Plan(
                 intent="delegate_analysis",
                 target="jarvis",
@@ -503,6 +504,8 @@ class DelegatingFakeAI:
                 raw_input=user_input,
                 confidence=1.0,
             )
+        if text.startswith("plane"):
+            return Plan(intent="plan_next_step", raw_input=user_input, confidence=1.0)
         return Plan(intent="chat", raw_input=user_input, confidence=1.0)
 
     def answer(self, user_input, history, long_term_summary=""):
@@ -722,6 +725,37 @@ def test_async_delegation_writes_consistent_history(tmp_path):
         assert "Ergebnis." in history[1].content
         # Die transiente Quittung wird NICHT persistiert.
         assert all("Verstanden" not in m.content for m in history)
+    finally:
+        runtime.stop()
+
+
+def test_async_plan_next_step_reuses_the_async_path(tmp_path):
+    """Ein ZWEITER long_running-Command (plan_next_step) nutzt denselben
+    Async-Pfad wie delegate_analysis - Quittung + Push, ohne Runtime-Aenderung."""
+    import commands.plan as plan_commands
+
+    backend = RuntimeFakeBackend(
+        result=AgentResult(text="# Titel\n## Empfehlung\nScheibe X.", ok=True, duration_seconds=0.1)
+    )
+    config = _make_config(tmp_path)
+    runtime = JarvisRuntime(config, ai=DelegatingFakeAI())
+    plan_commands.configure(config, backend=backend)  # echten Backend durch Fake ersetzen
+    runtime.start()
+    try:
+        replies = []
+        lock = threading.Lock()
+        two = threading.Event()
+
+        def cb(text):
+            with lock:
+                replies.append(text)
+                if len(replies) == 2:
+                    two.set()
+
+        runtime.submit("plane den nächsten schritt", cb, allow_async=True)
+        assert two.wait(timeout=5.0)
+        assert replies[0].startswith("Verstanden")   # generische Quittung
+        assert "Scheibe X." in replies[1]             # Push mit dem Vorschlag
     finally:
         runtime.stop()
 

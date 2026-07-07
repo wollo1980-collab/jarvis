@@ -102,6 +102,14 @@ Executor?", "lass X analysieren: ..."). target ist NUR der Repo-Alias (z. B.
 parameters.question ab (ohne Repo-Name und ohne Trigger-Worte). Nur bei einem
 klaren Analyse-/Delegations-Wunsch waehlen - eine normale Frage ist chat.
 
+WICHTIG zu plan_next_step: Verwende plan_next_step, wenn der Nutzer den
+naechsten Entwicklungsschritt am Jarvis-Projekt geplant/vorbereitet haben
+moechte (z. B. "plane den naechsten Schritt", "bereite die naechste Scheibe
+vor", "was sollten wir als Naechstes umsetzen"). Kein target/parameters noetig.
+Abgrenzung: plan_next_step SCHLAEGT einen naechsten Projektschritt VOR;
+delegate_analysis beantwortet eine konkrete Analysefrage zu einem Repo. Eine
+allgemeine Wissensfrage ist chat.
+
 Gib bei confidence an, wie sicher du dir beim erkannten Intent bist
 (1.0 = eindeutig, z. B. "öffne Excel"; niedrige Werte bei Mehrdeutigkeit,
 z. B. "mach das Ding auf")."""
