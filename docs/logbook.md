@@ -1,5 +1,18 @@
 # Logbook
 
+## 2026-07-07 - Externes Audit: Robustheit gehärtet (P1/P2 + Doc)
+
+**Kontext:** Ein externes Audit (Review-Artefakt) fand fünf reale Schwachstellen — nicht in der Fachlogik, sondern in Fehlerrobustheit und Haltbarkeit des dateibasierten Zustands (durch den neuen Async-/Hintergrundbetrieb relevanter geworden). Ich habe **alle unabhängig im Code gegengeprüft und bestätigt** (Rolle: unabhängiger Audit, hinterfragt auch das Review). Gesamtbild des Auditors: starke Basis, sehr gute Doku-/Testdisziplin; größte Risiken in Robustheit unter Fehlern.
+
+**Befunde (alle bestätigt) & Fixes:**
+- **P1a** — Worker verschluckte bei Exception den `reply_callback`; `ConsoleDummyChannel` wartete unbegrenzt → Konsole hängt / stiller Verlust. Fix: Worker sendet auf jedem Pfad eine Antwort (Fehlermeldung bei Exception) + großzügiges `_CONSOLE_REPLY_TIMEOUT`-Sicherheitsnetz.
+- **P1b** — Async-Läufer meldete Ausführungsfehler nach der Quittung nur im Log. Fix: finaler Fehler-Push in `_run_delegation`.
+- **P2a** — Artefakt-/Vorschlagsnamen nur sekundengenau + `write_text` → Überschreiben trotz „kein Überschreiben"-Zusage. Fix: `core/fileio.write_text_create_only` (exklusiv, Suffix bei Kollision) in `plan.py`/`delegate.py`.
+- **P2b** — JSON nicht atomar geschrieben; Reader fielen bei Korruption still auf Defaults zurück → Crash konnte History/Langzeit/Mail-Regeln löschen. Fix: `core/fileio.write_json_atomic` (Temp + fsync + `os.replace`) und `read_json` (kaputte Datei umbenennen statt verwerfen) in den drei Memory-Modulen.
+- **Doc** — README „über jeden Kanal" für die autostart-Commands falsch (Stufe 2, remote gesperrt) → korrigiert.
+
+**Umfang:** neues `core/fileio.py`; gehärtet: `jarvis_runtime.py`, `memory/{store,long_term,mail_rules}.py`, `commands/{plan,delegate}.py`; README. **Reine Defektreparatur** (Nutzwert-Phase-Kriterium erfüllt), keine Fachlogik-Änderung. 12 neue Tests (die Audit-Repros als Regressionsanker), Vollsuite 417 → **429 grün**, threaded 3× ohne Flakiness, Gate PASS.
+
 ## 2026-07-07 - Produktvision integriert: Handbook 4.3, VISION.md, Nordstern (+ ADR-037 accepted)
 
 **Kontext:** Der PO hat (nach 2h Brainstorming mit seinem Bruder) eine ausformulierte langfristige Produktvision gebracht: Jarvis als persönlicher **digitaler COO**. Auftrag: gegenlesen, sauber integrieren, ohne die Verfassung zu einer Wunschliste aufzublähen. Gegenlese-Befund: kein Richtungswechsel — die Vision baut auf dem bestehenden Fundament auf (Governance-Invariante 4.2, ADR-033/036, `plan_next_step` = erster Phase-2-Baustein).

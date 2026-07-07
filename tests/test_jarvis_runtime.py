@@ -387,6 +387,70 @@ def test_broken_reply_callback_does_not_kill_worker(tmp_path):
         runtime.stop()
 
 
+# --- Audit-Fixes: Fehlerrobustheit (P1a/P1b) ----------------------------------
+
+
+def test_worker_exception_still_sends_error_reply(tmp_path):
+    """Audit-Fix P1a: wirft _process, MUSS der Kanal trotzdem eine Antwort
+    bekommen - sonst wartet ein synchroner Kanal ewig auf reply_callback."""
+    runtime = JarvisRuntime(_make_config(tmp_path), ai=FakeAI())
+    runtime._process = MagicMock(side_effect=RuntimeError("boom"))
+    runtime.start()
+    try:
+        done = threading.Event()
+        replies = []
+
+        def reply_callback(text):
+            replies.append(text)
+            done.set()
+
+        runtime.submit("irgendwas", reply_callback)
+        _wait(done)
+        assert "unerwarteter Fehler" in replies[0]
+        assert runtime._worker.is_alive() is True
+    finally:
+        runtime._process = JarvisRuntime._process.__get__(runtime)  # Original zurueck
+        runtime.stop()
+
+
+def test_console_handle_returns_on_timeout_instead_of_hanging(monkeypatch, capsys):
+    """Audit-Fix P1a: bleibt reply_callback aus, darf die Konsole nicht endlos
+    haengen - nach dem Sicherheitsnetz-Timeout kehrt _handle zurueck."""
+    monkeypatch.setattr(jarvis_runtime, "_CONSOLE_REPLY_TIMEOUT", 0.05)
+    runtime = MagicMock()
+    runtime.submit.side_effect = lambda *a, **k: None  # ruft reply_callback NIE
+    channel = ConsoleDummyChannel(runtime)
+
+    channel._handle("hallo")  # darf nicht haengen
+
+    assert "keine Antwort erhalten" in capsys.readouterr().out
+
+
+def test_async_delegation_pushes_error_on_backend_exception(tmp_path):
+    """Audit-Fix P1b: wirft der Hintergrundlauf, folgt nach der Quittung ein
+    finaler Fehler-Push (nicht nur ein Log-Eintrag)."""
+    backend = RuntimeFakeBackend(raises=True)
+    runtime = _delegation_runtime(tmp_path, backend)
+    runtime.start()
+    try:
+        replies = []
+        lock = threading.Lock()
+        two = threading.Event()
+
+        def cb(text):
+            with lock:
+                replies.append(text)
+                if len(replies) == 2:
+                    two.set()
+
+        runtime.submit("analysiere jarvis: frage", cb, allow_async=True)
+        assert two.wait(timeout=5.0)
+        assert replies[0].startswith("Verstanden")       # Quittung
+        assert "fehlgeschlagen" in replies[1]             # finaler Fehler-Push
+    finally:
+        runtime.stop()
+
+
 def test_runtime_speech_is_fail_closed():
     speech = _RuntimeSpeech()
     assert speech.listen() == ""

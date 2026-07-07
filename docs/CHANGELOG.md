@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-07-07 - Robustheit gehärtet (externes Audit: P1/P2)
+
+### Behoben
+- **P1a — Konsole konnte hängen / Anfragen still verloren gehen:** Ein unerwarteter Fehler im Runtime-Worker rief den `reply_callback` nicht mehr auf; der Konsolenkanal wartete unbegrenzt. Jetzt sendet der Worker auf **jedem** Pfad genau eine Antwort (Fehlermeldung bei Exception), und die Konsole hat ein großzügiges Sicherheitsnetz-Timeout.
+- **P1b — Async-Läufer meldete keinen Ausführungsfehler:** Warf ein Hintergrund-Command nach der Quittung, blieb es beim Log. Jetzt folgt ein **finaler Fehler-Push** — nach „melde mich" kommt immer ein Abschluss.
+- **P2a — Vorschläge/Artefakte konnten sich überschreiben:** Dateinamen mit Sekundenauflösung + `write_text` konnten in dieselbe Datei schreiben. Neuer `core/fileio.write_text_create_only` (exklusiv, Suffix bei Kollision) macht „additiv, kein Überschreiben" **strukturell** wahr — betrifft `plan_next_step` und `delegate_analysis`.
+- **P2b — dateibasierter Zustand nicht crash-sicher:** `memory/store.py`, `long_term.py`, `mail_rules.py` überschrieben JSON direkt und fielen bei kaputtem JSON still auf leere Defaults zurück (= Datenverlust bei Crash). Jetzt **atomares Schreiben** (`core/fileio.write_json_atomic`, Temp + `os.replace`) und **Bewahren** kaputter Dateien (`.corrupt-<zeit>`) statt stillem Verwerfen.
+- **Doc:** README behauptete, `enable_/disable_jarvis_autostart` seien „über jeden Kanal" auslösbar — korrigiert: nur lokal über die Konsole (remote gesperrt).
+
+### Tests
+- 12 neue Tests (fileio, Runtime-Fehlerpfade P1a/P1b, Artefakt-Overwrite, kaputte-History-Bewahrung) — die manuell reproduzierten Audit-Pfade sind jetzt Regressionsanker. Vollsuite 429 grün, Gate PASS.
+
 ## 2026-07-07 - Jarvis plant den nächsten Schritt (erste Orchestrierungs-Kette)
 
 ### Neu

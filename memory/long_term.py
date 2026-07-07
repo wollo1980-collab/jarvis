@@ -15,12 +15,13 @@ falls die KI keine eindeutig passende Kategorie erkennt.
 """
 from __future__ import annotations
 
-import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from core.fileio import read_json, write_json_atomic
 
 logger = logging.getLogger("jarvis.memory.long_term")
 
@@ -97,13 +98,10 @@ class LongTermMemory:
         return "\n".join(f"- ({f.category}) {f.text}" for f in facts)
 
     def _read(self) -> list[dict[str, Any]]:
-        try:
-            with open(self.path, "r", encoding="utf-8") as fh:
-                return json.load(fh)
-        except (json.JSONDecodeError, FileNotFoundError) as e:
-            logger.warning("Konnte %s nicht lesen (%s), verwende leere Liste.", self.path, e)
-            return []
+        # Kaputtes JSON wird bewahrt statt still verworfen (Audit-Fix P2b).
+        return read_json(self.path, [])
 
     def _write(self, data: list[dict[str, Any]]) -> None:
-        with open(self.path, "w", encoding="utf-8") as fh:
-            json.dump(data, fh, ensure_ascii=False, indent=2)
+        # Atomar schreiben - ein Crash darf das Langzeitgedaechtnis nicht
+        # still loeschen (Audit-Fix P2b).
+        write_json_atomic(self.path, data)

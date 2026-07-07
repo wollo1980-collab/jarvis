@@ -55,6 +55,28 @@ def test_success_writes_isolated_proposal_and_summary(tmp_path: Path):
     assert result.data["artifact"] == str(proposals[0])
 
 
+def test_two_runs_same_timestamp_do_not_overwrite(tmp_path: Path, monkeypatch):
+    """Audit-Fix P2a: zwei Vorschläge in derselben Sekunde erzeugen zwei Dateien
+    (create-only) - das explizite Versprechen 'kein Überschreiben' hält."""
+    import datetime as _dt
+
+    class _FixedDT:
+        @staticmethod
+        def now():
+            return _dt.datetime(2026, 7, 7, 18, 58, 24)
+
+    monkeypatch.setattr(plan, "datetime", _FixedDT)
+    backend = FakeBackend(AgentResult(text="# T\n## Empfehlung\nX", ok=True, duration_seconds=0.1))
+    _configure(tmp_path, backend)
+    cmd = plan.PlanNextStepCommand()
+
+    cmd.execute(Plan(intent="plan_next_step"))
+    cmd.execute(Plan(intent="plan_next_step"))
+
+    files = sorted(p.name for p in (tmp_path / "proposals").glob("*.md"))
+    assert len(files) == 2  # kein Überschreiben trotz gleicher Sekunde
+
+
 def test_write_isolation_touches_only_proposals_dir(tmp_path: Path):
     backend = FakeBackend(AgentResult(text="ok", ok=True, duration_seconds=0.1))
     _configure(tmp_path, backend)

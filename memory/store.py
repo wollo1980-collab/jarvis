@@ -7,12 +7,12 @@ betrifft, nicht die Aufrufer in main.py/ai.py.
 """
 from __future__ import annotations
 
-import json
 import logging
 import threading
 from pathlib import Path
 from typing import Any, Protocol
 
+from core.fileio import read_json, write_json_atomic
 from core.models import Message
 
 logger = logging.getLogger("jarvis.memory")
@@ -89,13 +89,12 @@ class JsonMemoryStore:
     # -- intern -------------------------------------------------------------
 
     def _read(self, path: Path) -> Any:
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except (json.JSONDecodeError, FileNotFoundError) as e:
-            logger.warning("Konnte %s nicht lesen (%s), verwende leeren Default.", path, e)
-            return [] if path.name == "history.json" else {}
+        # Kaputtes JSON wird bewahrt (umbenannt) statt still verworfen -
+        # der Default bleibt der leere Anfangszustand je Datei (Audit-Fix P2b).
+        default: Any = [] if path.name == "history.json" else {}
+        return read_json(path, default)
 
     def _write(self, path: Path, data: Any) -> None:
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+        # Atomar schreiben - ein Crash mitten im Schreiben kann History/
+        # Praeferenzen sonst still loeschen (Audit-Fix P2b).
+        write_json_atomic(path, data)

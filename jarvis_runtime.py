@@ -76,6 +76,12 @@ _STOP = object()
 # sofort; das Limit ist nur die Sicherung gegen einen Haenger.
 _DELEGATION_JOIN_TIMEOUT = 15.0
 
+# Sicherheitsnetz-Timeout (Sekunden) fuer den synchronen Konsolenkanal
+# (Audit-Fix P1a). Grosszuegig ueber dem Standard-agent_timeout (300 s), damit
+# eine legitime synchrone Konsolen-Delegation nie faelschlich abgeschnitten wird;
+# er verhindert nur einen kuenftigen Endlos-Hang bei ausbleibendem reply_callback.
+_CONSOLE_REPLY_TIMEOUT = 600.0
+
 EXIT_WORDS = {"exit", "quit", "beenden", "ende", "stop", "stopp", "tschuess", "tschüss", "bye"}
 
 
@@ -209,8 +215,16 @@ class JarvisRuntime:
                 self._process(text, reply_callback, plan_filter, allow_async)
             except Exception:
                 # Der Worker darf bei Fehlern nicht still sterben - loggen
-                # und mit der naechsten Nachricht weitermachen.
+                # und mit der naechsten Nachricht weitermachen. Wichtig
+                # (Audit-Fix P1a): der Kanal MUSS trotzdem eine Antwort
+                # bekommen, sonst wartet ein synchroner Kanal (Konsole) ewig
+                # auf reply_callback und haengt.
                 logger.exception("Unerwarteter Fehler bei der Verarbeitung von: %r", text)
+                self._safe_reply(
+                    reply_callback,
+                    "Es ist ein unerwarteter Fehler aufgetreten - ich konnte die Anfrage nicht verarbeiten.",
+                    text,
+                )
             finally:
                 self._queue.task_done()
 
@@ -335,7 +349,15 @@ class JarvisRuntime:
             self.memory.append_history(Message(role="assistant", content=response_text))
             self._safe_reply(reply_callback, response_text, text)
         except Exception:
+            # Audit-Fix P1b: Nach der Quittung MUSS ein Abschluss folgen -
+            # bei einer unerwarteten Exception ein finaler Fehler-Push, nicht
+            # nur ein Log-Eintrag (sonst bleibt es beim "melde mich" ohne Ende).
             logger.exception("Hintergrund-Delegation fehlgeschlagen fuer: %r", text)
+            self._safe_reply(
+                reply_callback,
+                "Die Aufgabe ist unerwartet fehlgeschlagen - ich konnte kein Ergebnis liefern.",
+                text,
+            )
         finally:
             with self._state_lock:
                 self._delegation_active = False
@@ -369,7 +391,14 @@ class ConsoleDummyChannel:
             done.set()
 
         self.runtime.submit(user_input, reply_callback)
-        done.wait()
+        # Sicherheitsnetz (Audit-Fix P1a): grosszuegiger Timeout statt
+        # unbegrenztem Warten - dank Fehler-Reply im Worker feuert reply_callback
+        # jetzt auf jedem Pfad, der Timeout verhindert nur einen kuenftigen
+        # Endlos-Hang (z. B. bei einem toten Worker). Grosszuegig, weil eine
+        # synchrone Konsolen-Delegation legitim Minuten dauern darf.
+        if not done.wait(timeout=_CONSOLE_REPLY_TIMEOUT):
+            print("Jarvis: (keine Antwort erhalten - der Verarbeitungs-Thread reagiert nicht.)")
+            return
         print(f"Jarvis: {result.get('text', '')}")
 
 

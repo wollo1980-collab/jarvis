@@ -17,10 +17,11 @@ E-Mail-Adressen.
 """
 from __future__ import annotations
 
-import json
 import logging
 from pathlib import Path
 from typing import Optional
+
+from core.fileio import read_json, write_json_atomic
 
 logger = logging.getLogger("jarvis.memory.mail_rules")
 
@@ -72,16 +73,14 @@ class MailRules:
         return True
 
     def _read(self) -> dict[str, list[str]]:
-        try:
-            with open(self.path, "r", encoding="utf-8") as fh:
-                data = json.load(fh)
-                if not isinstance(data, dict):
-                    return {"hide": [], "keep": []}
-                return data
-        except (json.JSONDecodeError, FileNotFoundError) as e:
-            logger.warning("Konnte %s nicht lesen (%s), verwende leere Regeln.", self.path, e)
+        # Kaputtes JSON wird bewahrt statt still verworfen (Audit-Fix P2b);
+        # unerwarteter Typ faellt auf leere Regeln zurueck.
+        data = read_json(self.path, {"hide": [], "keep": []})
+        if not isinstance(data, dict):
             return {"hide": [], "keep": []}
+        return data
 
     def _write(self, data: dict[str, list[str]]) -> None:
-        with open(self.path, "w", encoding="utf-8") as fh:
-            json.dump(data, fh, ensure_ascii=False, indent=2)
+        # Atomar schreiben - ein Crash darf die Mail-Regeln nicht still
+        # loeschen (Audit-Fix P2b).
+        write_json_atomic(self.path, data)

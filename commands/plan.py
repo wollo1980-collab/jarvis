@@ -30,6 +30,7 @@ from typing import Optional
 
 from core.agent_backend import AgentBackend, AgentLimits
 from core.config import BASE_DIR
+from core.fileio import write_text_create_only
 from core.models import Plan, Result, Status
 
 logger = logging.getLogger("jarvis.commands.plan")
@@ -110,15 +111,16 @@ def _write_proposal(text: str) -> Optional[Path]:
     if _proposals_dir is None:
         return None
     try:
-        _proposals_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        path = _proposals_dir / f"{timestamp}-plan-next-step.md"
         header = (
             f"<!-- Jarvis-Vorschlag, erstellt {datetime.now().isoformat(timespec='seconds')} "
             "- Entwurf zur Freigabe, nicht umgesetzt -->\n\n"
         )
-        path.write_text(header + (text or "(kein Text)") + "\n", encoding="utf-8")
-        return path
+        # create-only: nie eine bestehende Datei ueberschreiben (Audit-Fix P2a) -
+        # sichert das explizite Versprechen "additiv, kein Ueberschreiben".
+        return write_text_create_only(
+            _proposals_dir, f"{timestamp}-plan-next-step.md", header + (text or "(kein Text)") + "\n"
+        )
     except OSError as e:  # noqa: BLE001 - Dateisystem kann vielfaeltig scheitern
         logger.warning("Vorschlags-Entwurf konnte nicht geschrieben werden: %s", e)
         return None

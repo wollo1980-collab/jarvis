@@ -65,6 +65,29 @@ def test_success_writes_artifact_and_short_summary(tmp_path: Path):
     assert result.data["artifact"] == str(artifacts[0])
 
 
+def test_two_analyses_same_timestamp_do_not_overwrite(tmp_path: Path, monkeypatch):
+    """Audit-Fix P2a: zwei Analysen in derselben Sekunde erzeugen zwei
+    Artefakte (create-only), kein Überschreiben."""
+    import datetime as _dt
+
+    class _FixedDT:
+        @staticmethod
+        def now():
+            return _dt.datetime(2026, 7, 7, 18, 58, 24)
+
+    monkeypatch.setattr(delegate, "datetime", _FixedDT)
+    backend = FakeBackend(AgentResult(text="Analyse", ok=True, duration_seconds=0.1))
+    _configure_with_repo(tmp_path, backend)
+    cmd = delegate.DelegateAnalysisCommand()
+    plan_obj = Plan(intent="delegate_analysis", target="jarvis", parameters={"question": "q"})
+
+    cmd.execute(plan_obj)
+    cmd.execute(plan_obj)
+
+    files = list((tmp_path / "delegations").glob("*.md"))
+    assert len(files) == 2
+
+
 def test_alias_case_insensitive(tmp_path: Path):
     backend = FakeBackend(AgentResult(text="ok", ok=True, duration_seconds=0.1))
     _configure_with_repo(tmp_path, backend)

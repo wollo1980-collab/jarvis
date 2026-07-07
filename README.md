@@ -763,8 +763,11 @@ Start automatisch erkannt und entfernt - kein manuelles Aufräumen nötig.
 
 `enable_jarvis_autostart`/`disable_jarvis_autostart` (Sicherheitsstufe 2,
 `commands/monitor.py`) registrieren/entfernen `jarvis_runtime.py` als
-Windows-Autostart-Eintrag - über jeden Kanal auslösbar (Konsole,
-Telegram über `telegram_main.py` oder über die Runtime selbst).
+Windows-Autostart-Eintrag - **nur lokal über die Konsole** (`main.py`)
+auslösbar. Remote (Telegram/Runtime) sind sie gesperrt: sie stehen nicht in
+der Telegram-Whitelist, sind bestätigungspflichtig (`requires_confirmation`),
+und die Fernkanal-Speech-Adapter sind fail-closed - eine Bestätigung ist
+remote nicht möglich (ADR-018).
 
 - Fester HKCU-Run-Key-Eintrag `"Jarvis"` - erscheint dadurch auch in
   `analyze_pc`/`system_status`s Autostart-Übersicht. Kein Bezug zu

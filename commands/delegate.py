@@ -36,6 +36,7 @@ from pathlib import Path
 from typing import Optional
 
 from core.agent_backend import AgentBackend, AgentLimits, AgentResult, ClaudeCodeBackend
+from core.fileio import write_text_create_only
 from core.models import Plan, Result, Status
 
 logger = logging.getLogger("jarvis.commands.delegate")
@@ -117,9 +118,7 @@ def _write_artifact(repo_alias: str, question: str, result: AgentResult) -> Opti
     if _artifact_dir is None:
         return None
     try:
-        _artifact_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        path = _artifact_dir / f"{timestamp}.md"
         status_symbol = "✓" if result.ok else "✗"
         cost = f"{result.cost_usd:.4f} USD" if result.cost_usd is not None else "unbekannt"
         turns = result.num_turns if result.num_turns is not None else "unbekannt"
@@ -134,8 +133,10 @@ def _write_artifact(repo_alias: str, question: str, result: AgentResult) -> Opti
             f"- **Zeitpunkt:** {datetime.now().isoformat(timespec='seconds')}\n\n"
             "---\n\n"
         )
-        path.write_text(header + (result.text or "(kein Text)") + "\n", encoding="utf-8")
-        return path
+        # create-only: nie ueberschreiben (Audit-Fix P2a).
+        return write_text_create_only(
+            _artifact_dir, f"{timestamp}.md", header + (result.text or "(kein Text)") + "\n"
+        )
     except OSError as e:  # noqa: BLE001 - Dateisystem kann vielfaeltig scheitern
         logger.warning("Delegations-Artefakt konnte nicht geschrieben werden: %s", e)
         return None

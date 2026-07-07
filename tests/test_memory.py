@@ -58,6 +58,20 @@ def test_get_history_with_limit(tmp_path: Path):
     assert [m.content for m in history] == ["7", "8", "9"]
 
 
+def test_corrupt_history_is_preserved_not_silently_deleted(tmp_path: Path):
+    """Audit-Fix P2b: kaputtes history.json wird zur Seite gelegt (bewahrt) und
+    auf den leeren Default zurueckgefallen - nicht unbemerkt geloescht."""
+    store = JsonMemoryStore(tmp_path)
+    (tmp_path / "history.json").write_text("{ kaputt ", encoding="utf-8")
+
+    history = store.get_history()
+
+    assert history == []
+    backups = list(tmp_path.glob("history.json.corrupt-*"))
+    assert len(backups) == 1
+    assert "kaputt" in backups[0].read_text(encoding="utf-8")
+
+
 def test_parallel_append_history_loses_no_entries(tmp_path: Path):
     """ADR-035: seit der asynchronen Repo-Analyse schreiben Delegations-Thread
     und Nachrichten-Worker gleichzeitig History. Das RLock im Store muss die
