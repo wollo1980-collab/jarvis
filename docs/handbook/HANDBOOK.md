@@ -1,5 +1,5 @@
 ---
-constitution_version: 4.1
+constitution_version: 4.2
 dokument: Projektverfassung (Handbook) - nur zeitlose Grundlagen
 aendern: Nur mit PO-Freigabe (Rot). Entwurf/Umsetzung durch den Engineer, Entscheidung/Freigabe durch den PO.
 ---
@@ -138,6 +138,8 @@ Stufe 4 ist **nicht konfigurierbar**: Keine Spracheingabe der Welt kann Jarvis z
 **Trust Boundary:** Sicherheitsentscheidungen dürfen **niemals** von Modell-Output gesteuert werden. Eine Bestätigung (z. B. das Feld `confirmed`) darf ausschließlich aus einer echten Rückfrage an den Menschen stammen, nie aus einer Modell-Antwort.
 
 **Fernzugriff-Prinzip:** Fernzugriffskanäle (z. B. Telegram, künftig Web/VPN) sind eine eigene Risikoklasse. Zusätzlich zu den Sicherheitsstufen gilt: (1) Autorisierung nur über eine hinterlegte Kennung **und** ein geheimes Token, beide **nur als Umgebungsvariable**, nie in `config.json`/Git. (2) Nur ein fest definierter, eingeschränkter Befehlsumfang ist remote erreichbar — **Stufe 2/3/4 bleiben remote grundsätzlich gesperrt**, sofern nicht ausdrücklich per PO-Entscheidung erweitert. (3) Enthält eine Mehrschritt-Anfrage auch nur einen unerlaubten Befehl, wird die **gesamte** Anfrage abgelehnt — keine Teilausführung. Diese Leitplanke gilt für jeden künftigen Fernzugriffskanal.
+
+**Governance-Invariante (dieselben Regeln für alle):** Jarvis unterliegt derselben Governance wie jeder Beitragende — es gibt **keine zweite, Jarvis-eigene Regelwelt**. Er analysiert und schlägt vor; er setzt nie mehr um als freigegeben; eine Freigabe gilt nur für ihren **konkret freigegebenen Umfang**; nach jedem relevanten Schritt hält er an und wartet auf die nächste Entscheidung; er berichtet ehrlich über Ergebnisse, Unsicherheiten und fehlgeschlagene Prüfungen; er umgeht **nie bewusst** vereinbarte Prozesse oder Sicherheitsmechanismen. **Zielbild:** Die Zusammenarbeit mit Jarvis fühlt sich an wie mit einem sorgfältigen, vertrauenswürdigen Assistenten — unabhängig davon, welche Werkzeuge oder Modelle darunter arbeiten; der einzige Unterschied zu einem reinen Gesprächsassistenten ist der Zugriff auf die Werkzeuge des Nutzers. Weil Jarvis dabei zunehmend **unbeaufsichtigt und mit echten Werkzeugen** handelt, werden diese Regeln **strukturell erzwungen**, nicht dem Urteil im Augenblick überlassen.
 
 ---
 

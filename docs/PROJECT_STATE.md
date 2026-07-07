@@ -18,7 +18,7 @@ Der maschinenlesbare Kopf (oben) ist die Single Source der Kern-Kennzahlen; das 
 
 Davor abgeschlossen und getaggt: `v0.7` "PC-Admin" (`v0.7` → `a7eb86d`); der **Infrastruktur-/Runtime-Baustein** (ADR-024 bis ADR-028, ohne eigene Versionsnummer/Tag), konsolidiert in Handbook v3.7. `v0.4`/`v0.5`/`v0.6`/`v0.7` sind alle abgeschlossen und getaggt.
 
-Verfassung: **`docs/handbook/HANDBOOK.md`** (`constitution_version 4.1`) — zeitlose Projektverfassung, Leitbild/DNA in Teil 1. Die früheren `.docx`-Handbücher (v3.2–v3.8) liegen als Historie unter `docs/handbook/archive/` (nicht maßgeblich).
+Verfassung: **`docs/handbook/HANDBOOK.md`** (`constitution_version 4.2`) — zeitlose Projektverfassung, Leitbild/DNA in Teil 1. Die früheren `.docx`-Handbücher (v3.2–v3.8) liegen als Historie unter `docs/handbook/archive/` (nicht maßgeblich).
 
 ## Status
 
@@ -35,6 +35,7 @@ Handbook-Konsolidierungen seit v0.7:
 - **v3.7**: Infrastruktur-/Runtime-Baustein (ADR-024 bis ADR-028).
 - **v3.8**: **Leitbild / DNA** (Produktidentität, EBENE 1) - Kap. 0 Leitbild „Wofür Jarvis existiert" (Identität als Haltung) + 9 Produkt-Leitplanken; Angleichungen in Kap. 1/7/26/32; Mission unverändert. Bewusste, dokumentierte Governance-Ausnahme (reine EBENE-1-Konsolidierung mitten in v0.8, ohne Auswirkung auf die technische Code-Basis).
 - **constitution_version 4.1**: Auftreten und Tonfall von Jarvis explizit als Produkt-DNA verankert; Chat-System-Prompt und erste zentrale Alltagsantworten wurden daran angeglichen (ruhig, praezise, loyal, trockene Eleganz statt Show).
+- **constitution_version 4.2**: **Governance-Invariante** in Teil 6 verankert (PO-Freigabe 2026-07-07) — Jarvis unterliegt derselben Governance wie jeder Beitragende (keine zweite Regelwelt): analysieren & vorschlagen, nie mehr als freigegeben, Freigabe nur für den konkreten Umfang, nach jedem relevanten Schritt anhalten, ehrlich berichten, Prozesse/Sicherheitsmechanismen nie umgehen. Zielbild zeitlos formuliert (keine Modell-/Produktnamen); Regeln werden im zunehmend unbeaufsichtigten Betrieb strukturell erzwungen. Konsolidiert die Richtung aus ADR-036.
 
 Weiterhin gültig aus v0.7 und davor (Details in den jeweiligen ADRs): PC-Admin (ADR-020-023), Infrastruktur-/Runtime-Baustein (ADR-024-028), Telegram-Fernzugriff (ADR-018), Excel/Tabellen-Auswertung/KPI (ADR-014/015/016), Kurz-/Langzeitgedächtnis (ADR-009), PC-Grundsteuerung (ADR-011/012).
 

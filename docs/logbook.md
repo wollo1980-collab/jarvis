@@ -1,5 +1,15 @@
 # Logbook
 
+## 2026-07-07 - Handbook 4.2: Governance-Invariante verankert (🔴 Verfassungsänderung)
+
+**Kontext:** In der Vision-Schärfung um Jarvis als orchestrierenden Assistenten kristallisierte sich ein Grundsatz heraus, den der PO ausdrücklich als **Produktphilosophie** (nicht als Architekturentscheidung) verstanden wissen will: *Jarvis unterliegt derselben Governance wie jeder Beitragende — keine zweite, Jarvis-eigene Regelwelt.* Damit wird der 🔴-Handbook-Kandidat aus ADR-036 eingelöst.
+
+**Umsetzung:** Neue **Governance-Invariante** in Handbook Teil 6 (Sicherheitsmodell), `constitution_version` 4.1 → 4.2. Inhalt: analysieren & vorschlagen · nie mehr umsetzen als freigegeben · Freigabe nur für ihren konkreten Umfang · nach jedem relevanten Schritt anhalten · ehrlich über Ergebnisse/Unsicherheiten/fehlgeschlagene Prüfungen berichten · Prozesse/Sicherheitsmechanismen nie bewusst umgehen. Zielbild bewusst **zeitlos** formuliert (der PO fing den Fehler ab, konkrete Produktnamen in eine Verfassung zu schreiben — dieselbe „keine Namen"-Disziplin wie ADR-036, eine Ebene höher): „fühlt sich an wie ein sorgfältiger, vertrauenswürdiger Assistent — unabhängig von Werkzeug/Modell". Ergänzt um die Brücke zur Durchsetzung: weil Jarvis zunehmend unbeaufsichtigt mit echten Werkzeugen handelt, werden die Regeln **strukturell erzwungen**, nicht dem Urteil im Moment überlassen.
+
+**Datierte Illustration (Stand 2026, gehört bewusst NICHT in die zeitlose Verfassung):** Gemeint ist die Assistenz-Qualität, wie man sie 2026 von ChatGPT, Codex oder Claude als sorgfältigem Assistenten erwartet — nur mit Zugriff auf die eigenen Werkzeuge. In 2–3 Jahren tragen andere Modelle diese Qualität; die Verfassung nennt deshalb die Eigenschaft, nicht die Marke.
+
+**Governance:** 🔴-Verfassungsänderung mit PO-Freigabe 2026-07-07 (Entwurf → Review → Schärfung des Zielbilds → Freigabe → Umsetzung — die Invariante selbst gelebt). PROJECT_STATE-Referenzen auf 4.2 gezogen. Gate prüft Handbook-Reinheit (keine Status-Tokens) — Text ist zeitlos, kein Verstoß.
+
 ## 2026-07-07 - ADR-036 (accepted): Fähigkeits-/Werkzeug-Orchestrierung als Invariante
 
 **Kontext:** Langfristige PO-Architektur-Vorgabe (keine Implementierung). Erster Entwurf war „Modellunabhängigkeit + AI-Dispatcher"; **im PO-Review geschärft**: Jarvis orchestriert langfristig nicht Modelle, sondern **Fähigkeiten und Werkzeuge**, um ein **Nutzerziel** zu erreichen. Modelle (GPT/Claude/Codex) sind nur *ein* Werkzeugtyp — gleichrangig mit Git/GitHub/Browser/Outlook/Gmail/PowerShell/lokalen Skripten.
