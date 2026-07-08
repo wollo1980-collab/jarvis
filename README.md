@@ -43,6 +43,11 @@ export OPENAI_API_KEY="sk-..."   # überschreibt config.json
 python main.py
 ```
 
+Für den **vollständigen Laufzeit-Betrieb** (Telegram-Runtime, Word-Export,
+Claude-Provider, TTS) statt der Kern-Deps: `pip install -r requirements-runtime.txt`
+— installiert die real genutzten, in `requirements.txt` optional gehaltenen Pakete
+gleich mit (reproduzierbarer venv-Neuaufbau, ADR-037).
+
 ## KI-Provider wählen: OpenAI oder Claude (v0.8 Multi-KI, Phase 1, ADR-029)
 
 Jarvis kann **explizit** zwischen zwei KI-Anbietern wählen. Gesteuert wird das
