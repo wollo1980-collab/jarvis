@@ -1,5 +1,15 @@
 # Logbook
 
+## 2026-07-08 - delegate.py-Backend-Entkopplung: ADR-036 vollständig geschlossen (erster geschlossener Kreis)
+
+**Kontext:** `plan_next_step` (die gestern gebaute Planungs-Fähigkeit) hat auf die Frage „nächster Schritt?" **selbst** die `delegate.py`-Backend-Entkopplung empfohlen — zweimal, geerdet, mit Zeilenverweisen und ADR-Prüfung. Damit ist dies der **erste voll geschlossene Vorschlag→Umsetzung-Kreis**: Jarvis schlägt vor, der Mensch entscheidet, wir setzen um (genau die COO-Vision / Governance-Invariante in Aktion).
+
+**Umsetzung:** Die einzige verbliebene Modellnamen-Leckstelle in der Fachlogik geschlossen. `AgentBackend`-Protocol bekommt ein `name`-Attribut (`ClaudeCodeBackend.name = "Claude Code"`); der Adapter kennt seinen Namen, die Fachlogik liest ihn nur. `commands/delegate.py`: kein `ClaudeCodeBackend`-Import/-Default mehr, `_backend` wird injiziert (`_require_configured` prüft), Artefakt-Header/Log über `_backend.name`, Docstring generisch (nebenbei die Async-/Telegram-Drift aus Scheibe 2 mitkorrigiert). `main.py`/`jarvis_runtime.py`: `configure(config, ClaudeCodeBackend())` (Backend-Wahl in der Verdrahtungsschicht, wie bei `plan.py`). Zwei Design-Entscheidungen (PO-bestätigt): Anzeigename über `backend.name` statt weglassen; Verdrahtung **nicht** konsolidiert (Regel 6).
+
+**Tests:** 3 neu (`AgentBackend.name`; delegate ohne Backend → klarer Fehler; Artefakt-Header zeigt generischen Namen, kein „Claude Code"). Vollsuite 429 → **432 grün**, Gate PASS. `grep Claude commands/delegate.py` → keine Werkzeugnamen mehr in der Fachlogik.
+
+**Governance:** reine Invarianten-Schließung/Refactor an bestehendem Code (Nutzwert-Phase-tauglich), keine Verhaltensänderung. ADR-036 damit vollständig eingelöst.
+
 ## 2026-07-07 - Externes Audit: Robustheit gehärtet (P1/P2 + Doc)
 
 **Kontext:** Ein externes Audit (Review-Artefakt) fand fünf reale Schwachstellen — nicht in der Fachlogik, sondern in Fehlerrobustheit und Haltbarkeit des dateibasierten Zustands (durch den neuen Async-/Hintergrundbetrieb relevanter geworden). Ich habe **alle unabhängig im Code gegengeprüft und bestätigt** (Rolle: unabhängiger Audit, hinterfragt auch das Review). Gesamtbild des Auditors: starke Basis, sehr gute Doku-/Testdisziplin; größte Risiken in Robustheit unter Fehlern.

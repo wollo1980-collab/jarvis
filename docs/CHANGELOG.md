@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-07-08 - Backend-Entkopplung: ADR-036 vollständig geschlossen
+
+### Geaendert
+- `commands/delegate.py` nennt **kein konkretes Backend** mehr — die letzte Modellnamen-Leckstelle in der Fachlogik ist zu. Das Backend wird aus der Verdrahtungsschicht (`main.py`/`jarvis_runtime.py`) injiziert; der Anzeigename für Artefakt-Header/Log kommt aus dem neuen `AgentBackend.name` (der Adapter kennt seinen Namen, die Fachlogik liest ihn nur). Damit ist die **Modellunabhängigkeits-Invariante aus ADR-036 vollständig erfüllt**.
+- Kein Verhaltensunterschied für `delegate_analysis`. `plan.py` war das Vorbild; `delegate.py` folgt jetzt demselben Muster.
+
+### Hinweis
+- **Erster voll geschlossener Vorschlag→Umsetzung-Kreis:** Diesen Schritt hatte `plan_next_step` selbst als nächsten empfohlen.
+
+### Tests
+- 3 neue Tests (`AgentBackend.name`, delegate ohne injiziertes Backend → klarer Fehler, Artefakt-Header zeigt den generischen Backend-Namen). Vollsuite 432 grün, Gate PASS.
+
 ## 2026-07-07 - Robustheit gehärtet (externes Audit: P1/P2)
 
 ### Behoben

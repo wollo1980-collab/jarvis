@@ -1,11 +1,12 @@
 """
 Repo-Analyse delegieren (ADR-033 Delegationsprozess, ADR-034 read-only
-Repo-Analyse - Umsetzungs-Scheibe 1: lokal & synchron).
+Repo-Analyse, ADR-035 asynchron + Telegram-Push).
 
 Auf "analysiere <repo>: <Frage>" startet Jarvis das Agenten-Backend
-(core/agent_backend.py, erste Impl: Claude Code CLI) read-only im
-allowlisteten Repo, laesst die Analyse synchron laufen, legt das
-vollstaendige Ergebnis als reviewbares Artefakt unter
+(core/agent_backend.py, ueber configure() injiziert - die Fachlogik nennt
+kein konkretes Backend, ADR-036) read-only im allowlisteten Repo, laesst die
+Analyse laufen (lokal synchron, ueber den Runtime-Telegram-Kanal asynchron mit
+Ergebnis-Push), legt das vollstaendige Ergebnis als reviewbares Artefakt unter
 <memory_dir>/delegations/<zeitstempel>.md ab und traegt eine
 Kurz-Zusammenfassung vor. Sicherheitsstufe 0 (keine System-/Repo-Aenderung),
 konsistent mit search_web/check_mail.
@@ -19,13 +20,14 @@ Ausschnitte enthalten - sie bleibt lokal (Scheibe 1, kein Remote-Kanal).
 
 configure()-Muster wie commands/mail.py: die Registry instanziiert Commands
 vor Config.load(), deshalb ein Einmal-Aufruf beim Start (main.py/
-jarvis_runtime.py) statt Konstruktor-Injection. Das Backend ist injizierbar,
-damit Tests ohne echten `claude`-Aufruf laufen.
+jarvis_runtime.py) statt Konstruktor-Injection. Das Backend wird dabei aus der
+Verdrahtungsschicht injiziert (kein eingebauter Default) - so nennt die
+Fachlogik kein konkretes Backend und Tests laufen ohne echten Agenten-Aufruf.
 
-Bewusst NICHT in dieser Scheibe: asynchrone Hintergrund-Ausfuehrung und der
-Telegram-Intent/Ergebnis-Push (Folge-Arbeitspaket). delegate_analysis bleibt
-deshalb NICHT in telegram_main.ALLOWED_INTENTS und wird ueber Telegram
-automatisch fail-closed abgelehnt.
+delegate_analysis ist ueber den Standalone-Bot (telegram_main.py) NICHT
+erreichbar, sondern nur ueber den Runtime-Telegram-Kanal (der den Async-Worker
+hat, ADR-035) - der synchrone Standalone-Bot wuerde bei einer Minuten-Analyse
+den Event-Loop blockieren.
 """
 from __future__ import annotations
 
@@ -35,14 +37,17 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from core.agent_backend import AgentBackend, AgentLimits, AgentResult, ClaudeCodeBackend
+from core.agent_backend import AgentBackend, AgentLimits, AgentResult
 from core.fileio import write_text_create_only
 from core.models import Plan, Result, Status
 
 logger = logging.getLogger("jarvis.commands.delegate")
 
 _allowlist: dict[str, Path] = {}
-_backend: AgentBackend = ClaudeCodeBackend()
+# Kein eingebauter Default (ADR-036): die Fachlogik nennt kein konkretes Backend.
+# Das Backend wird ueber configure() aus der Verdrahtungsschicht (main.py/
+# jarvis_runtime.py) injiziert - wie bei commands/plan.py.
+_backend: Optional[AgentBackend] = None
 _artifact_dir: Optional[Path] = None
 _limits: AgentLimits = AgentLimits()
 _configured: bool = False
@@ -62,8 +67,7 @@ def configure(config, backend: Optional[AgentBackend] = None) -> None:
     _allowlist = _build_allowlist(config)
     _artifact_dir = Path(config.memory_dir) / "delegations"
     _limits = AgentLimits(timeout_seconds=float(getattr(config, "agent_timeout", 300.0)))
-    if backend is not None:
-        _backend = backend
+    _backend = backend
     _configured = True
 
 
@@ -90,10 +94,10 @@ def _build_allowlist(config) -> dict[str, Path]:
 
 
 def _require_configured() -> None:
-    if not _configured:
+    if not _configured or _backend is None:
         raise RuntimeError(
-            "Repo-Analyse nicht konfiguriert - commands.delegate.configure() "
-            "muss beim Start aufgerufen werden (siehe main.py)."
+            "Repo-Analyse nicht konfiguriert - commands.delegate.configure(config, backend) "
+            "muss beim Start mit einem Backend aufgerufen werden (siehe main.py)."
         )
 
 
@@ -125,7 +129,7 @@ def _write_artifact(repo_alias: str, question: str, result: AgentResult) -> Opti
         header = (
             f"# Repo-Analyse: {repo_alias}\n\n"
             f"- **Frage:** {question}\n"
-            f"- **Backend:** Claude Code (read-only)\n"
+            f"- **Backend:** {_backend.name} (read-only)\n"
             f"- **Status:** {status_symbol} {result.detail}\n"
             f"- **Dauer:** {result.duration_seconds:.1f}s\n"
             f"- **Turns:** {turns}\n"
@@ -218,7 +222,7 @@ class DelegateAnalysisCommand:
                 ),
             )
 
-        logger.info("Repo-Analyse gestartet: repo=%s frage=%r backend=claude", repo_alias, question)
+        logger.info("Repo-Analyse gestartet: repo=%s frage=%r backend=%s", repo_alias, question, _backend.name)
         result = _backend.analyze(repo, question, _limits, cancel_event)
         artifact = _write_artifact(repo_alias, question, result)
 

@@ -45,6 +45,11 @@ def _backend_returning(popen: FakePopen, captured=None) -> ClaudeCodeBackend:
     return ClaudeCodeBackend(popen=factory)
 
 
+def test_backend_exposes_display_name():
+    # ADR-036: der Adapter kennt seinen Namen; die Fachlogik liest ihn nur.
+    assert ClaudeCodeBackend.name == "Claude Code"
+
+
 def test_argv_enforces_read_only_and_utf8(tmp_path: Path):
     captured = {}
     popen = FakePopen(output=(json.dumps({"is_error": False, "result": "ok"}), ""))

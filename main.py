@@ -111,10 +111,10 @@ def main() -> None:
         mail_commands.configure(config)
         web_commands.configure(ai, timeout_seconds=config.timeout)
 
-        # Agenten-Delegation (ADR-034, Scheibe 1): read-only Repo-Analyse.
-        # Baut die Repo-Allowlist aus config.agent_repos; Backend real
-        # (Claude Code CLI, ClaudeCodeBackend als Default in delegate.py).
-        delegate_commands.configure(config)
+        # Agenten-Delegation (ADR-034): read-only Repo-Analyse. Backend hier in
+        # der Verdrahtungsschicht gewählt und injiziert - die Fachlogik
+        # (commands/delegate.py) nennt bewusst kein Backend (ADR-036).
+        delegate_commands.configure(config, ClaudeCodeBackend())
 
         # Nächsten Schritt planen (erste Orchestrierungs-Kette, ADR-036 /
         # Handbook 4.2). Das Backend wird hier in der Verdrahtungsschicht

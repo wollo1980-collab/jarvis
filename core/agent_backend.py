@@ -87,6 +87,11 @@ class AgentBackend(Protocol):
     ADR-035) erlaubt der Runtime, einen laufenden Agentenlauf hart
     abzubrechen (Kill-Switch)."""
 
+    # Anzeigename des Backends. Der Adapter kennt seinen eigenen Namen (ADR-036);
+    # die Fachlogik liest ihn nur (z. B. fuer Artefakt-Header/Logs) und nennt
+    # kein konkretes Backend hart.
+    name: str
+
     def analyze(
         self,
         repo: Path,
@@ -106,6 +111,8 @@ class ClaudeCodeBackend:
     (bis 300 s) haengen. Die Popen-Factory ist injizierbar, damit Tests ohne
     echten `claude`-Aufruf/Netzwerk laufen (gleiches Muster wie ein
     injizierter reader/searcher in den bestehenden Commands)."""
+
+    name = "Claude Code"
 
     def __init__(self, popen=subprocess.Popen, binary: str = CLAUDE_BINARY):
         self._popen = popen

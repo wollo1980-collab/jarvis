@@ -123,8 +123,9 @@ class JarvisRuntime:
         monitor_commands.configure(self.ai)
         web_commands.configure(self.ai, timeout_seconds=config.timeout)
         mail_commands.configure(config)
-        # Agenten-Delegation (ADR-034, Scheibe 1): read-only Repo-Analyse.
-        delegate_commands.configure(config)
+        # Agenten-Delegation (ADR-034): read-only Repo-Analyse. Backend aus der
+        # Verdrahtungsschicht injiziert (Fachlogik nennt kein Backend, ADR-036).
+        delegate_commands.configure(config, ClaudeCodeBackend())
         # Nächsten Schritt planen (ADR-036 / Handbook 4.2): Backend in der
         # Verdrahtungsschicht gewählt und injiziert (Fachlogik nennt kein
         # konkretes Backend, Modellunabhängigkeit).

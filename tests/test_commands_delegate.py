@@ -7,6 +7,8 @@ import threading
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 import commands.delegate as delegate
 from core.agent_backend import AgentResult
 from core.models import Plan, Status
@@ -15,6 +17,8 @@ from core.models import Plan, Status
 class FakeBackend:
     """Ersetzt AgentBackend 1:1. Merkt sich den letzten Aufruf und liefert
     ein voreingestelltes Ergebnis."""
+
+    name = "TestBackend"
 
     def __init__(self, result: AgentResult):
         self._result = result
@@ -158,6 +162,32 @@ def test_backend_failure_is_reported_not_silent(tmp_path: Path):
     )
     assert result.status == Status.FAILED
     assert "Zeitlimit" in result.message
+
+
+def test_delegate_requires_injected_backend(tmp_path: Path):
+    # ADR-036: die Fachlogik nennt/instanziiert kein Backend - es MUSS injiziert
+    # werden. Ohne Backend gibt es keinen eingebauten Default, und die Analyse
+    # scheitert klar statt still mit einem festen Werkzeug zu laufen.
+    delegate.configure(_config(tmp_path, [{"alias": "jarvis", "path": str(tmp_path)}]), backend=None)
+    assert delegate._backend is None
+    with pytest.raises(RuntimeError, match="Backend"):
+        delegate.DelegateAnalysisCommand().execute(
+            Plan(intent="delegate_analysis", target="jarvis", parameters={"question": "frage"})
+        )
+
+
+def test_artifact_header_shows_injected_backend_name(tmp_path: Path):
+    backend = FakeBackend(AgentResult(text="Analyse.", ok=True, duration_seconds=0.1))
+    _configure_with_repo(tmp_path, backend)
+
+    delegate.DelegateAnalysisCommand().execute(
+        Plan(intent="delegate_analysis", target="jarvis", parameters={"question": "q"})
+    )
+
+    artifact = next((tmp_path / "delegations").glob("*.md"))
+    body = artifact.read_text(encoding="utf-8")
+    assert "TestBackend" in body            # generischer Name aus dem Backend
+    assert "Claude Code" not in body         # kein hartkodierter Werkzeugname
 
 
 def test_command_is_marked_long_running():

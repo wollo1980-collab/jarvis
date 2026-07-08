@@ -580,6 +580,8 @@ class RuntimeFakeBackend:
     """AgentBackend-Ersatz fuer die Runtime-Tests. Kann blockieren (block),
     auf den Cancel warten (wait_cancel) oder werfen (raises)."""
 
+    name = "TestBackend"
+
     def __init__(self, *, result=None, block=None, raises=False, wait_cancel=False):
         self.result = result or AgentResult(text="Analyse fertig.", ok=True, duration_seconds=0.1)
         self.block = block
