@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-08 - Sprach-Eingabe über Telegram (ADR-038)
+
+### Neu
+- Du kannst Jarvis über den Runtime-Telegram-Kanal jetzt **Sprachnachrichten** schicken statt zu tippen. Jarvis transkribiert sie (OpenAI, derselbe `OPENAI_API_KEY`), **echoot das Erkannte** („🎤 Verstanden: …") und behandelt es wie eine Textnachricht — dieselbe Whitelist.
+- **Sicher/privat by design:** Audio wird **nur nach Autorisierung** verarbeitet, **nicht gespeichert** (nur im Speicher), und bei einem Transkriptionsfehler oder leerem Ergebnis wird **nichts ausgeführt**. Ohne OpenAI-Key bleibt der Textbetrieb unverändert.
+- Zuvor: **Beenden-Befehl** (`stop_runtime`) — „beende dich" fährt Jarvis über Telegram sauber herunter.
+
 ## 2026-07-08 - Backend-Entkopplung: ADR-036 vollständig geschlossen
 
 ### Geaendert

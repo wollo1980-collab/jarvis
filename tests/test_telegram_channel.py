@@ -8,7 +8,7 @@ from __future__ import annotations
 import asyncio
 import threading
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from core.config import Config
 from core.models import Plan
@@ -396,3 +396,90 @@ def test_stop_flushes_pending_sends_before_teardown():
 
     # Darf nicht werfen - ein fehlgeschlagener Send blockiert den Shutdown nicht.
     channel._flush_pending_sends(timeout=1.0)
+
+
+# --- Sprach-Eingabe (STT, ADR-038) -------------------------------------------
+
+
+def _voice_channel(allowed_chat_id="111", transcript="erinnere mich an den Zahnarzt"):
+    channel = MagicMock()
+    channel.allowed_chat_id = allowed_chat_id
+    channel.runtime = MagicMock()
+    channel.transcriber = MagicMock()
+    channel.transcriber.transcribe.return_value = transcript
+    # Echte Lock/Set fuer den Reply-Helper (kein MagicMock-Kontextmanager-Zauber).
+    channel._pending_sends = set()
+    channel._pending_lock = threading.Lock()
+    return channel
+
+
+def _voice_update(chat_id, file_id="f1"):
+    update = MagicMock()
+    update.effective_chat.id = chat_id
+    update.message.voice.file_id = file_id
+    return update
+
+
+def _voice_context(channel, audio=b"OGG"):
+    context = MagicMock()
+    context.application.bot_data = {"channel": channel}
+    tg_file = MagicMock()
+    tg_file.download_as_bytearray = AsyncMock(return_value=bytearray(audio))
+    context.bot.get_file = AsyncMock(return_value=tg_file)
+    context.bot.send_message = AsyncMock()
+    return context
+
+
+def test_voice_authorized_transcribes_and_forwards_transcript():
+    channel = _voice_channel(transcript="erinnere mich an den Zahnarzt")
+    update = _voice_update(chat_id=111)
+    context = _voice_context(channel, audio=b"OGGDATA")
+
+    asyncio.run(telegram_channel._on_voice(update, context))
+
+    # Audio nur im Speicher geladen und transkribiert.
+    context.bot.get_file.assert_awaited_once()
+    channel.transcriber.transcribe.assert_called_once()
+    assert channel.transcriber.transcribe.call_args[0][0] == b"OGGDATA"
+    # Transkript geht durch DIESELBE Whitelist/Pipeline wie Text.
+    channel.runtime.submit.assert_called_once()
+    args, kwargs = channel.runtime.submit.call_args
+    assert args[0] == "erinnere mich an den Zahnarzt"
+    assert kwargs["plan_filter"] is telegram_channel._runtime_filter_plan
+    assert kwargs["allow_async"] is True
+
+
+def test_voice_unauthorized_does_not_download_or_submit():
+    # Auflage: Audio erst NACH Autorisierung anfassen.
+    channel = _voice_channel(allowed_chat_id="111")
+    update = _voice_update(chat_id=999)
+    context = _voice_context(channel)
+
+    asyncio.run(telegram_channel._on_voice(update, context))
+
+    context.bot.get_file.assert_not_called()
+    channel.transcriber.transcribe.assert_not_called()
+    channel.runtime.submit.assert_not_called()
+
+
+def test_voice_transcription_error_does_not_execute():
+    # Auflage: Fehler ohne Ausfuehrung.
+    channel = _voice_channel()
+    channel.transcriber.transcribe.side_effect = RuntimeError("api kaputt")
+    update = _voice_update(chat_id=111)
+    context = _voice_context(channel)
+
+    asyncio.run(telegram_channel._on_voice(update, context))
+
+    channel.runtime.submit.assert_not_called()
+
+
+def test_voice_empty_transcript_does_not_execute():
+    # Nichts verstanden -> nichts ausfuehren, nur Rueckmeldung.
+    channel = _voice_channel(transcript="")
+    update = _voice_update(chat_id=111)
+    context = _voice_context(channel)
+
+    asyncio.run(telegram_channel._on_voice(update, context))
+
+    channel.runtime.submit.assert_not_called()

@@ -457,7 +457,7 @@ TELEGRAM_BOT_TOKEN_ENV = "JARVIS_TELEGRAM_BOT_TOKEN"
 TELEGRAM_ALLOWED_CHAT_ID_ENV = "JARVIS_TELEGRAM_ALLOWED_CHAT_ID"
 
 
-def _start_telegram_channel(runtime: JarvisRuntime):
+def _start_telegram_channel(runtime: JarvisRuntime, config: Config):
     """Startet TelegramChannel (ADR-027) in einem eigenen Thread, falls
     die bekannten Umgebungsvariablen gesetzt UND python-telegram-bot
     installiert ist - liefert (channel, thread) oder None. Ohne
@@ -482,7 +482,18 @@ def _start_telegram_channel(runtime: JarvisRuntime):
         )
         return None
 
-    channel = TelegramChannel(runtime, bot_token, allowed_chat_id)
+    # Sprach-Eingabe (ADR-038): Transcriber aus dem OpenAI-Key bauen. Ohne Key
+    # bleibt er None -> nur Text (der Voice-Handler wird dann nicht registriert).
+    transcriber = None
+    if config.openai_api_key:
+        try:
+            from core.transcribe import OpenAITranscriber
+
+            transcriber = OpenAITranscriber(config.openai_api_key, config.transcription_model)
+        except Exception:
+            logger.warning("Transcriber nicht verfuegbar - Sprach-Eingabe deaktiviert.", exc_info=True)
+
+    channel = TelegramChannel(runtime, bot_token, allowed_chat_id, transcriber=transcriber)
     thread = threading.Thread(target=channel.run, name="jarvis-runtime-telegram", daemon=True)
     thread.start()
     logger.info("TelegramChannel gestartet (eigener Thread, Runtime v2).")
@@ -510,7 +521,7 @@ def main() -> None:
         runtime = JarvisRuntime(config)
         runtime.start()
 
-        telegram = _start_telegram_channel(runtime)
+        telegram = _start_telegram_channel(runtime, config)
 
         try:
             if sys.stdin is not None:

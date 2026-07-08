@@ -78,10 +78,20 @@ class TelegramChannel:
     eine bereits existierende JarvisRuntime injiziert - baut keinen
     eigenen Core-Stack auf (Core-Stack bleibt einmalig, ADR-024)."""
 
-    def __init__(self, runtime: JarvisRuntime, bot_token: str, allowed_chat_id: str):
+    def __init__(
+        self,
+        runtime: JarvisRuntime,
+        bot_token: str,
+        allowed_chat_id: str,
+        transcriber=None,
+    ):
         self.runtime = runtime
         self.bot_token = bot_token
         self.allowed_chat_id = allowed_chat_id
+        # Sprach-Eingabe (ADR-038): optionaler Transcriber. Ist keiner injiziert
+        # (z. B. kein OpenAI-Key), wird der Voice-Handler nicht registriert -
+        # Textbetrieb bleibt unveraendert.
+        self.transcriber = transcriber
         self._application: Optional[Application] = None
         # Der PTB-Event-Loop laeuft in DIESEM Kanal-Thread (run_polling), nicht
         # im Runtime-/Main-Thread, der stop() aufruft. _loop wird per
@@ -112,6 +122,9 @@ class TelegramChannel:
         )
         self._application.bot_data["channel"] = self
         self._application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _on_message))
+        # Sprach-Eingabe (ADR-038): nur registrieren, wenn ein Transcriber da ist.
+        if self.transcriber is not None:
+            self._application.add_handler(MessageHandler(filters.VOICE, _on_voice))
 
         logger.info("TelegramChannel gestartet (Long-Polling, Runtime v2).")
         # stop_signals=None: Application.run_polling() versucht sonst,
@@ -195,22 +208,14 @@ def _log_send_future(future: Future) -> None:
         logger.exception("Telegram-Antwort konnte nicht gesendet werden.")
 
 
-async def _on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    channel: TelegramChannel = context.application.bot_data["channel"]
-    if update.effective_chat is None or update.message is None or not update.message.text:
-        return
-
-    chat_id = update.effective_chat.id
-    if not is_authorized(chat_id, channel.allowed_chat_id):
-        logger.warning("Nicht autorisierter Chat %s - Nachricht ignoriert.", chat_id)
-        return
-
-    user_input = update.message.text
-    loop = asyncio.get_running_loop()
+def _make_reply_callback(channel, bot, chat_id, loop):
+    """Baut den reply_callback: schleust die Antwort thread-sicher auf den
+    PTB-Loop (aus dem Runtime-Worker-Thread aufgerufen) und trackt den Send,
+    damit stop() ihn vor dem Teardown zustellt. Von Text- UND Voice-Pfad genutzt."""
 
     def reply_callback(text: str) -> None:
         future = asyncio.run_coroutine_threadsafe(
-            _send_reply_chunks(context.bot, chat_id=chat_id, text=text), loop
+            _send_reply_chunks(bot, chat_id=chat_id, text=text), loop
         )
         with channel._pending_lock:
             channel._pending_sends.add(future)
@@ -222,10 +227,63 @@ async def _on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
         future.add_done_callback(_done)
 
+    return reply_callback
+
+
+async def _on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    channel: TelegramChannel = context.application.bot_data["channel"]
+    if update.effective_chat is None or update.message is None or not update.message.text:
+        return
+
+    chat_id = update.effective_chat.id
+    if not is_authorized(chat_id, channel.allowed_chat_id):
+        logger.warning("Nicht autorisierter Chat %s - Nachricht ignoriert.", chat_id)
+        return
+
+    reply_callback = _make_reply_callback(channel, context.bot, chat_id, asyncio.get_running_loop())
     # allow_async=True: die Runtime darf delegate_analysis in ihren
     # Hintergrund-Worker auslagern (Quittung sofort, Ergebnis-Push spaeter
     # ueber denselben reply_callback). Telegram bleibt reiner Transportkanal
     # (ADR-035) - die gesamte Async-Orchestrierung liegt in der Runtime.
     channel.runtime.submit(
-        user_input, reply_callback, plan_filter=_runtime_filter_plan, allow_async=True
+        update.message.text, reply_callback, plan_filter=_runtime_filter_plan, allow_async=True
+    )
+
+
+async def _on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Sprachnachricht (ADR-038). Reihenfolge nach PO-Auflagen:
+    1. NUR nach Autorisierung wird ueberhaupt Audio geladen.
+    2. Audio bleibt im Speicher (kein Datei-Write).
+    3. Transkription -> Echo (gegen Verhoerer) -> dieselbe Whitelist/Pipeline
+       wie Text.
+    4. Schlaegt die Transkription fehl oder ergibt nichts, wird NICHTS
+       ausgefuehrt - nur eine klare Rueckmeldung."""
+    channel: TelegramChannel = context.application.bot_data["channel"]
+    if update.effective_chat is None or update.message is None or update.message.voice is None:
+        return
+
+    chat_id = update.effective_chat.id
+    if not is_authorized(chat_id, channel.allowed_chat_id):
+        logger.warning("Nicht autorisierter Chat %s - Sprachnachricht ignoriert.", chat_id)
+        return
+
+    reply_callback = _make_reply_callback(channel, context.bot, chat_id, asyncio.get_running_loop())
+
+    try:
+        tg_file = await context.bot.get_file(update.message.voice.file_id)
+        # download_as_bytearray: nur im Speicher - kein download_to_drive (Auflage).
+        audio = bytes(await tg_file.download_as_bytearray())
+        transcript = await asyncio.to_thread(channel.transcriber.transcribe, audio, "voice.ogg")
+    except Exception:
+        logger.exception("Sprachnachricht konnte nicht verarbeitet werden.")
+        reply_callback("Ich konnte die Sprachnachricht nicht verstehen - bitte nochmal oder als Text.")
+        return
+
+    if not transcript:
+        reply_callback("Ich habe in der Sprachnachricht nichts verstanden - bitte nochmal.")
+        return
+
+    reply_callback(f"🎤 Verstanden: «{transcript}»")
+    channel.runtime.submit(
+        transcript, reply_callback, plan_filter=_runtime_filter_plan, allow_async=True
     )

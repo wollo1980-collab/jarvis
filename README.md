@@ -244,6 +244,16 @@ schickt zuerst die Zusage („ich fahre herunter"), stellt sie sicher zu und
 beendet dann die Runtime. Zum Wiederanlauf den Autostart bzw.
 `pythonw jarvis_runtime.py` nutzen. (Die Konsole hat weiterhin ihr Exit-Wort.)
 
+## Sprachnachricht an Jarvis (Sprach-Eingabe, ADR-038)
+
+Über den **Runtime-Telegram-Kanal** kannst du Jarvis eine **Sprachnachricht**
+schicken statt zu tippen. Jarvis verarbeitet Audio **nur nach Autorisierung**,
+**speichert es nicht** (nur im Speicher), transkribiert es (OpenAI, derselbe
+`OPENAI_API_KEY`; Modell via `transcription_model`, Standard `whisper-1`),
+**echoot das Erkannte** (🎤 „Verstanden: …") und behandelt es dann wie eine
+Textnachricht — dieselbe Whitelist. Versteht Jarvis nichts, wird **nichts
+ausgeführt**, nur rückgemeldet. Ohne OpenAI-Key bleibt der Textbetrieb unberührt.
+
 ## Tests ausführen
 
 ```bash

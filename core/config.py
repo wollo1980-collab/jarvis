@@ -25,6 +25,10 @@ class Config:
     openai_api_key: str = ""
     model: str = "gpt-4o-mini"
 
+    # Sprach-Eingabe (STT, ADR-038): Transkriptionsmodell fuer Telegram-
+    # Sprachnachrichten. Nutzt denselben openai_api_key wie oben.
+    transcription_model: str = "whisper-1"
+
     # Multi-KI Provider-Auswahl (v0.8 Phase 1, ADR-029): "openai" | "claude".
     # Explizite Auswahl per Config, kein Auto-Routing. Claude nutzt einen
     # eigenen Key (ANTHROPIC_API_KEY, ausschliesslich ueber Env, nie in
@@ -121,6 +125,7 @@ class Config:
         cfg = cls(
             openai_api_key=api_key,
             model=data.get("model", cls.model),
+            transcription_model=data.get("transcription_model", cls.transcription_model),
             ai_provider=data.get("ai_provider", cls.ai_provider),
             anthropic_api_key=anthropic_key,
             claude_model=data.get("claude_model", cls.claude_model),
