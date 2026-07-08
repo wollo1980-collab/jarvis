@@ -51,6 +51,7 @@ import commands.memory as memory_commands
 import commands.monitor as monitor_commands
 import commands.plan as plan_commands
 import commands.reports as reports_commands
+import commands.shutdown as shutdown_commands
 import commands.web as web_commands
 from commands import REGISTRY
 from core.agent_backend import ClaudeCodeBackend
@@ -130,6 +131,11 @@ class JarvisRuntime:
         # Verdrahtungsschicht gewählt und injiziert (Fachlogik nennt kein
         # konkretes Backend, Modellunabhängigkeit).
         plan_commands.configure(config, ClaudeCodeBackend())
+        # Beenden-Befehl (stop_runtime): injizierter Hook legt das Stop-Sentinel
+        # in die Queue - der Befehl kennt die Runtime nicht (entkoppelt), und
+        # weil nur die Queue befuellt wird, gibt es keinen Selbst-Join des
+        # Worker-Threads (Deadlock-Falle vermieden).
+        shutdown_commands.configure(self._request_shutdown)
 
         self._queue: "queue.Queue" = queue.Queue()
         self._worker: Optional[threading.Thread] = None
@@ -153,6 +159,17 @@ class JarvisRuntime:
         )
         self._worker.start()
         logger.info("Jarvis-Runtime gestartet (Worker-Thread aktiv).")
+
+    def _request_shutdown(self) -> None:
+        """Hook fuer den stop_runtime-Befehl (aus der Verdrahtungsschicht
+        injiziert): legt das Stop-Sentinel in die Queue. Der Worker zieht es
+        erst in der NAECHSTEN Runde - also nachdem die aktuelle Nachricht
+        (inkl. der 'ich fahre herunter'-Zusage) fertig verarbeitet ist. main()
+        wacht dann aus worker.join() auf und faehrt im finally sauber herunter.
+        Bewusst KEIN join() hier: der Aufruf laeuft auf dem Worker-Thread selbst
+        (der Befehl wird dort ausgefuehrt) - ein join wuerde sich selbst
+        blockieren."""
+        self._queue.put(_STOP)
 
     def stop(self) -> None:
         """Legt den Stop-Sentinel in die Queue und wartet, bis der

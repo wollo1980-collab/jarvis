@@ -110,6 +110,16 @@ Abgrenzung: plan_next_step SCHLAEGT einen naechsten Projektschritt VOR;
 delegate_analysis beantwortet eine konkrete Analysefrage zu einem Repo. Eine
 allgemeine Wissensfrage ist chat.
 
+WICHTIG zu stop_runtime: Verwende stop_runtime, wenn der Nutzer JARVIS SELBST
+(die laufende Assistenz/Runtime) beenden/herunterfahren moechte - z. B. "beende
+dich", "fahr dich runter", "stell dich ab", "beende Jarvis", "Jarvis
+herunterfahren". Streng abgrenzen: shutdown_pc = den RECHNER ausschalten ("fahr
+den PC herunter", "schalte den Computer aus"); stop_runtime = NUR Jarvis
+beenden, der Rechner laeuft weiter. Bloße Abschiedsworte wie "Tschuess", "Ende",
+"Stop", "Bye", "Danke" sind KEIN stop_runtime, sondern chat - nur ein klar auf
+Jarvis selbst gerichteter Beenden-Wunsch waehlt stop_runtime. Kein
+target/parameters noetig.
+
 Gib bei confidence an, wie sicher du dir beim erkannten Intent bist
 (1.0 = eindeutig, z. B. "öffne Excel"; niedrige Werte bei Mehrdeutigkeit,
 z. B. "mach das Ding auf")."""

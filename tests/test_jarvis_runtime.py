@@ -300,6 +300,28 @@ def test_stop_cleanly_terminates_worker_thread(tmp_path):
     assert runtime._worker.is_alive() is False
 
 
+def test_shutdown_hook_is_wired_to_runtime(tmp_path):
+    # Der stop_runtime-Befehl bekommt beim Runtime-Aufbau den Hook injiziert
+    # (Verdrahtungsschicht) - genau wie delegate/plan ihr Backend.
+    import commands.shutdown as shutdown_commands
+
+    runtime = JarvisRuntime(_make_config(tmp_path), ai=FakeAI())
+
+    assert shutdown_commands._shutdown_hook == runtime._request_shutdown
+
+
+def test_request_shutdown_stops_worker(tmp_path):
+    # _request_shutdown legt nur das Stop-Sentinel in die Queue (kein
+    # Selbst-Join) -> der Worker beendet sich sauber in der naechsten Runde.
+    runtime = JarvisRuntime(_make_config(tmp_path), ai=FakeAI())
+    runtime.start()
+
+    runtime._request_shutdown()
+    runtime._worker.join(timeout=5.0)
+
+    assert runtime._worker.is_alive() is False
+
+
 def test_stufe2_commands_are_fail_closed(tmp_path):
     """Sicherheitsstufe-2/3-Commands duerfen ueber die Runtime nicht
     ausgefuehrt werden - _RuntimeSpeech.listen() liefert "" (fail

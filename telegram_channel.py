@@ -45,7 +45,7 @@ logger = logging.getLogger("jarvis.runtime.telegram")
 # Event-Loop. Der Standalone-Bot (telegram_main.py) bleibt bewusst ohne diesen
 # Intent - er hat keinen Async-Worker und wuerde bei einer Minuten-Analyse den
 # PTB-Loop blockieren.
-RUNTIME_ALLOWED_INTENTS = ALLOWED_INTENTS | {"delegate_analysis", "plan_next_step"}
+RUNTIME_ALLOWED_INTENTS = ALLOWED_INTENTS | {"delegate_analysis", "plan_next_step", "stop_runtime"}
 
 __all__ = [
     "TelegramChannel",
@@ -57,6 +57,12 @@ __all__ = [
 ]
 
 _MAX_TELEGRAM_TEXT = 4000
+
+# Zeitlimit (Sekunden), das stop() auf das Zustellen noch ausstehender Antworten
+# wartet, bevor der Event-Loop gestoppt wird. Sichert die "ich fahre herunter"-
+# Zusage des stop_runtime-Befehls gegen den Teardown ab (fire-and-forget-Reply
+# wuerde sonst mit dem Loop-Stop verloren gehen).
+_SEND_FLUSH_TIMEOUT = 10.0
 
 
 def _runtime_filter_plan(steps):
@@ -83,6 +89,12 @@ class TelegramChannel:
         # verfuegbar ist.
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._loop_ready = threading.Event()
+        # Ausstehende (fire-and-forget) Antwort-Sends. stop() wartet auf deren
+        # Zustellung, bevor der Loop stoppt - sonst geht die letzte Nachricht
+        # (z. B. die Herunterfahr-Zusage) verloren. Set + Lock, weil add/discard
+        # im PTB-Loop-Thread, das Auslesen aber im Main-Thread passiert.
+        self._pending_sends: set = set()
+        self._pending_lock = threading.Lock()
 
     async def _post_init(self, application: Application) -> None:
         """Laeuft im PTB-Event-Loop-Thread nach der Initialisierung und vor
@@ -126,7 +138,24 @@ class TelegramChannel:
                 "TelegramChannel.stop(): Event-Loop nicht verfuegbar - Shutdown uebersprungen."
             )
             return
+        # Auflage (Zusage-vor-Teardown): ausstehende Antworten - v. a. die
+        # "ich fahre herunter"-Zusage - noch zustellen, BEVOR der Loop stoppt.
+        # Der Loop laeuft hier noch, die Sends laufen also durch.
+        self._flush_pending_sends()
         loop.call_soon_threadsafe(app.stop_running)
+
+    def _flush_pending_sends(self, timeout: float = _SEND_FLUSH_TIMEOUT) -> None:
+        """Wartet, bis alle noch ausstehenden Antwort-Sends zugestellt sind (der
+        Event-Loop laeuft zu diesem Zeitpunkt noch, future.result() blockiert
+        also nur bis zur Zustellung). Fehler werden geloggt, nicht
+        weitergereicht - der Shutdown darf daran nicht scheitern."""
+        with self._pending_lock:
+            pending = list(self._pending_sends)
+        for future in pending:
+            try:
+                future.result(timeout=timeout)
+            except Exception:
+                logger.exception("Ausstehende Telegram-Antwort beim Stop nicht zugestellt.")
 
 
 def _message_chunks(text: str, limit: int = _MAX_TELEGRAM_TEXT) -> list[str]:
@@ -183,7 +212,15 @@ async def _on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         future = asyncio.run_coroutine_threadsafe(
             _send_reply_chunks(context.bot, chat_id=chat_id, text=text), loop
         )
-        future.add_done_callback(_log_send_future)
+        with channel._pending_lock:
+            channel._pending_sends.add(future)
+
+        def _done(f: Future) -> None:
+            with channel._pending_lock:
+                channel._pending_sends.discard(f)
+            _log_send_future(f)
+
+        future.add_done_callback(_done)
 
     # allow_async=True: die Runtime darf delegate_analysis in ihren
     # Hintergrund-Worker auslagern (Quittung sofort, Ergebnis-Push spaeter

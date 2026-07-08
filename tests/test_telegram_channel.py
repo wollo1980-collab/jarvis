@@ -236,6 +236,16 @@ def test_runtime_whitelist_allows_plan_next_step():
     assert len(steps) == 1
 
 
+def test_runtime_whitelist_allows_stop_runtime():
+    """stop_runtime (Jarvis selbst herunterfahren) ist ueber den Runtime-Kanal
+    erreichbar, aber bewusst nicht ueber den synchronen Standalone-Bot."""
+    assert "stop_runtime" in telegram_channel.RUNTIME_ALLOWED_INTENTS
+    assert "stop_runtime" not in telegram_main.ALLOWED_INTENTS
+    steps, rejection = telegram_channel._runtime_filter_plan([Plan(intent="stop_runtime")])
+    assert rejection is None
+    assert len(steps) == 1
+
+
 def test_telegram_channel_reuses_security_logic_from_telegram_main():
     """Regressionsschutz gegen kuenftiges versehentliches Duplizieren
     (ADR-027 Punkt 7/8) - echte Identitaet, nicht nur gleicher Inhalt."""
@@ -367,3 +377,22 @@ def test_stop_from_foreign_thread_does_not_raise_runtime_error():
 def test_stop_without_run_is_a_no_op():
     channel = TelegramChannel(runtime=MagicMock(), bot_token="TOKEN", allowed_chat_id="111")
     channel.stop()  # darf nicht werfen (kein Application, kein Loop)
+
+
+def test_stop_flushes_pending_sends_before_teardown():
+    """Auflage (Zusage-vor-Teardown): ausstehende (fire-and-forget) Antworten -
+    v. a. die 'ich fahre herunter'-Zusage - werden vor dem Loop-Stop zugestellt.
+    _flush_pending_sends wartet auf die Futures und schluckt Sende-Fehler, statt
+    den Shutdown scheitern zu lassen."""
+    from concurrent.futures import Future
+
+    channel = TelegramChannel(runtime=MagicMock(), bot_token="TOKEN", allowed_chat_id="111")
+    done = Future()
+    done.set_result(None)
+    boom = Future()
+    boom.set_exception(RuntimeError("send kaputt"))
+    with channel._pending_lock:
+        channel._pending_sends.update({done, boom})
+
+    # Darf nicht werfen - ein fehlgeschlagener Send blockiert den Shutdown nicht.
+    channel._flush_pending_sends(timeout=1.0)

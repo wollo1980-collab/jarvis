@@ -235,6 +235,15 @@ Jarvis: Vorschlag für den nächsten Schritt:
 - **Sicher by design:** der Agent bleibt strikt read-only; den Entwurf schreibt Jarvis selbst **additiv** (neue Datei, kein Überschreiben, kein Code, kein Git).
 - Async über den Telegram-Runtime-Kanal (Quittung → Push), lokal über die Konsole synchron.
 
+## Jarvis beenden (Runtime herunterfahren)
+
+Über den **Runtime-Telegram-Kanal** fährt Jarvis sich auf „**beende dich**" /
+„**fahr dich runter**" / „**beende Jarvis**" selbst sauber herunter (`stop_runtime`)
+— gemeint ist **Jarvis, nicht der Rechner** (das wäre `shutdown_pc`). Jarvis
+schickt zuerst die Zusage („ich fahre herunter"), stellt sie sicher zu und
+beendet dann die Runtime. Zum Wiederanlauf den Autostart bzw.
+`pythonw jarvis_runtime.py` nutzen. (Die Konsole hat weiterhin ihr Exit-Wort.)
+
 ## Tests ausführen
 
 ```bash

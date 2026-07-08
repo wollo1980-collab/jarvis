@@ -1,5 +1,9 @@
 # Logbook
 
+## 2026-07-08 - Beenden-Befehl (stop_runtime): Jarvis über Telegram sauber herunterfahren
+
+**Reibungsfix aus dem Dogfooding:** Jarvis stoppen hieß bisher PIDs jagen. Neuer Befehl `stop_runtime` (`commands/shutdown.py`): „beende dich" / „fahr dich runter" fährt die **Runtime** (nicht den Rechner) sauber herunter. **Kein Selbst-Join-Deadlock:** der Befehl kennt die Runtime nicht, er ruft nur einen injizierten Hook (`_request_shutdown`), der das `_STOP`-Sentinel in die Queue legt; der Worker bricht in der nächsten Runde ab, `main()` fährt im `finally` herunter. **Auflage „Zusage-vor-Teardown" erfüllt:** der Telegram-`reply_callback` ist fire-and-forget — `TelegramChannel` trackt jetzt ausstehende Sends und `stop()` stellt sie (v. a. die „ich fahre herunter"-Zusage) **zu, bevor der Loop stoppt**. Planner-Guidance in `core/ai.py` grenzt `stop_runtime` **streng** von `shutdown_pc` (Rechner aus) und von Abschiedsworten (`Tschüss`/`Ende` = chat) ab. `requires_confirmation=False` ist zwingend (Runtime-Speech ist fail-closed). Nur über den Runtime-Telegram-Kanal (Whitelist), nicht über den Standalone-Bot.
+
 ## 2026-07-08 - Kontext-Optimierung Stufe 1: kuratierter Kontext für plan_next_step
 
 Statt den Agenten das ganze Projekt explorieren zu lassen (~17 Turns), reicht `plan_next_step` den relevanten Stand jetzt **kuratiert im Prompt** mit (`_assemble_context`: PROJECT_STATE voll, die 3 jüngsten ADRs, jüngste CHANGELOG-/logbook-Einträge; jeder Block eindeutig mit Repo-Pfad überschrieben, **Cap pro Quelle + Gesamt-Cap** als Token-Schutz — PO-Auflagen). Der Agent bleibt read-only und darf bei Bedarf nachlesen (HANDBOOK für die Governance-Invariante). **Nur `plan_next_step`**; `delegate_analysis` bleibt unangetastet (beliebige Fragen brauchen echte Exploration). Der eigentliche Wirknachweis (Turn-Reduktion 17 → ~5) erfolgt per Live-Dogfood separat.
