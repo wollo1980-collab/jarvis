@@ -1,5 +1,9 @@
 # Logbook
 
+## 2026-07-08 - Kontext-Optimierung Stufe 1: kuratierter Kontext für plan_next_step
+
+Statt den Agenten das ganze Projekt explorieren zu lassen (~17 Turns), reicht `plan_next_step` den relevanten Stand jetzt **kuratiert im Prompt** mit (`_assemble_context`: PROJECT_STATE voll, die 3 jüngsten ADRs, jüngste CHANGELOG-/logbook-Einträge; jeder Block eindeutig mit Repo-Pfad überschrieben, **Cap pro Quelle + Gesamt-Cap** als Token-Schutz — PO-Auflagen). Der Agent bleibt read-only und darf bei Bedarf nachlesen (HANDBOOK für die Governance-Invariante). **Nur `plan_next_step`**; `delegate_analysis` bleibt unangetastet (beliebige Fragen brauchen echte Exploration). Der eigentliche Wirknachweis (Turn-Reduktion 17 → ~5) erfolgt per Live-Dogfood separat.
+
 ## 2026-07-08 - delegate.py-Backend-Entkopplung: ADR-036 vollständig geschlossen (erster geschlossener Kreis)
 
 **Kontext:** `plan_next_step` (die gestern gebaute Planungs-Fähigkeit) hat auf die Frage „nächster Schritt?" **selbst** die `delegate.py`-Backend-Entkopplung empfohlen — zweimal, geerdet, mit Zeilenverweisen und ADR-Prüfung. Damit ist dies der **erste voll geschlossene Vorschlag→Umsetzung-Kreis**: Jarvis schlägt vor, der Mensch entscheidet, wir setzen um (genau die COO-Vision / Governance-Invariante in Aktion).

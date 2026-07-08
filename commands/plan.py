@@ -23,6 +23,7 @@ jarvis_runtime.py) injiziert.
 from __future__ import annotations
 
 import logging
+import re
 import threading
 from datetime import datetime
 from pathlib import Path
@@ -43,6 +44,15 @@ _configured: bool = False
 
 _SUMMARY_CHARS = 600
 
+# Kuratierter Kontext (Kontext-Optimierung Stufe 1): Caps PRO Quelle UND ein
+# Gesamt-Cap (PO-Auflage) - Token-Schutz gegen einen aufgeblaehten Prompt.
+_RECENT_ADR_COUNT = 3
+_CAP_PROJECT_STATE = 6000
+_CAP_ADR = 3500
+_CAP_CHANGELOG = 2500
+_CAP_LOGBOOK = 2500
+_CAP_TOTAL = 20000
+
 # Der eigentliche Wert dieser Fähigkeit steckt im Prompt: Er zwingt zu einem
 # konkreten, klein geschnittenen Schritt in fester Struktur, erlaubt aber
 # ausdrücklich das ehrliche „kein sinnvoller Schritt" statt eines erzwungenen
@@ -50,10 +60,13 @@ _SUMMARY_CHARS = 600
 _PLANNING_PROMPT = (
     "Du bist die Planungs-Fähigkeit von Jarvis. Ziel: den sinnvollsten NÄCHSTEN "
     "kleinen Entwicklungsschritt für das Jarvis-Projekt vorschlagen — nicht mehr.\n\n"
-    "Lies dazu zuerst selbst den Projektstand im aktuellen Repo (nutze Read/Grep/"
-    "Glob): PROJECT_STATE.md, docs/handbook/HANDBOOK.md, die jüngsten Dateien in "
-    "docs/adr/, docs/CHANGELOG.md, docs/logbook.md sowie die offenen Aufgaben/TODOs. "
-    "Stütze dich nur auf das, was dort wirklich steht.\n\n"
+    "Der aktuelle Projektstand ist dir UNTEN bereits kuratiert mitgegeben "
+    "(PROJECT_STATE.md, die 3 jüngsten ADRs aus docs/adr/, jüngste "
+    "docs/CHANGELOG.md- und docs/logbook.md-Einträge). Stütze dich PRIMÄR auf "
+    "diesen mitgegebenen Kontext und nur auf das, was dort wirklich steht. Lies "
+    "nur dann zusätzlich selbst (Read/Grep/Glob), wenn es wirklich nötig ist - "
+    "insbesondere docs/handbook/HANDBOOK.md für die Governance-Invariante, oder "
+    "eine ältere ADR bei konkretem Verdacht.\n\n"
     "WICHTIG - ehrlich bleiben: Wenn sich nach der Analyse KEIN klar begründbarer "
     "kleiner nächster Schritt zeigt, sage das ausdrücklich und begründe es "
     "(Empfehlung: 'Ich sehe aktuell keinen klar begründbaren nächsten Schritt.') - "
@@ -104,6 +117,68 @@ def _summary(text: str) -> str:
     return f"{clean[:_SUMMARY_CHARS].rsplit(' ', 1)[0]} …"
 
 
+# --- Kuratierter Projektkontext (Kontext-Optimierung Stufe 1) -----------------
+# Statt den Agenten das ganze Projekt explorieren zu lassen (~17 Turns), reicht
+# Jarvis den relevanten Stand fertig kuratiert im Prompt mit - der Agent denkt
+# dann darueber, statt zu suchen. Read-only; der Agent darf bei Bedarf nachlesen.
+_ADR_RE = re.compile(r"ADR-(\d+)\.md$", re.IGNORECASE)
+
+
+def _read_text_capped(path: Path, cap: int) -> str:
+    """Liest eine Datei fail-safe und deckelt sie auf `cap` Zeichen (Kopf, da
+    CHANGELOG/logbook neueste Eintraege zuerst fuehren). Nie ein harter Fehler:
+    fehlt/klemmt die Datei, kommt eine Notiz statt eines Absturzes."""
+    try:
+        text = path.read_text(encoding="utf-8").strip()
+    except (OSError, UnicodeDecodeError):
+        return "(nicht lesbar)"
+    if len(text) <= cap:
+        return text
+    return text[:cap] + " …[gekürzt]"
+
+
+def _recent_adrs(adr_dir: Path, count: int) -> list:
+    """Die `count` juengsten ADRs (nach Nummer im Dateinamen absteigend)."""
+    numbered = []
+    for p in adr_dir.glob("ADR-*.md"):
+        m = _ADR_RE.search(p.name)
+        if m:
+            numbered.append((int(m.group(1)), p))
+    numbered.sort(key=lambda t: t[0], reverse=True)
+    return [p for _, p in numbered[:count]]
+
+
+def _assemble_context(repo: Path) -> str:
+    """Buendelt den relevanten Projektstand read-only als kuratierten Textblock:
+    PROJECT_STATE (voll), die 3 juengsten ADRs, juengste CHANGELOG-/logbook-
+    Eintraege. Jeder Block ist eindeutig mit seinem Repo-Pfad ueberschrieben
+    (PO-Auflage); es gilt ein Cap PRO Quelle UND ein Gesamt-Cap (Token-Schutz)."""
+    docs = repo / "docs"
+
+    def _block(rel_path: str, content: str) -> str:
+        return f"===== {rel_path} =====\n{content}"
+
+    parts = [
+        _block(
+            "docs/PROJECT_STATE.md",
+            _read_text_capped(docs / "PROJECT_STATE.md", _CAP_PROJECT_STATE),
+        )
+    ]
+    for adr in _recent_adrs(docs / "adr", _RECENT_ADR_COUNT):
+        parts.append(_block(f"docs/adr/{adr.name}", _read_text_capped(adr, _CAP_ADR)))
+    parts.append(
+        _block("docs/CHANGELOG.md", _read_text_capped(docs / "CHANGELOG.md", _CAP_CHANGELOG))
+    )
+    parts.append(
+        _block("docs/logbook.md", _read_text_capped(docs / "logbook.md", _CAP_LOGBOOK))
+    )
+
+    assembled = "\n\n".join(parts).strip()
+    if len(assembled) > _CAP_TOTAL:
+        assembled = assembled[:_CAP_TOTAL] + "\n…[Gesamtkontext gekürzt]"
+    return assembled
+
+
 def _write_proposal(text: str) -> Optional[Path]:
     """Schreibt den Vorschlag additiv als neue Markdown-Datei. Neue Datei mit
     Zeitstempel - kein Überschreiben, kein Code, isoliert im memory_dir. Ein
@@ -152,7 +227,13 @@ class PlanNextStepCommand:
         backend = _require_configured()
 
         logger.info("Nächster-Schritt-Planung gestartet (Repo %s).", _repo)
-        result = backend.analyze(_repo, _PLANNING_PROMPT, _limits, cancel_event)
+        question = (
+            f"{_PLANNING_PROMPT}\n"
+            "================ AKTUELLER PROJEKTKONTEXT "
+            "(kuratiert, read-only) ================\n\n"
+            f"{_assemble_context(_repo)}\n"
+        )
+        result = backend.analyze(_repo, question, _limits, cancel_event)
 
         if not result.ok:
             logger.info("Planung fehlgeschlagen: %s", result.detail)

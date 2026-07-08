@@ -127,8 +127,9 @@ def test_not_configured_raises_clear_error(tmp_path: Path):
 
 def test_prompt_enforces_reading_honesty_and_fixed_structure():
     prompt = plan._PLANNING_PROMPT
-    # liest den echten Projektstand selbst
+    # der Projektstand wird kuratiert MITGEGEBEN (Stufe 1); Quellen bleiben benannt
     assert "PROJECT_STATE.md" in prompt and "HANDBOOK.md" in prompt and "docs/adr/" in prompt
+    assert "mitgegeben" in prompt
     # ehrlicher "kein Schritt"-Fall (kein erzwungener Vorschlag)
     assert "keinen klar begründbaren nächsten Schritt" in prompt
     assert "NIEMALS einen Vorschlag" in prompt
@@ -144,3 +145,74 @@ def test_prompt_enforces_reading_honesty_and_fixed_structure():
         "## Empfehlung",
     ):
         assert section in prompt
+
+
+# --- Kontext-Optimierung Stufe 1: kuratierter Kontext -------------------------
+
+
+def _make_docs(tmp_path: Path, *, project_state="STATE-INHALT", adr_numbers=(1, 2, 3, 4, 5),
+               changelog="CHANGELOG-INHALT", logbook="LOGBOOK-INHALT") -> None:
+    docs = tmp_path / "docs"
+    (docs / "adr").mkdir(parents=True)
+    (docs / "PROJECT_STATE.md").write_text(project_state, encoding="utf-8")
+    (docs / "CHANGELOG.md").write_text(changelog, encoding="utf-8")
+    (docs / "logbook.md").write_text(logbook, encoding="utf-8")
+    for n in adr_numbers:
+        (docs / "adr" / f"ADR-{n:03d}.md").write_text(f"ADR-NR-{n}", encoding="utf-8")
+
+
+def test_assemble_context_picks_newest_adrs_and_labels_paths(tmp_path: Path):
+    _make_docs(tmp_path)
+    ctx = plan._assemble_context(tmp_path)
+
+    # Jeder Block ist eindeutig mit seinem Repo-Pfad ueberschrieben (Auflage 1).
+    assert "===== docs/PROJECT_STATE.md =====" in ctx and "STATE-INHALT" in ctx
+    assert "===== docs/CHANGELOG.md =====" in ctx and "CHANGELOG-INHALT" in ctx
+    assert "===== docs/logbook.md =====" in ctx and "LOGBOOK-INHALT" in ctx
+    assert "===== docs/adr/ADR-005.md =====" in ctx
+    # Nur die 3 juengsten ADRs (5,4,3) - nicht die aelteren.
+    assert "ADR-NR-5" in ctx and "ADR-NR-4" in ctx and "ADR-NR-3" in ctx
+    assert "ADR-NR-2" not in ctx and "ADR-NR-1" not in ctx
+
+
+def test_assemble_context_caps_per_source_and_tolerates_missing(tmp_path: Path):
+    docs = tmp_path / "docs"
+    (docs / "adr").mkdir(parents=True)
+    # PROJECT_STATE ueber dem Per-Quelle-Cap -> gekuerzt; CHANGELOG/logbook fehlen.
+    (docs / "PROJECT_STATE.md").write_text("X" * (plan._CAP_PROJECT_STATE + 500), encoding="utf-8")
+
+    ctx = plan._assemble_context(tmp_path)
+
+    assert "…[gekürzt]" in ctx          # Cap pro Quelle greift
+    assert "(nicht lesbar)" in ctx       # fehlende Dateien fail-safe toleriert
+
+
+def test_assemble_context_enforces_total_cap(tmp_path: Path):
+    # Alle Quellen ueber ihren Cap (inkl. der ADRs) -> Summe der Per-Quelle-Caps
+    # (6000 + 3x3500 + 2500 + 2500 = 21500) sprengt den Gesamt-Cap.
+    docs = tmp_path / "docs"
+    (docs / "adr").mkdir(parents=True)
+    big = "Y" * 10000
+    (docs / "PROJECT_STATE.md").write_text(big, encoding="utf-8")
+    (docs / "CHANGELOG.md").write_text(big, encoding="utf-8")
+    (docs / "logbook.md").write_text(big, encoding="utf-8")
+    for n in (1, 2, 3):
+        (docs / "adr" / f"ADR-{n:03d}.md").write_text(big, encoding="utf-8")
+
+    ctx = plan._assemble_context(tmp_path)
+
+    assert len(ctx) <= plan._CAP_TOTAL + 40  # Gesamt-Cap (+ Kuerzungsmarker)
+    assert "Gesamtkontext gekürzt" in ctx
+
+
+def test_prompt_includes_curated_context(tmp_path: Path, monkeypatch):
+    # Verdrahtung entkoppelt vom echten Repo pruefen: Sentinel statt echtem Kontext.
+    monkeypatch.setattr(plan, "_assemble_context", lambda repo: "KURATIERTER-SENTINEL")
+    backend = FakeBackend(AgentResult(text="# T\n## Empfehlung\nX", ok=True, duration_seconds=0.1))
+    _configure(tmp_path, backend)
+
+    plan.PlanNextStepCommand().execute(Plan(intent="plan_next_step"))
+
+    question = backend.calls[0][1]
+    assert "KURATIERTER-SENTINEL" in question       # Kontext landet im Prompt
+    assert "AKTUELLER PROJEKTKONTEXT" in question    # abgesetzter Kontextblock
