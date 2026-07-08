@@ -227,24 +227,38 @@ class ClaudeCodeBackend:
     ) -> AgentResult:
         """Uebersetzt das Subprozess-Ergebnis in ein AgentResult. Keine
         stillen Fehler: Exit != 0, is_error und nicht parsebares JSON werden
-        klar als ok=False mit `detail` gemeldet."""
+        klar als ok=False mit `detail` gemeldet.
+
+        Die JSON-Ausgabe wird IMMER zuerst verstanden - auch bei Exit != 0:
+        claude meldet Fehler (z. B. Session-Limit/429) als JSON mit
+        is_error=true und einer menschenlesbaren Meldung im Feld `result`.
+        Frueher griff bei Exit != 0 ein Vorab-Zweig, der das rohe stdout (das
+        JSON) als detail durchreichte -> beim Nutzer landete eine JSON-Wand
+        statt der Klartext-Meldung (Dogfooding-Fund 2026-07-08)."""
         stdout = (stdout or "").strip()
         stderr = (stderr or "").strip()
 
-        if returncode != 0:
-            detail = stderr or stdout or f"Exit-Code {returncode}"
-            return AgentResult(
-                text=stdout,
-                ok=False,
-                duration_seconds=duration,
-                detail=f"Agentenlauf fehlgeschlagen: {detail}",
-            )
+        data = None
+        if stdout:
+            try:
+                parsed = json.loads(stdout)
+            except (json.JSONDecodeError, ValueError):
+                parsed = None
+            if isinstance(parsed, dict):
+                data = parsed
 
-        try:
-            data = json.loads(stdout)
-        except (json.JSONDecodeError, ValueError):
-            # Kein/kaputtes JSON trotz Exit 0 -> Rohtext behalten, aber ehrlich
-            # als unsicher markieren (kein stiller Erfolg).
+        if data is None:
+            # Kein/kaputtes JSON. Bei Exit != 0 ehrlich mit stderr/stdout/
+            # Exit-Code, bei Exit 0 als "kein gueltiges JSON" markieren (kein
+            # stiller Erfolg) - Verhalten wie bisher.
+            if returncode != 0:
+                detail = stderr or stdout or f"Exit-Code {returncode}"
+                return AgentResult(
+                    text=stdout,
+                    ok=False,
+                    duration_seconds=duration,
+                    detail=f"Agentenlauf fehlgeschlagen: {detail}",
+                )
             return AgentResult(
                 text=stdout,
                 ok=False,
@@ -252,7 +266,8 @@ class ClaudeCodeBackend:
                 detail="Antwort des Agenten war kein gueltiges JSON.",
             )
 
-        is_error = bool(data.get("is_error", False))
+        # Exit != 0 gilt auch bei sauberem JSON als Fehler (etwas ging schief).
+        is_error = bool(data.get("is_error", False)) or returncode != 0
         text = (data.get("result") or "").strip()
         num_turns = data.get("num_turns")
         cost = data.get("total_cost_usd")
@@ -262,7 +277,7 @@ class ClaudeCodeBackend:
                 text=text,
                 ok=False,
                 duration_seconds=duration,
-                detail=data.get("subtype") or "Agent meldete einen Fehler oder lieferte keinen Text.",
+                detail=self._error_detail(data, text),
                 num_turns=num_turns if isinstance(num_turns, int) else None,
                 cost_usd=float(cost) if isinstance(cost, (int, float)) else None,
             )
@@ -275,3 +290,23 @@ class ClaudeCodeBackend:
             num_turns=num_turns if isinstance(num_turns, int) else None,
             cost_usd=float(cost) if isinstance(cost, (int, float)) else None,
         )
+
+    @staticmethod
+    def _error_detail(data: dict, text: str) -> str:
+        """Baut aus einem Fehler-JSON eine nutzerfreundliche `detail`-Meldung.
+        Der Session-Limit-/429-Fall bekommt eine freundliche, Jarvis-
+        gesprochene Meldung mitsamt dem Reset-Hinweis aus `result`; sonst wird
+        die menschenlesbare `result`-Meldung bevorzugt, erst zuletzt der
+        (oft wenig sagende) `subtype`."""
+        is_session_limit = (
+            data.get("api_error_status") == 429 or "session limit" in text.lower()
+        )
+        if is_session_limit:
+            hint = text or "Session-Limit erreicht."
+            return (
+                "Der Agenten-Arm ist gerade am Session-Limit und pausiert. "
+                f"Hinweis: {hint}"
+            )
+        if text:
+            return text
+        return data.get("subtype") or "Agent meldete einen Fehler oder lieferte keinen Text."

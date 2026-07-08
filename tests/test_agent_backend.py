@@ -168,3 +168,47 @@ def test_missing_binary_is_reported(tmp_path: Path):
 
     assert result.ok is False
     assert "nicht gefunden" in result.detail
+
+
+def test_session_limit_429_gives_friendly_detail(tmp_path: Path):
+    # 429/Session-Limit: claude beendet sich mit Exit != 0 und meldet den
+    # Fehler als JSON. Die menschenlesbare result-Meldung (mit Reset-Hinweis)
+    # muss beim Nutzer ankommen - keine Roh-JSON-Wand (Dogfooding-Fund
+    # 2026-07-08). Auch der irrefuehrende subtype="success" darf nicht greifen.
+    payload = {
+        "type": "result",
+        "subtype": "success",
+        "is_error": True,
+        "api_error_status": 429,
+        "num_turns": 1,
+        "result": "You've hit your session limit · resets 10:20am (Europe/Berlin)",
+    }
+    backend = _backend_returning(
+        FakePopen(output=(json.dumps(payload), ""), returncode=1)
+    )
+    result = backend.analyze(tmp_path, "frage", AgentLimits())
+
+    assert result.ok is False
+    assert "resets 10:20am" in result.detail  # Reset-Hinweis bleibt erhalten
+    assert "Session-Limit" in result.detail    # freundliche Rahmung
+    assert "{" not in result.detail            # keine Roh-JSON-Wand
+    assert "is_error" not in result.detail
+    assert "success" != result.detail          # nicht der irrefuehrende subtype
+
+
+def test_nonzero_exit_with_json_error_surfaces_result(tmp_path: Path):
+    # Exit != 0, aber verstehbares Fehler-JSON: die result-Meldung wird
+    # herausgezogen, statt das rohe JSON durchzureichen.
+    payload = {
+        "is_error": True,
+        "subtype": "error_during_execution",
+        "result": "Etwas ging schief",
+    }
+    backend = _backend_returning(
+        FakePopen(output=(json.dumps(payload), ""), returncode=1)
+    )
+    result = backend.analyze(tmp_path, "frage", AgentLimits())
+
+    assert result.ok is False
+    assert "Etwas ging schief" in result.detail
+    assert "{" not in result.detail
