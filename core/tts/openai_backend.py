@@ -14,6 +14,29 @@ from openai import OpenAI
 
 logger = logging.getLogger("jarvis.tts.openai")
 
+# Streaming-Platzhalter, den OpenAI in die WAV-Groessenfelder schreibt.
+_STREAMING_PLACEHOLDER = 0xFFFFFFFF
+
+
+def _fix_wav_header(data: bytes) -> bytes:
+    """Repariert die Groessenfelder im WAV-Header. OpenAI streamt die Datei
+    (Transfer-Encoding: chunked) und traegt als RIFF-/data-Groesse den
+    Platzhalter 0xFFFFFFFF ein - tolerante Player schlucken das, Windows'
+    winsound.PlaySound verweigert STUMM (Live-Fund 2026-07-09: Piptoene ja,
+    Antwort nein, kein Fehler im Log). Nicht-WAV-Daten kommen unveraendert
+    zurueck (fail-safe)."""
+    if len(data) < 44 or data[:4] != b"RIFF" or data[8:12] != b"WAVE":
+        return data
+
+    out = bytearray(data)
+    out[4:8] = (len(data) - 8).to_bytes(4, "little")
+    # data-Chunk direkt suchen statt Chunk-Iteration - die Platzhalter-
+    # Groessen wuerden jede Iteration in die Irre fuehren.
+    i = data.find(b"data", 12)
+    if i != -1 and i + 8 <= len(data):
+        out[i + 4 : i + 8] = (len(data) - i - 8).to_bytes(4, "little")
+    return bytes(out)
+
 
 class OpenAITTSBackend:
     name = "openai"
@@ -38,4 +61,7 @@ class OpenAITTSBackend:
             input=text,
             response_format="wav",
         )
-        response.stream_to_file(output_path)
+        # Header reparieren statt direkt zu streamen - sonst spielt winsound
+        # die Datei stumm nicht ab (siehe _fix_wav_header).
+        with open(output_path, "wb") as f:
+            f.write(_fix_wav_header(response.content))

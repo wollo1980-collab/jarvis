@@ -1,5 +1,9 @@
 # Logbook
 
+## 2026-07-09 - Bugfix: OpenAI-TTS war über winsound stumm (kaputte WAV-Header)
+
+**Nutzungslauf-Befund:** Nach dem Wechsel auf `tts_backend: "openai"` kamen Piptöne, aber keine gesprochene Antwort — ohne jeden Log-Fehler. Diagnose per Byte-Inspektion: OpenAI **streamt** WAVs (chunked) und trägt in RIFF-/data-Größenfelder den Platzhalter `0xFFFFFFFF` ein; `winsound.PlaySound` verweigert solche Dateien **stumm** (tolerante Player wie der Mediaplayer schlucken sie — deshalb klangen die Desktop-Stimmproben). Fix: `_fix_wav_header()` in `core/tts/openai_backend.py` repariert die Größenfelder vor dem Schreiben (fail-safe: Nicht-WAV passiert unverändert; idempotent). Lehre: „kein Fehler im Log" + „Player spielt's ab" beweist nichts für `winsound` — strikte Konsumenten brauchen strikte Dateien.
+
 ## 2026-07-09 - Welle 3.1+3.2 Push-to-talk am PC (ADR-041): PO-Ziel #3 erreicht
 
 **Machbarkeits-Check (3.1):** sounddevice 0.5.5 + pynput laufen auf Py 3.13, Sound-Blaster-Mikro vorhanden; **Fund:** Piper-Modell Thorsten lag seit 01.07. in `voices/` — nur das Paket fehlte; `piper-tts` läuft auf 3.13 (WAV-Beweis). Thorsten-**high** (108 MB) nachgeladen; **PO wählte high per A/B-Stimmprobe.** **Umsetzung (3.2):** neuer optionaler Kanal `hotkey_channel.py` — `Strg+Alt+J`-Toggle → Aufnahme im Speicher (16 kHz, kein Datei-Write) → geteilter `OpenAITranscriber` (aus `main()` gehoben, Telegram+PTT nutzen dieselbe Instanz) → `runtime.submit` (volle Intents wie Konsole, `allow_async`, fail-closed unberührt) → Antwort **lokal gesprochen** (SpeechEngine, jetzt pythonw-sicher). Transkripte nicht geloggt (nur Länge). 3 neue Runtime-Deps (piper-tts/sounddevice/pynput) in requirements-runtime. **Wake-Word bewusst Folge-Scheibe 3.2b** (tauscht nur den Auslöser). Latenz ehrlich: ~3–6 s bis zur hörbaren Antwort.

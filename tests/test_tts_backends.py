@@ -61,10 +61,21 @@ def test_openai_backend_raises_without_api_key():
         OpenAITTSBackend(api_key="")
 
 
-def test_openai_backend_calls_speech_api(tmp_path):
+def _broken_openai_wav(pcm: bytes = b"\x00\x01" * 100) -> bytes:
+    """WAV, wie OpenAI sie streamt: Groessenfelder = 0xFFFFFFFF-Platzhalter."""
+    placeholder = (0xFFFFFFFF).to_bytes(4, "little")
+    fmt = b"fmt " + (16).to_bytes(4, "little") + b"\x01\x00\x01\x00" + (24000).to_bytes(4, "little") + (48000).to_bytes(4, "little") + b"\x02\x00\x10\x00"
+    return b"RIFF" + placeholder + b"WAVE" + fmt + b"data" + placeholder + pcm
+
+
+def test_openai_backend_writes_repaired_wav(tmp_path):
+    """Live-Fund 2026-07-09: OpenAI streamt WAVs mit Platzhalter-Groessen
+    (0xFFFFFFFF) - winsound spielt die stumm NICHT ab. Das Backend muss den
+    Header vor dem Schreiben reparieren."""
     output_path = tmp_path / "out.wav"
     backend = OpenAITTSBackend(api_key="test-key", model="tts-1", voice="onyx")
     fake_response = MagicMock()
+    fake_response.content = _broken_openai_wav()
 
     with patch.object(
         backend.client.audio.speech, "create", return_value=fake_response
@@ -74,7 +85,22 @@ def test_openai_backend_calls_speech_api(tmp_path):
     create.assert_called_once_with(
         model="tts-1", voice="onyx", input="Hallo", response_format="wav"
     )
-    fake_response.stream_to_file.assert_called_once_with(str(output_path))
+    data = output_path.read_bytes()
+    assert int.from_bytes(data[4:8], "little") == len(data) - 8  # RIFF repariert
+    i = data.find(b"data", 12)
+    assert int.from_bytes(data[i + 4 : i + 8], "little") == len(data) - i - 8  # data repariert
+
+
+def test_fix_wav_header_leaves_valid_and_foreign_data_untouched():
+    from core.tts.openai_backend import _fix_wav_header
+
+    # Bereits korrekte Groessen bleiben korrekt (Reparatur ist idempotent) ...
+    broken = _broken_openai_wav()
+    fixed = _fix_wav_header(broken)
+    assert _fix_wav_header(fixed) == fixed
+    # ... und Nicht-WAV-Daten passieren unveraendert (fail-safe).
+    assert _fix_wav_header(b"kein wav") == b"kein wav"
+    assert _fix_wav_header(b"") == b""
 
 
 # --- ElevenLabs ------------------------------------------------------------
