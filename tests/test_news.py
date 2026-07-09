@@ -91,6 +91,38 @@ def test_command_reports_failure_when_no_feed_answers(monkeypatch):
     assert "nicht abrufbar" in result.message
 
 
+def test_topic_uses_google_news_search_feed(monkeypatch):
+    """ADR-043: 'was gibt's Neues in Usingen?' -> Google-News-RSS-Suche
+    statt der Standard-Feeds."""
+    news_commands.configure(["standard-feed"], timeout_seconds=5.0)
+    captured = {}
+
+    def fake_fetch(feeds, limit, timeout):
+        captured["feeds"] = feeds
+        return fetch_headlines(["a"], limit=limit, fetcher=_fetcher({"a": _RSS}))
+
+    monkeypatch.setattr(news_commands, "fetch_headlines", fake_fetch)
+
+    result = news_commands.GetNewsCommand().execute(
+        Plan(intent="get_news", parameters={"topic": "Usingen"})
+    )
+
+    assert result.status == Status.SUCCESS
+    assert result.message.startswith("Die Lage zu «Usingen», Sir:")
+    assert len(captured["feeds"]) == 1
+    assert "news.google.com/rss/search" in captured["feeds"][0]
+    assert "Usingen" in captured["feeds"][0]
+    assert result.data["topic"] == "Usingen"
+
+
+def test_google_news_url_encodes_topic():
+    from core.news_reader import google_news_feed_url
+
+    url = google_news_feed_url("Bad Homburg")
+    assert "q=Bad%20Homburg" in url
+    assert "hl=de" in url
+
+
 def test_command_not_configured_raises():
     news_commands._feeds = None
     try:

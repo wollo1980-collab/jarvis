@@ -275,12 +275,21 @@ Jarvis: 🗑 Eintrag gelöscht: «Zahnarzt»
   erfüllt deinen expliziten Auftrag und ist rein informativ (Governance-
   Invariante gewahrt). Daten liegen in `memory_data/entries.json`.
 
-## News-Briefing: „Was gibt's Neues?" (ADR-042)
+## News-Briefing: „Was gibt's Neues?" (ADR-042/043)
 
 Jarvis trägt die aktuellen **Top-Schlagzeilen** aus RSS-Feeds vor („Die Lage,
 Sir — …") — Standard: tagesschau, erweiterbar über `news_feeds` in
-`config.json`. Read-only, kein API-Key. Abgrenzung: „was gibt's Neues?" →
-Briefing; „such im Web nach X" → Recherche mit Quellen.
+`config.json`. Mit Orts-/Themenangabe („was gibt's Neues **in Usingen**?",
+„News **zu Bitcoin**") kommt die Google-News-RSS-Suche zum Zug. Read-only,
+kein API-Key. Abgrenzung: „was gibt's Neues?" → Briefing; „such im Web
+nach X" → Recherche mit Quellen.
+
+## Wetter: „Wie wird das Wetter morgen?" (ADR-043)
+
+Vorhersage über **Open-Meteo** (kostenlos, kein Key): versteht
+heute/morgen/übermorgen/Datum und jeden Ort — „Morgen in Usingen, Sir:
+wechselnd bewölkt, 12 bis 19 Grad, Regenrisiko 20 Prozent." Ohne Ortsangabe
+gilt `weather_default_location` aus `config.json`.
 
 ## Mit Jarvis am PC sprechen (Push-to-talk, ADR-041)
 

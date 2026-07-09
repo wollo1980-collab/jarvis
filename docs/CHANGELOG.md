@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-07-09 - Orts-News + Wetter (ADR-043)
+
+### Neu
+- **„Was gibt's Neues in Usingen?"** — Nachrichten jetzt auch zu Ort oder Thema (Google-News-RSS-Suche): „Die Lage zu «Usingen», Sir: …". Ohne Angabe wie gehabt die Standard-Feeds.
+- **„Wie wird das Wetter morgen?"** — neue Wetter-Fähigkeit (Open-Meteo, kostenlos, kein Key): versteht heute/morgen/übermorgen/Datum und jeden Ort; ohne Ortsangabe gilt der Standard-Ort (`weather_default_location`, bei Wolfgang: Usingen). „Morgen in Usingen, Sir: wechselnd bewölkt, 12 bis 19 Grad, Regenrisiko 20 Prozent."
+
 ## 2026-07-09 - News-Briefing + Sprechfassung (ADR-042)
 
 ### Neu

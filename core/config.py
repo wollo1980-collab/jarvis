@@ -40,6 +40,10 @@ class Config:
         default_factory=lambda: ["https://www.tagesschau.de/index~rss2.xml"]
     )
 
+    # Wetter (ADR-043, Open-Meteo, keyless): Standard-Ort, wenn der Nutzer
+    # keinen nennt ("wie wird das Wetter morgen?"). Leer = Rueckfrage.
+    weather_default_location: str = ""
+
     # Multi-KI Provider-Auswahl (v0.8 Phase 1, ADR-029): "openai" | "claude".
     # Explizite Auswahl per Config, kein Auto-Routing. Claude nutzt einen
     # eigenen Key (ANTHROPIC_API_KEY, ausschliesslich ueber Env, nie in
@@ -140,6 +144,7 @@ class Config:
             transcription_model=data.get("transcription_model", cls.transcription_model),
             ptt_enabled=data.get("ptt_enabled", cls.ptt_enabled),
             news_feeds=data.get("news_feeds") or ["https://www.tagesschau.de/index~rss2.xml"],
+            weather_default_location=data.get("weather_default_location", cls.weather_default_location),
             ai_provider=data.get("ai_provider", cls.ai_provider),
             anthropic_api_key=anthropic_key,
             claude_model=data.get("claude_model", cls.claude_model),

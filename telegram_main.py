@@ -75,6 +75,8 @@ ALLOWED_INTENTS = {
     "search_web",
     # News-Briefing (ADR-042): read-only RSS-Schlagzeilen, Stufe 0.
     "get_news",
+    # Wetter (ADR-043): read-only Open-Meteo, Stufe 0.
+    "get_weather",
     "check_mail",
     "show_mail_advertising",
 }

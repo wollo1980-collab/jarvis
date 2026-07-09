@@ -118,9 +118,18 @@ Erinnerungen/Aufgaben; list_facts zeigt dauerhafte Fakten.
 
 WICHTIG zu get_news: Verwende get_news, wenn der Nutzer aktuelle
 NACHRICHTEN/Schlagzeilen moechte ("was gibt's Neues?", "gibt es
-Nachrichten?", "was ist heute in der Welt los?"). Kein target noetig;
-optional parameters.count. Abgrenzung: get_news = Schlagzeilen-Briefing;
-search_web = gezielte Recherche zu einem konkreten Thema.
+Nachrichten?", "was ist heute in der Welt los?"). Nennt er einen Ort oder
+ein Thema ("was gibt's Neues in Usingen?", "News zu Bitcoin"), lege es in
+parameters.topic (nur der Ort/das Thema, ohne Trigger-Worte); sonst topic
+weglassen. Optional parameters.count. Abgrenzung: get_news =
+Schlagzeilen-Briefing; search_web = gezielte Recherche.
+
+WICHTIG zu get_weather: Verwende get_weather bei Wetterfragen ("wie wird
+das Wetter morgen in Usingen?", "Wetter heute?", "brauche ich morgen einen
+Schirm?"). parameters.location = NUR der Ortsname, falls genannt (sonst
+weglassen - dann gilt der Standard-Ort). parameters.day = "heute",
+"morgen", "uebermorgen" ODER ein ISO-Datum (rechne Wochentage anhand des
+oben genannten aktuellen Datums um); ohne Zeitangabe weglassen.
 
 WICHTIG zu search_web: Verwende search_web, wenn der Nutzer
 ausdruecklich Web, Internet, Suche, Recherche oder aktuelle Informationen

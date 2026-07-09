@@ -20,6 +20,7 @@ import commands.entries as entries_commands
 import commands.mail as mail_commands
 import commands.memory as memory_commands
 import commands.news as news_commands
+import commands.weather as weather_commands
 import commands.plan as plan_commands
 import commands.monitor as monitor_commands
 import commands.reports as reports_commands
@@ -101,6 +102,8 @@ def main() -> None:
         entries_commands.configure(config.memory_dir)
         # News-Briefing (ADR-042): RSS-Feeds aus der Config.
         news_commands.configure(config.news_feeds, timeout_seconds=config.timeout)
+        # Wetter (ADR-043): Standard-Ort aus der Config.
+        weather_commands.configure(config.weather_default_location, timeout_seconds=config.timeout)
 
         # Tabellen-Auswertung (v0.5, ADR-015): analyze_report ruft als
         # erster Command direkt die KI auf - dieselbe AIEngine-Instanz wird

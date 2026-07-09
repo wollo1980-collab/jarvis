@@ -253,6 +253,12 @@ def test_whitelist_allows_get_news_everywhere():
     assert "get_news" in telegram_channel.RUNTIME_ALLOWED_INTENTS
 
 
+def test_whitelist_allows_get_weather_everywhere():
+    """ADR-043: get_weather ist rein lesend (Stufe 0)."""
+    assert "get_weather" in telegram_main.ALLOWED_INTENTS
+    assert "get_weather" in telegram_channel.RUNTIME_ALLOWED_INTENTS
+
+
 def test_whitelist_allows_list_facts_everywhere():
     """Welle 1.3: list_facts ist rein lesend (Stufe 0) und deshalb - wie
     remember/forget_fact - schon im Standalone-Set erlaubt (und damit

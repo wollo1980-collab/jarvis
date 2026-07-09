@@ -54,6 +54,7 @@ import commands.plan as plan_commands
 import commands.news as news_commands
 import commands.reports as reports_commands
 import commands.shutdown as shutdown_commands
+import commands.weather as weather_commands
 import commands.web as web_commands
 from commands import REGISTRY
 from core.agent_backend import ClaudeCodeBackend
@@ -163,6 +164,8 @@ class JarvisRuntime:
         web_commands.configure(self.ai, timeout_seconds=config.timeout)
         # News-Briefing (ADR-042): RSS-Feeds aus der Config.
         news_commands.configure(config.news_feeds, timeout_seconds=config.timeout)
+        # Wetter (ADR-043): Standard-Ort aus der Config.
+        weather_commands.configure(config.weather_default_location, timeout_seconds=config.timeout)
         mail_commands.configure(config)
         # Agenten-Delegation (ADR-034): read-only Repo-Analyse. Backend aus der
         # Verdrahtungsschicht injiziert (Fachlogik nennt kein Backend, ADR-036).

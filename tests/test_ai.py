@@ -337,9 +337,11 @@ def test_system_prompt_is_built_from_registry_not_hardcoded():
     assert ShutdownPcCommand.name in prompt
     assert "chat" in prompt
     # Phantom-Intents aus der alten, hartcodierten Liste duerfen nicht
-    # mehr auftauchen - es gibt keine Commands dafuer.
+    # mehr auftauchen - es gibt keine Commands dafuer. ("weather" war bis
+    # ADR-043 ebenfalls Phantom - seit get_weather existiert, gehoert es
+    # legitim in den Prompt.)
     assert "search_google" not in prompt
-    assert "weather" not in prompt
+    assert "get_weather" in prompt
 
 
 def test_system_prompt_includes_command_descriptions():

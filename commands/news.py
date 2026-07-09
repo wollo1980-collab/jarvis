@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import Optional
 
 from core.models import Plan, Result, Status
-from core.news_reader import fetch_headlines
+from core.news_reader import fetch_headlines, google_news_feed_url
 
 _feeds: Optional[list] = None
 _timeout: float = 10.0
@@ -52,11 +52,22 @@ class GetNewsCommand:
         except (TypeError, ValueError):
             limit = _DEFAULT_LIMIT
 
-        headlines = fetch_headlines(_require_feeds(), limit=limit, timeout=_timeout)
+        # Orts-/Themen-News (ADR-043): "was gibt's Neues in Usingen?" ->
+        # Google-News-RSS-Suche statt der Standard-Feeds.
+        topic = str(plan.parameters.get("topic") or plan.target or "").strip()
+        if topic:
+            feeds = [google_news_feed_url(topic)]
+            header = f"Die Lage zu «{topic}», Sir:"
+        else:
+            feeds = _require_feeds()
+            header = "Die Lage, Sir — die wichtigsten Meldungen:"
+
+        headlines = fetch_headlines(feeds, limit=limit, timeout=_timeout)
         if not headlines:
+            detail = f" zu «{topic}»" if topic else ""
             return Result(
                 status=Status.FAILED,
-                message="Die Nachrichtenlage ist gerade nicht abrufbar, Sir — die Feeds antworten nicht.",
+                message=f"Die Nachrichtenlage{detail} ist gerade nicht abrufbar, Sir.",
             )
 
         lines = []
@@ -66,8 +77,8 @@ class GetNewsCommand:
         body = "\n".join(lines)
         return Result(
             status=Status.SUCCESS,
-            message=f"Die Lage, Sir — die wichtigsten Meldungen:\n{body}",
-            data={"count": len(headlines)},
+            message=f"{header}\n{body}",
+            data={"count": len(headlines), "topic": topic or None},
         )
 
 

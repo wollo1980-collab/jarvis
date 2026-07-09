@@ -12,12 +12,21 @@ from __future__ import annotations
 
 import logging
 import re
+import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from typing import Callable, Optional
 
 logger = logging.getLogger("jarvis.news")
+
+
+def google_news_feed_url(topic: str) -> str:
+    """RSS-Suche von Google News - liefert echte Schlagzeilen zu einem Ort
+    oder Thema ("Usingen", "Bitcoin") im selben RSS-Format wie die
+    Standard-Feeds (ADR-043-Erweiterung von ADR-042)."""
+    query = urllib.parse.quote(topic.strip())
+    return f"https://news.google.com/rss/search?q={query}&hl=de&gl=DE&ceid=DE:de"
 
 _TAG_RE = re.compile(r"<[^>]+>")
 _MAX_SUMMARY_CHARS = 200
