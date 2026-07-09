@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from core.fileio import read_json, write_json_atomic
+from core.redaction import redact
 
 logger = logging.getLogger("jarvis.memory.long_term")
 
@@ -62,7 +63,10 @@ class LongTermMemory:
             logger.info("Unbekannte Kategorie '%s' - falle zurück auf '%s'.", category, DEFAULT_CATEGORY)
             category = DEFAULT_CATEGORY
 
-        fact = Fact(text=text, category=category)
+        # Auto-Redaction (ADR-040): Secrets nie im Klartext auf Platte. Das
+        # Echo des Commands zeigt den geschwaerzten Text - der Nutzer SIEHT,
+        # dass geschwaerzt wurde.
+        fact = Fact(text=redact(text), category=category)
         facts = self._read()
         facts.append(fact.to_dict())
         self._write(facts)

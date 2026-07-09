@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from core.fileio import read_json, write_json_atomic
+from core.redaction import redact
 
 logger = logging.getLogger("jarvis.memory.entries")
 
@@ -137,8 +138,9 @@ class EntryStore:
         # A2: nichts zu melden, wenn kein Zeitpunkt existiert ODER er bei der
         # Anlage schon vergangen ist (rueckdatierter Merkposten, z. B. das
         # Audit vom 12.07.25) - solche Eintraege feuern NIE.
+        # Auto-Redaction (ADR-040): Secrets nie im Klartext auf Platte.
         entry = Entry(
-            text=text.strip(),
+            text=redact(text.strip()),
             when=clean_when,
             important=important,
             notified=(not clean_when or is_past(clean_when)),

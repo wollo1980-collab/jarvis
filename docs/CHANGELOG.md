@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-07-09 - Auto-Redaction: Secrets landen nie im Klartext auf Platte (ADR-040)
+
+### Neu
+- Diktierst oder tippst du versehentlich ein Secret (API-Key, Bot-Token, „mein Passwort ist …"), wird es **vor dem Speichern geschwärzt** — in Gesprächsverlauf, Langzeitgedächtnis und Einträgen steht dann `[Secret entfernt]`, der Satz bleibt lesbar. Das Echo zeigt dir die Schwärzung.
+- Bewusst **nicht** geschwärzt: E-Mail-Adressen und Telefonnummern — das sind bei Jarvis Nutzdaten (Mail-Triage, Einträge). Ehrliche Grenze: erkannt werden bekannte Secret-Formate, kein Allheilmittel.
+
 ## 2026-07-09 - Jarvis meldet sich von selbst: Erinnerungs-Push (A2, ADR-039)
 
 ### Neu

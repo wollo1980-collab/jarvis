@@ -14,6 +14,7 @@ from typing import Any, Protocol
 
 from core.fileio import read_json, write_json_atomic
 from core.models import Message
+from core.redaction import redact
 
 logger = logging.getLogger("jarvis.memory")
 
@@ -66,8 +67,9 @@ class JsonMemoryStore:
     def append_history(self, message: Message) -> None:
         with self._lock:
             history = self._read(self.history_path)
+            # Auto-Redaction (ADR-040): Secrets nie im Klartext auf Platte.
             history.append(
-                {"role": message.role, "content": message.content, "timestamp": message.timestamp}
+                {"role": message.role, "content": redact(message.content), "timestamp": message.timestamp}
             )
 
             # History-Limit: verhindert unbegrenztes Wachstum von history.json.
