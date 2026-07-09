@@ -233,6 +233,29 @@ def test_wake_word_triggers_shared_pipeline(monkeypatch):
     reset.assert_called()  # Modell-Puffer geleert (gegen Endlos-Schleife)
 
 
+def test_wake_records_quiet_speaker_via_calibrated_threshold(monkeypatch):
+    """Live-Fund 2026-07-09 (2. Runde): feste Schwelle 300 verpasste leise
+    Sprecher - die Frage nach dem Wake wurde als 'keine Sprache' verworfen.
+    Jetzt kalibriert sich die Schwelle am Pegel des Wake-Words selbst."""
+    monkeypatch.setattr(hotkey_channel, "_beep", lambda start: None)
+    channel = _channel()
+    channel.process_audio = MagicMock()
+    from hotkey_channel import WakeWordListener
+
+    scores = iter([0.1, 0.9])
+    listener = WakeWordListener(channel, scorer=lambda f: next(scores, 0.0), reset=MagicMock())
+    # Leises "Hey Jarvis" (Pegel 200) -> Schwelle ~60; die Frage (Pegel 150)
+    # laege unter der alten Konstante 300, wird jetzt aber erkannt.
+    stream = FakeStream([200, 200] + [0] * 5 + [150] * 10 + [0] * 25)
+
+    try:
+        listener._listen_loop(stream)
+    except StopIteration:
+        pass
+
+    channel.process_audio.assert_called_once()
+
+
 def test_wake_without_speech_is_discarded_silently(monkeypatch):
     """Live-Fund 2026-07-09: Wake ohne Anschlussfrage (Fehltrigger) wird
     still verworfen - kein process_audio, keine genervte Ansage."""

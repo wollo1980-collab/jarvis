@@ -75,6 +75,14 @@ _WAKE_COOLDOWN_SECONDS = 3.0
 _SILENCE_RMS_THRESHOLD = 300.0
 _SILENCE_SECONDS = 1.5
 _LEADIN_SECONDS = 4.0
+# Adaptive Sprach-Schwelle (Live-Fund 2026-07-09: feste 300 verpasste leise
+# Sprecher/entfernte Mikrofone - die Frage wurde als "keine Sprache" verworfen).
+# Kalibrierung am gerade gehoerten "Hey Jarvis": Schwelle = Anteil des
+# Stimmpegels des Wake-Words, gedeckelt durch die alte Konstante, mit
+# Untergrenze gegen Rauschen.
+_RECENT_RMS_FRAMES = 13  # ~1 s Rueckblick (13 x 80 ms) - deckt das Wake-Word ab
+_VOICE_LEVEL_FRACTION = 0.25
+_MIN_RMS_THRESHOLD = 60.0
 
 
 def dependencies_available() -> bool:
@@ -139,6 +147,11 @@ def _to_wav(pcm: bytes) -> bytes:
         w.setframerate(SAMPLE_RATE)
         w.writeframes(pcm)
     return buffer.getvalue()
+
+
+def _frame_rms(frame) -> float:
+    """Lautstaerke (RMS) eines int16-Audio-Frames."""
+    return float(_np.sqrt(_np.mean(frame.astype(_np.float64) ** 2)))
 
 
 def _play_wav_bytes(data: bytes) -> None:
@@ -413,6 +426,9 @@ class WakeWordListener:
         """Kern-Schleife, mit Fake-Stream testbar. Ein Trigger verarbeitet
         die Folge-Aufnahme SYNCHRON in diesem Thread - waehrenddessen wird
         naturgemaess nicht gelauscht (plus explizite Abklingzeit)."""
+        from collections import deque
+
+        recent_rms: deque = deque(maxlen=_RECENT_RMS_FRAMES)
         while not self._stop.is_set():
             data, _overflowed = stream.read(_WAKE_FRAME_SAMPLES)
             frame = data.reshape(-1)
@@ -420,14 +436,26 @@ class WakeWordListener:
                 continue  # eigene Stimme zaehlt nicht (Selbstschutz)
             if (time.monotonic() - self._last_trigger) < _WAKE_COOLDOWN_SECONDS:
                 continue
+            recent_rms.append(_frame_rms(frame))
             score = self._scorer(frame)
             if score < _WAKE_SCORE_THRESHOLD:
                 continue
 
-            logger.info("Wake-Word erkannt (Score %.2f).", score)
+            # Sprach-Schwelle am Pegel des gerade gehoerten Wake-Words
+            # kalibrieren - so laut wie "Hey Jarvis" kommt, kommt auch die
+            # Frage (leiser Sprecher/entferntes Mikrofon inklusive).
+            voice_level = max(recent_rms, default=0.0)
+            threshold = max(
+                min(voice_level * _VOICE_LEVEL_FRACTION, _SILENCE_RMS_THRESHOLD),
+                _MIN_RMS_THRESHOLD,
+            )
+            logger.info(
+                "Wake-Word erkannt (Score %.2f, Stimmpegel ~%.0f, Sprach-Schwelle %.0f).",
+                score, voice_level, threshold,
+            )
             self._last_trigger = time.monotonic()
             self._announce()
-            audio = self._record_until_silence(stream)
+            audio = self._record_until_silence(stream, threshold)
             _beep(start=False)
             if audio:
                 self.channel.process_audio(audio)
@@ -438,6 +466,7 @@ class WakeWordListener:
             # Modell-Puffer leeren, sonst feuert das alte "Hey Jarvis" beim
             # Weiterlauschen sofort erneut (Endlos-Schleife, Live-Fund).
             self._reset_model()
+            recent_rms.clear()
             self._last_trigger = time.monotonic()
 
     def _announce(self) -> None:
@@ -454,23 +483,26 @@ class WakeWordListener:
         finally:
             self.channel._speaking.clear()
 
-    def _record_until_silence(self, stream) -> bytes:
+    def _record_until_silence(self, stream, threshold: float = _SILENCE_RMS_THRESHOLD) -> bytes:
         """Nimmt nach dem Wake-Word auf: wartet zuerst auf SPRACHBEGINN
         (Vorlauf _LEADIN_SECONDS - der Nutzer braucht einen Moment zum
         Formulieren), dann bis ~1.5 s Stille nach dem Sprechen. Kommt gar
         keine Sprache: leeres Ergebnis (der Aufrufer verwirft still). Nur im
-        Speicher; gerechnet in AUDIO-Zeit (deterministisch testbar)."""
+        Speicher; gerechnet in AUDIO-Zeit (deterministisch testbar).
+        `threshold` kommt kalibriert vom Aufrufer (Pegel des Wake-Words)."""
         frames: list[bytes] = []
         frame_seconds = _WAKE_FRAME_SAMPLES / SAMPLE_RATE
         recorded_seconds = 0.0
         silent_seconds = 0.0
         speech_seen = False
+        peak = 0.0
         while recorded_seconds < MAX_RECORD_SECONDS:
             data, _overflowed = stream.read(_WAKE_FRAME_SAMPLES)
             frames.append(data.tobytes())
             recorded_seconds += frame_seconds
-            rms = float(_np.sqrt(_np.mean(data.astype(_np.float64) ** 2)))
-            if rms >= _SILENCE_RMS_THRESHOLD:
+            rms = _frame_rms(data)
+            peak = max(peak, rms)
+            if rms >= threshold:
                 speech_seen = True
                 silent_seconds = 0.0
             elif speech_seen:
@@ -478,5 +510,11 @@ class WakeWordListener:
                 if silent_seconds >= _SILENCE_SECONDS:
                     break
             elif recorded_seconds >= _LEADIN_SECONDS:
+                # Diagnose-Pegel loggen (nur Zahlen, kein Inhalt) - damit ein
+                # Live-"verworfen" nicht wieder Raetselraten bedeutet.
+                logger.info(
+                    "Keine Sprache im Vorlauf (Spitzenpegel %.0f, Schwelle %.0f).",
+                    peak, threshold,
+                )
                 return b""  # nie gesprochen - Fehltrigger/Schweigen
         return b"".join(frames) if speech_seen else b""
