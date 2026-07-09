@@ -291,6 +291,15 @@ heute/morgen/übermorgen/Datum und jeden Ort — „Morgen in Usingen, Sir:
 wechselnd bewölkt, 12 bis 19 Grad, Regenrisiko 20 Prozent." Ohne Ortsangabe
 gilt `weather_default_location` aus `config.json`.
 
+## „Hey Jarvis" — Wake-Word (ADR-044)
+
+Mit `"wake_word_enabled": true` in `config.json` genügt der Zuruf **„Hey
+Jarvis"**: Signalton → sprechen → kurz still sein → gesprochene Antwort.
+Die Erkennung läuft **vollständig lokal** (openwakeword, 1,3-MB-Modell) —
+kein Audio verlässt den Rechner, bis das Wake-Word erkannt ist; während
+Jarvis selbst spricht, lauscht er nicht. Standard: **aus** (bewusste
+Entscheidung fürs Dauer-Mikrofon). Der Hotkey bleibt parallel verfügbar.
+
 ## Mit Jarvis am PC sprechen (Push-to-talk, ADR-041)
 
 **`Strg+Alt+J`** drücken → Signalton → sprechen → erneut `Strg+Alt+J` (oder

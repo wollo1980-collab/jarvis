@@ -85,7 +85,7 @@ def test_empty_transcript_speaks_and_does_not_execute():
     _run_toggle_cycle(channel)
 
     runtime.submit.assert_not_called()
-    assert any("verstanden" in c.args[0].lower() for c in channel.speak.call_args_list)
+    assert any("verstanden" in c.args[0].lower() for c in channel._raw_speak.call_args_list)
 
 
 def test_transcriber_error_speaks_and_does_not_execute():
@@ -95,7 +95,7 @@ def test_transcriber_error_speaks_and_does_not_execute():
     _run_toggle_cycle(channel)
 
     runtime.submit.assert_not_called()
-    channel.speak.assert_called()
+    channel._raw_speak.assert_called()
 
 
 def test_empty_audio_speaks_and_does_not_transcribe():
@@ -107,7 +107,7 @@ def test_empty_audio_speaks_and_does_not_transcribe():
 
     assert transcriber.calls == []
     runtime.submit.assert_not_called()
-    assert any("aufgenommen" in c.args[0].lower() for c in channel.speak.call_args_list)
+    assert any("aufgenommen" in c.args[0].lower() for c in channel._raw_speak.call_args_list)
 
 
 def test_start_refuses_gracefully_without_dependencies(monkeypatch):
@@ -163,6 +163,116 @@ def test_make_speakable_leaves_short_text_untouched():
 
     assert make_speakable("Notiert, Sir: «Zahnarzt» — 09:00") == "Notiert, Sir: «Zahnarzt» — 09:00"
     assert make_speakable("") == ""
+
+
+# --- Wake-Word (ADR-044) ------------------------------------------------------
+
+
+class FakeStream:
+    """Mikrofonstream-Ersatz: liefert vorbereitete (frames, score)-Paare.
+    numpy-Arrays wie sounddevice sie liefert."""
+
+    def __init__(self, frames):
+        import numpy as np
+
+        self._frames = [np.full((1280, 1), amplitude, dtype=np.int16) for amplitude in frames]
+        self._i = 0
+
+    def read(self, n):
+        if self._i >= len(self._frames):
+            raise StopIteration("keine Frames mehr")
+        frame = self._frames[self._i]
+        self._i += 1
+        return frame, False
+
+
+def _wake_listener(channel, scores):
+    """Listener mit injiziertem Scorer: gibt der Reihe nach `scores` zurueck."""
+    from hotkey_channel import WakeWordListener
+
+    it = iter(scores)
+    return WakeWordListener(channel, scorer=lambda frame: next(it, 0.0))
+
+
+def test_wake_word_triggers_shared_pipeline(monkeypatch):
+    monkeypatch.setattr(hotkey_channel, "_beep", lambda start: None)
+    channel = _channel()
+    channel.process_audio = MagicMock()
+    listener = _wake_listener(channel, scores=[0.1, 0.9])  # 2. Frame weckt
+    # Nach dem Trigger: Aufnahme bis Stille - hier sofort still (Amplitude 0),
+    # Mindestdauer erzwingt ein paar Frames.
+    stream = FakeStream([500, 500] + [0] * 40)
+
+    try:
+        listener._listen_loop(stream)
+    except StopIteration:
+        pass  # Frames aufgebraucht = Loop-Ende im Test
+
+    channel.process_audio.assert_called_once()
+    audio = channel.process_audio.call_args.args[0]
+    assert isinstance(audio, bytes) and len(audio) > 0
+
+
+def test_wake_word_below_threshold_never_triggers(monkeypatch):
+    monkeypatch.setattr(hotkey_channel, "_beep", lambda start: None)
+    channel = _channel()
+    channel.process_audio = MagicMock()
+    listener = _wake_listener(channel, scores=[0.1, 0.3, 0.49, 0.2])
+    stream = FakeStream([500] * 4)
+
+    try:
+        listener._listen_loop(stream)
+    except StopIteration:
+        pass
+
+    channel.process_audio.assert_not_called()
+
+
+def test_wake_word_muted_while_jarvis_speaks(monkeypatch):
+    """Selbstschutz (ADR-044): waehrend der TTS-Wiedergabe zaehlt kein Score -
+    Jarvis weckt sich nicht mit der eigenen Stimme."""
+    monkeypatch.setattr(hotkey_channel, "_beep", lambda start: None)
+    channel = _channel()
+    channel.process_audio = MagicMock()
+    channel._speaking.set()  # Jarvis "spricht"
+    listener = _wake_listener(channel, scores=[0.99, 0.99, 0.99])
+    stream = FakeStream([500] * 3)
+
+    try:
+        listener._listen_loop(stream)
+    except StopIteration:
+        pass
+
+    channel.process_audio.assert_not_called()
+
+
+def test_wake_word_start_refuses_without_package(monkeypatch):
+    from hotkey_channel import WakeWordListener
+
+    monkeypatch.setattr(hotkey_channel, "_openwakeword", None)
+    listener = WakeWordListener(_channel())
+    assert listener.start() is False
+
+
+def test_channel_without_wake_flag_starts_no_listener(monkeypatch):
+    """wake_word=False (Default): kein Dauer-Lauscher - Privacy-by-default."""
+    channel = HotkeyChannel(
+        runtime=MagicMock(), transcriber=MagicMock(), speak=MagicMock(), wake_word=False
+    )
+    assert channel._wake_word_enabled is False
+    assert channel._wake_listener is None
+
+
+def test_speak_sets_and_clears_speaking_flag():
+    seen = []
+    channel = HotkeyChannel(
+        runtime=MagicMock(),
+        transcriber=MagicMock(),
+        speak=lambda text: seen.append(channel._speaking.is_set()),
+    )
+    channel.speak("Hallo")
+    assert seen == [True]              # waehrend der Ausgabe gesetzt
+    assert not channel._speaking.is_set()  # danach wieder frei
 
 
 def test_to_wav_produces_valid_mono_16k():

@@ -34,14 +34,23 @@ from typing import Callable, Optional
 logger = logging.getLogger("jarvis.runtime.hotkey")
 
 try:  # optionale Abhaengigkeit (ADR-041)
+    import numpy as _np
     import sounddevice as _sounddevice
 except Exception:  # noqa: BLE001 - fehlend/kaputt = Kanal bleibt aus
     _sounddevice = None
+    _np = None
 
 try:  # optionale Abhaengigkeit (ADR-041)
     from pynput import keyboard as _keyboard
 except Exception:  # noqa: BLE001
     _keyboard = None
+
+try:  # optionale Abhaengigkeit (ADR-044, Wake-Word)
+    import openwakeword as _openwakeword
+    from openwakeword.model import Model as _WakeWordModel
+except Exception:  # noqa: BLE001 - ohne Paket bleibt das Wake-Word aus
+    _openwakeword = None
+    _WakeWordModel = None
 
 # Auslöser im pynput-GlobalHotKeys-Format. Bewusst Konstante, kein Config-
 # Feld (YAGNI) - wird bei realem Bedarf konfigurierbar.
@@ -51,6 +60,16 @@ SAMPLE_RATE = 16_000  # Whisper-freundlich: 16 kHz mono int16
 MAX_RECORD_SECONDS = 15.0
 _BLOCK_SECONDS = 0.1
 _WORKER_JOIN_TIMEOUT = 5.0
+
+# Wake-Word (ADR-044): openwakeword erwartet 80-ms-Frames bei 16 kHz.
+WAKE_WORD_MODEL = "hey_jarvis"
+_WAKE_FRAME_SAMPLES = 1280
+_WAKE_SCORE_THRESHOLD = 0.5
+_WAKE_COOLDOWN_SECONDS = 3.0
+# Aufnahme-Ende nach dem Wake-Word: ~1.5 s Stille (einfacher RMS-Pegel).
+_SILENCE_RMS_THRESHOLD = 300.0
+_SILENCE_SECONDS = 1.5
+_MIN_UTTERANCE_SECONDS = 1.0
 
 
 def dependencies_available() -> bool:
@@ -138,15 +157,31 @@ class HotkeyChannel:
         transcriber,
         speak: Callable[[str], None],
         recorder: Optional[Callable[[], bytes]] = None,
+        wake_word: bool = False,
     ):
         self.runtime = runtime
         self.transcriber = transcriber
-        self.speak = speak
+        self._raw_speak = speak
         self._recorder = recorder or self._record_microphone
         self._recording = threading.Event()
         self._worker: Optional[threading.Thread] = None
         self._listener = None
         self._toggle_lock = threading.Lock()
+        # Wake-Word (ADR-044): waehrend Jarvis SELBST spricht, lauscht der
+        # Wake-Listener nicht - sonst weckt ihn die eigene Stimme ("Ich bin
+        # Jarvis ..."). speak() setzt dieses Flag um die Wiedergabe herum.
+        self._speaking = threading.Event()
+        self._wake_word_enabled = wake_word
+        self._wake_listener: Optional["WakeWordListener"] = None
+
+    def speak(self, text: str) -> None:
+        """Gesprochene Ausgabe mit Selbstschutz: waehrend der Wiedergabe ist
+        das Wake-Word stummgeschaltet (self._speaking)."""
+        self._speaking.set()
+        try:
+            self._raw_speak(text)
+        finally:
+            self._speaking.clear()
 
     # -- Lifecycle ---------------------------------------------------------
 
@@ -165,11 +200,19 @@ class HotkeyChannel:
         self._listener = _keyboard.GlobalHotKeys({HOTKEY: self._on_hotkey})
         self._listener.start()
         logger.info("Push-to-talk aktiv: %s (max. %.0fs pro Aufnahme).", HOTKEY, MAX_RECORD_SECONDS)
+
+        # Wake-Word (ADR-044) zusaetzlich zum Hotkey - optional, graceful.
+        if self._wake_word_enabled:
+            self._wake_listener = WakeWordListener(self)
+            if not self._wake_listener.start():
+                self._wake_listener = None
         return True
 
     def stop(self) -> None:
         """Beendet Listener und eine ggf. laufende Aufnahme (Runtime-Stop)."""
         self._recording.clear()
+        if self._wake_listener is not None:
+            self._wake_listener.stop()
         if self._listener is not None:
             try:
                 self._listener.stop()
@@ -194,9 +237,7 @@ class HotkeyChannel:
             self._worker.start()
 
     def _capture_and_process(self) -> None:
-        """Laeuft im PTT-Worker: aufnehmen -> transkribieren -> in die normale
-        Runtime-Pipeline geben. Fehler enden IMMER in einer gesprochenen
-        Rueckmeldung, nie in einer Ausfuehrung (Muster ADR-038)."""
+        """Laeuft im PTT-Worker: aufnehmen, dann in die geteilte Pipeline."""
         try:
             _beep(start=True)
             audio = self._recorder()
@@ -209,6 +250,13 @@ class HotkeyChannel:
         finally:
             self._recording.clear()
 
+        self.process_audio(audio)
+
+    def process_audio(self, audio: bytes) -> None:
+        """Geteilte Pipeline fuer Hotkey UND Wake-Word (ADR-044):
+        transkribieren -> in die normale Runtime-Pipeline geben. Fehler enden
+        IMMER in einer gesprochenen Rueckmeldung, nie in einer Ausfuehrung
+        (Muster ADR-038)."""
         if not audio:
             self.speak("Da wurde nichts aufgenommen, Sir - das Mikrofon blieb stumm.")
             return
@@ -245,4 +293,112 @@ class HotkeyChannel:
             while self._recording.is_set() and (time.monotonic() - started) < MAX_RECORD_SECONDS:
                 data, _overflowed = stream.read(int(SAMPLE_RATE * _BLOCK_SECONDS))
                 frames.append(data.tobytes())
+        return b"".join(frames)
+
+
+def wake_word_available() -> bool:
+    """True, wenn openwakeword importierbar ist (zusaetzlich zu den
+    Basis-Abhaengigkeiten des Kanals)."""
+    return dependencies_available() and _openwakeword is not None
+
+
+class WakeWordListener:
+    """Dauer-Lauscher (ADR-044): Mikrofon-Stream -> 80-ms-Frames -> lokales
+    hey_jarvis-Modell. Score ueber Schwelle -> Signalton -> Aufnahme bis
+    Stille -> dieselbe Pipeline wie der Hotkey (channel.process_audio).
+
+    Privacy: JEDES Frame wird ausschliesslich lokal bewertet und sofort
+    verworfen - nichts wird gespeichert, nichts verlaesst den Rechner, bis
+    das Wake-Word erkannt wurde. Waehrend Jarvis selbst spricht
+    (channel._speaking), wird nicht gelauscht (kein Selbst-Aufwecken).
+
+    scorer ist injizierbar (Tests: Funktion frame->float statt Modell)."""
+
+    def __init__(self, channel: HotkeyChannel, scorer: Optional[Callable] = None):
+        self.channel = channel
+        self._scorer = scorer
+        self._stop = threading.Event()
+        self._thread: Optional[threading.Thread] = None
+        self._last_trigger = 0.0
+
+    def start(self) -> bool:
+        if not wake_word_available():
+            logger.info("Wake-Word aus: openwakeword nicht installiert.")
+            return False
+        if self._scorer is None:
+            try:
+                # Modelldateien sind klein (~7 MB) und werden nur beim ersten
+                # Start heruntergeladen (idempotent).
+                _openwakeword.utils.download_models([WAKE_WORD_MODEL])
+                model = _WakeWordModel(
+                    wakeword_models=[WAKE_WORD_MODEL], inference_framework="onnx"
+                )
+                self._scorer = lambda frame: float(model.predict(frame)[WAKE_WORD_MODEL])
+            except Exception:  # noqa: BLE001 - Wake-Word ist strikt optional
+                logger.warning("Wake-Word-Modell nicht ladbar - Wake-Word bleibt aus.", exc_info=True)
+                return False
+
+        self._thread = threading.Thread(target=self._run, name="jarvis-wakeword", daemon=True)
+        self._thread.start()
+        logger.info('Wake-Word aktiv: "Hey Jarvis" (Modell lokal, Schwelle %.2f).', _WAKE_SCORE_THRESHOLD)
+        return True
+
+    def stop(self) -> None:
+        self._stop.set()
+        thread = self._thread
+        if thread is not None and thread.is_alive():
+            thread.join(timeout=_WORKER_JOIN_TIMEOUT)
+
+    def _run(self) -> None:
+        try:
+            with _sounddevice.InputStream(
+                samplerate=SAMPLE_RATE, channels=1, dtype="int16"
+            ) as stream:
+                self._listen_loop(stream)
+        except Exception:  # noqa: BLE001 - Lauscher darf die Runtime nie reissen
+            logger.exception("Wake-Word-Lauscher beendet sich nach Fehler.")
+
+    def _listen_loop(self, stream) -> None:
+        """Kern-Schleife, mit Fake-Stream testbar. Ein Trigger verarbeitet
+        die Folge-Aufnahme SYNCHRON in diesem Thread - waehrenddessen wird
+        naturgemaess nicht gelauscht (plus explizite Abklingzeit)."""
+        while not self._stop.is_set():
+            data, _overflowed = stream.read(_WAKE_FRAME_SAMPLES)
+            frame = data.reshape(-1)
+            if self.channel._speaking.is_set():
+                continue  # eigene Stimme zaehlt nicht (Selbstschutz)
+            if (time.monotonic() - self._last_trigger) < _WAKE_COOLDOWN_SECONDS:
+                continue
+            score = self._scorer(frame)
+            if score < _WAKE_SCORE_THRESHOLD:
+                continue
+
+            logger.info("Wake-Word erkannt (Score %.2f).", score)
+            self._last_trigger = time.monotonic()
+            _beep(start=True)
+            audio = self._record_until_silence(stream)
+            _beep(start=False)
+            self.channel.process_audio(audio)
+            self._last_trigger = time.monotonic()
+
+    def _record_until_silence(self, stream) -> bytes:
+        """Nimmt nach dem Wake-Word auf, bis ~1.5 s Stille herrscht (RMS-
+        Pegel) oder MAX_RECORD_SECONDS erreicht sind. Nur im Speicher.
+        Gerechnet wird in AUDIO-Zeit (aufgenommene Frames), nicht Wanduhr -
+        korrekt und deterministisch testbar."""
+        frames: list[bytes] = []
+        frame_seconds = _WAKE_FRAME_SAMPLES / SAMPLE_RATE
+        recorded_seconds = 0.0
+        silent_seconds = 0.0
+        while recorded_seconds < MAX_RECORD_SECONDS:
+            data, _overflowed = stream.read(_WAKE_FRAME_SAMPLES)
+            frames.append(data.tobytes())
+            recorded_seconds += frame_seconds
+            rms = float(_np.sqrt(_np.mean(data.astype(_np.float64) ** 2)))
+            if rms < _SILENCE_RMS_THRESHOLD:
+                silent_seconds += frame_seconds
+                if silent_seconds >= _SILENCE_SECONDS and recorded_seconds > _MIN_UTTERANCE_SECONDS:
+                    break
+            else:
+                silent_seconds = 0.0
         return b"".join(frames)

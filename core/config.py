@@ -34,6 +34,11 @@ class Config:
     # OpenAI-Key vorhanden sind; hier laesst er sich hart abschalten.
     ptt_enabled: bool = True
 
+    # Wake-Word (ADR-044): "Hey Jarvis" per dauerhaft lauschendem Mikrofon,
+    # lokal bewertet (openwakeword). Privacy-by-default AUS - bewusst per
+    # Config einschalten.
+    wake_word_enabled: bool = False
+
     # News-Briefing (ADR-042): RSS-Feeds fuer "was gibt's Neues?". Read-only,
     # kein Key. Default: tagesschau; beliebig erweiterbar in config.json.
     news_feeds: list = field(
@@ -143,6 +148,7 @@ class Config:
             model=data.get("model", cls.model),
             transcription_model=data.get("transcription_model", cls.transcription_model),
             ptt_enabled=data.get("ptt_enabled", cls.ptt_enabled),
+            wake_word_enabled=data.get("wake_word_enabled", cls.wake_word_enabled),
             news_feeds=data.get("news_feeds") or ["https://www.tagesschau.de/index~rss2.xml"],
             weather_default_location=data.get("weather_default_location", cls.weather_default_location),
             ai_provider=data.get("ai_provider", cls.ai_provider),

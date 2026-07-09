@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-07-09 - „Hey Jarvis" — Wake-Word (ADR-044)
+
+### Neu
+- **Einfach „Hey Jarvis" sagen** — kein Tastendruck mehr nötig: Signalton → sprechen → kurz still sein → Jarvis antwortet. Der Hotkey `Strg+Alt+J` bleibt als Rückfall bestehen.
+- **Privat by design:** Das dauerhaft lauschende Mikrofon wird ausschließlich **lokal** von einem 1,3-MB-Modell bewertet — nichts wird gespeichert, nichts verlässt den Rechner, bis das Wake-Word erkannt ist. Während Jarvis selbst spricht, lauscht er nicht (kein Selbst-Aufwecken). Abschaltbar per `"wake_word_enabled": false` (Standard: aus; bei Wolfgang an).
+
 ## 2026-07-09 - Orts-News + Wetter (ADR-043)
 
 ### Neu

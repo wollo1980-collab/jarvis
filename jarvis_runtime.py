@@ -597,7 +597,12 @@ def _start_hotkey_channel(runtime: JarvisRuntime, config: Config, transcriber):
         except Exception:  # noqa: BLE001
             logger.exception("Sprachausgabe fehlgeschlagen.")
 
-    channel = HotkeyChannel(runtime, transcriber, speak)
+    channel = HotkeyChannel(
+        runtime,
+        transcriber,
+        speak,
+        wake_word=getattr(config, "wake_word_enabled", False),
+    )
     return channel if channel.start() else None
 
 
