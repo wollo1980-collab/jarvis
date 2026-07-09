@@ -244,6 +244,31 @@ schickt zuerst die Zusage („ich fahre herunter"), stellt sie sicher zu und
 beendet dann die Runtime. Zum Wiederanlauf den Autostart bzw.
 `pythonw jarvis_runtime.py` nutzen. (Die Konsole hat weiterhin ihr Exit-Wort.)
 
+## Einträge: Erinnerungen, Aufgaben & wichtige Merkposten (A1)
+
+Jarvis merkt sich Einmaliges — per Text oder Sprachnachricht:
+
+```text
+Du:     erinnere mich morgen um 9 an den Zahnarzt
+Jarvis: Eintrag gespeichert: «Zahnarzt» — 10.07.2026 09:00
+Du:     wichtiger Termin: am 12.07.25 war das Audit in Musterstadt
+Jarvis: ⭐ Wichtiger Eintrag gespeichert: «Audit in Musterstadt» — 12.07.2025
+Du:     was steht an?
+Jarvis: Deine Einträge: …
+Du:     lösch die Zahnarzt-Erinnerung
+Jarvis: 🗑 Eintrag gelöscht: «Zahnarzt»
+```
+
+- Relative Zeiten („morgen", „nächsten Montag") rechnet der Planner um — das
+  **Echo nennt die verstandene Zeit**, damit Verhörer sofort auffallen.
+- Standard-Liste: offene/zukünftige Einträge **plus alle wichtigen** (auch
+  vergangene ⭐-Merkposten zum Nachschlagen); Rest der Vergangenheit nur auf
+  Nachfrage.
+- Abgrenzung: dauerhafte Fakten über dich → „merk dir …" (`remember_fact`);
+  Einmaliges/Terminiertes → Eintrag.
+- **Noch ohne selbstständiges Melden** zur Fälligkeit — das kommt mit dem
+  Scheduler (A2, ADR-039). Daten liegen in `memory_data/entries.json`.
+
 ## Sprachnachricht an Jarvis (Sprach-Eingabe, ADR-038)
 
 Über den **Runtime-Telegram-Kanal** kannst du Jarvis eine **Sprachnachricht**

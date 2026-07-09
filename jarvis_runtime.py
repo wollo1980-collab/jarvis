@@ -46,6 +46,7 @@ from datetime import date
 from typing import Callable, Optional
 
 import commands.delegate as delegate_commands
+import commands.entries as entries_commands
 import commands.mail as mail_commands
 import commands.memory as memory_commands
 import commands.monitor as monitor_commands
@@ -120,6 +121,9 @@ class JarvisRuntime:
         # Gleiche configure()-Verdrahtung wie main.py - Commands werden
         # beim Modul-Import instanziiert, bevor Config/AIEngine existieren.
         memory_commands.configure(config.memory_dir)
+        # Eintraege (A1): Erinnerungen/Aufgaben/Merkposten, eigener Store
+        # neben dem Langzeitgedaechtnis (memory/entries.py).
+        entries_commands.configure(config.memory_dir)
         reports_commands.configure(self.ai)
         monitor_commands.configure(self.ai)
         web_commands.configure(self.ai, timeout_seconds=config.timeout)

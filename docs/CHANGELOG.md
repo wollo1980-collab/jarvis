@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-09 - Einträge: Erinnerungen, Aufgaben & wichtige Merkposten (A1)
+
+### Neu
+- **„Erinnere mich morgen um 9 an den Zahnarzt"** — Jarvis legt Einträge an (per Sprache oder Text), versteht relative Zeiten („morgen", „nächsten Montag") und **echoot die verstandene Zeit** zurück (⭐ bei „wichtig"). Auch rückdatierte wichtige Merkposten gehen: „wichtiger Termin: am 12.07. war das Audit".
+- **„Was steht an?"** listet offene und zukünftige Einträge plus alle wichtigen; **„lösch die Zahnarzt-Erinnerung"** entfernt einen Eintrag.
+- Abgrenzung: dauerhafte Fakten über dich bleiben bei „merk dir…" (`remember_fact`); alles Einmalige/Terminierte ist jetzt ein Eintrag.
+- **Noch ohne selbstständiges Melden** — der proaktive Push zur Fälligkeit kommt als nächste Scheibe (A2, Scheduler).
+
 ## 2026-07-08 - Sprach-Eingabe über Telegram (ADR-038)
 
 ### Neu

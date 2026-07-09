@@ -28,6 +28,21 @@ def _make_ai(**overrides) -> AIEngine:
     return AIEngine(config)
 
 
+def test_system_prompt_contains_current_date_and_entry_guidance():
+    """A1: Der Planner-Prompt nennt das aktuelle Datum (sonst kann die KI
+    'morgen um 9' nicht in ISO umrechnen) und fuehrt die Eintrags-Intents
+    inkl. Abgrenzung zu remember_fact."""
+    from datetime import datetime
+
+    prompt = build_system_prompt()
+
+    assert datetime.now().strftime("%d.%m.%Y") in prompt  # heutiges Datum
+    assert "Europe/Berlin" in prompt
+    assert "add_entry" in prompt and "list_entries" in prompt and "delete_entry" in prompt
+    assert "parameters.when" in prompt and "ISO 8601" in prompt
+    assert "remember_fact ist" in prompt  # Abgrenzung dauerhafte Fakten vs. Eintrag
+
+
 def test_get_plan_parses_valid_json():
     ai = _make_ai()
     payload = json.dumps(

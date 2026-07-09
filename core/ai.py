@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime
 
 from commands import REGISTRY
 from core.config import Config
@@ -50,6 +51,25 @@ def _known_intents_text() -> str:
     return ", ".join(f"{name} ({desc})" if desc else name for name, desc in entries)
 
 
+# Deutsche Wochentage fuer die Datums-Zeile im Planner-Prompt (strftime %A
+# haengt an der System-Locale und liefert auf Standard-Setups Englisch).
+_WEEKDAYS_DE = ("Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag")
+
+
+def _current_datetime_text() -> str:
+    """Aktuelles Datum/Uhrzeit (Europe/Berlin) fuer den Planner-Prompt (A1):
+    ohne 'jetzt' kann die KI relative Angaben wie 'morgen um 9' oder
+    'naechsten Montag' nicht in konkrete ISO-Zeitpunkte umrechnen. Fail-safe
+    lokale Zeit, falls die Zeitzonen-DB fehlt."""
+    try:
+        from zoneinfo import ZoneInfo
+
+        now = datetime.now(ZoneInfo("Europe/Berlin"))
+    except Exception:  # noqa: BLE001 - Naeherung ist besser als Absturz
+        now = datetime.now()
+    return f"{_WEEKDAYS_DE[now.weekday()]}, {now.strftime('%d.%m.%Y %H:%M')} Uhr (Europe/Berlin)"
+
+
 def build_system_prompt() -> str:
     """Wird bei jedem get_plan()-Aufruf neu gebaut (nicht einmalig
     gecacht), damit zur Laufzeit registrierte Commands sofort sichtbar
@@ -57,6 +77,8 @@ def build_system_prompt() -> str:
     API-Call)."""
     return f"""Du bist die Intent-Analyse von Jarvis, einem lokalen Assistenten.
 Du führst NICHTS aus, du erkennst nur den Intent aus der Nutzereingabe.
+
+Aktuelles Datum und Uhrzeit: {_current_datetime_text()}.
 
 Antworte AUSSCHLIESSLICH mit einem JSON-Objekt in genau dieser Form,
 kein Freitext, keine Erklärung, kein Markdown-Codeblock:
@@ -119,6 +141,24 @@ beenden, der Rechner laeuft weiter. Bloße Abschiedsworte wie "Tschuess", "Ende"
 "Stop", "Bye", "Danke" sind KEIN stop_runtime, sondern chat - nur ein klar auf
 Jarvis selbst gerichteter Beenden-Wunsch waehlt stop_runtime. Kein
 target/parameters noetig.
+
+WICHTIG zu add_entry/list_entries/delete_entry (Eintraege = Erinnerungen,
+Aufgaben, wichtige Merkposten): Verwende add_entry, wenn der Nutzer sich
+etwas EINMALIGES vormerken will - z. B. "erinnere mich morgen um 9 an den
+Zahnarzt", "notiere: Milch kaufen", "wichtiger Termin: am 12.07. Audit in
+Musterstadt". parameters.text ist NUR der Eintragstext ohne Trigger-Worte.
+parameters.when ist der Zeitpunkt als ISO 8601 ("2026-07-10T09:00", bei
+ganztaegig nur "2025-07-12") - rechne relative Angaben ("morgen",
+"naechsten Montag", "in 2 Stunden") anhand des oben genannten aktuellen
+Datums um; lasse when komplett weg, wenn keine Zeit genannt ist. Setze
+parameters.important auf true bei "wichtig"/"wichtiger Termin"/"merk dir
+das als wichtig". Verwende list_entries fuer "was steht an?", "zeig meine
+Erinnerungen/Aufgaben/Eintraege" (optional parameters.keyword fuer ein
+Stichwort, parameters.important_only=true bei "wichtige"). Verwende
+delete_entry fuer "loesch/streich die X-Erinnerung" - parameters.text ist
+der wiedererkennbare Text. Abgrenzung zu remember_fact: remember_fact ist
+fuer DAUERHAFTE Fakten ueber den Nutzer (Gewohnheiten, Praeferenzen,
+Beziehungen); alles Einmalige oder Terminierte ist IMMER add_entry.
 
 Gib bei confidence an, wie sicher du dir beim erkannten Intent bist
 (1.0 = eindeutig, z. B. "öffne Excel"; niedrige Werte bei Mehrdeutigkeit,

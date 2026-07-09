@@ -45,7 +45,15 @@ logger = logging.getLogger("jarvis.runtime.telegram")
 # Event-Loop. Der Standalone-Bot (telegram_main.py) bleibt bewusst ohne diesen
 # Intent - er hat keinen Async-Worker und wuerde bei einer Minuten-Analyse den
 # PTB-Loop blockieren.
-RUNTIME_ALLOWED_INTENTS = ALLOWED_INTENTS | {"delegate_analysis", "plan_next_step", "stop_runtime"}
+RUNTIME_ALLOWED_INTENTS = ALLOWED_INTENTS | {
+    "delegate_analysis",
+    "plan_next_step",
+    "stop_runtime",
+    # Eintraege (A1): reiner eigener Datenlayer, harmlos wie remember_fact.
+    "add_entry",
+    "list_entries",
+    "delete_entry",
+}
 
 __all__ = [
     "TelegramChannel",

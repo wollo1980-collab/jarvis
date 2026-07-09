@@ -16,6 +16,7 @@ import sys
 from datetime import date
 
 import commands.delegate as delegate_commands
+import commands.entries as entries_commands
 import commands.mail as mail_commands
 import commands.memory as memory_commands
 import commands.plan as plan_commands
@@ -95,6 +96,8 @@ def main() -> None:
         # Konstruktor-Injection).
         long_term = LongTermMemory(config.memory_dir)
         memory_commands.configure(config.memory_dir)
+        # Eintraege (A1): eigener Store neben dem Langzeitgedaechtnis.
+        entries_commands.configure(config.memory_dir)
 
         # Tabellen-Auswertung (v0.5, ADR-015): analyze_report ruft als
         # erster Command direkt die KI auf - dieselbe AIEngine-Instanz wird
