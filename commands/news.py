@@ -9,10 +9,19 @@ search_web = explizite Recherche zu einem Thema. Read-only, Stufe 0.
 """
 from __future__ import annotations
 
+import re
 from typing import Optional
 
 from core.models import Plan, Result, Status
 from core.news_reader import fetch_headlines, google_news_feed_url
+
+# Auto-generierte Fuellstoff-"Meldungen", die Themen-/Orts-Suchen fluten
+# (Nutzungslauf-Befund 2026-07-09: "Luftqualitaet in Usingen ..."). Fuer
+# Wetter gibt es die eigene Faehigkeit; solche Treffer fliegen raus.
+_TOPIC_JUNK_RE = re.compile(
+    r"(?i)\b(luftqualität|luftqualitaet|pollenflug|benzinpreis|spritpreis|"
+    r"wetter (heute|morgen|aktuell)|stau (heute|aktuell))"
+)
 
 _feeds: Optional[list] = None
 _timeout: float = 10.0
@@ -62,7 +71,12 @@ class GetNewsCommand:
             feeds = _require_feeds()
             header = "Die Lage, Sir — die wichtigsten Meldungen:"
 
-        headlines = fetch_headlines(feeds, limit=limit, timeout=_timeout)
+        # Bei Themen-Suchen mehr holen und Fuellstoff aussieben - lieber zwei
+        # echte Meldungen als vier ueber Feinstaub.
+        fetch_limit = limit * 3 if topic else limit
+        headlines = fetch_headlines(feeds, limit=fetch_limit, timeout=_timeout)
+        if topic:
+            headlines = [h for h in headlines if not _TOPIC_JUNK_RE.search(h.title)][:limit]
         if not headlines:
             detail = f" zu «{topic}»" if topic else ""
             return Result(

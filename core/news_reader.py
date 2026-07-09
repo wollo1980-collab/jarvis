@@ -67,9 +67,21 @@ def _parse_feed(data: bytes) -> tuple[str, list[Headline]]:
     channel = root.find("channel")
     if channel is not None:  # RSS 2.0
         source = _clean(channel.findtext("title")) or "Unbekannte Quelle"
+        # Google-News-Feeds sind unordentlich (Nutzungslauf-Befund 2026-07-09):
+        # die "description" ist eine HTML-Linkliste verwandter Artikel (nach
+        # Tag-Strip: Wort-Salat), und der Titel traegt den Verlag hinten dran
+        # ("Schlagzeile - Verlag"). Deshalb: description verwerfen, Verlag
+        # als Quelle abtrennen.
+        is_google_news = "google news" in source.lower()
         for item in channel.findall("item"):
             title = _clean(item.findtext("title"))
-            if title:
+            if not title:
+                continue
+            if is_google_news:
+                head, sep, publisher = title.rpartition(" - ")
+                item_source = publisher if sep and publisher else source
+                headlines.append(Headline(title=head or title, summary="", source=item_source))
+            else:
                 headlines.append(
                     Headline(title=title, summary=_clean(item.findtext("description")), source=source)
                 )

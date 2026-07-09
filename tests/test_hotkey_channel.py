@@ -146,6 +146,18 @@ def test_make_speakable_caps_long_answers_at_sentence():
     assert spoken.endswith("— so weit der Überblick, Sir.")
 
 
+def test_make_speakable_speaks_ordinals_instead_of_numbers():
+    """Nutzungslauf-Befund 2026-07-09: '1. 2. 3.' wird als 'eins, zwei, drei'
+    vorgelesen - gesprochen soll es 'Erstens ... Zweitens ...' heissen."""
+    from hotkey_channel import make_speakable
+
+    spoken = make_speakable("Die Lage, Sir:\n1. Meldung A\n2. Meldung B\n3. Meldung C")
+    assert "Erstens: Meldung A" in spoken
+    assert "Zweitens: Meldung B" in spoken
+    assert "Drittens: Meldung C" in spoken
+    assert "1." not in spoken and "2." not in spoken
+
+
 def test_make_speakable_leaves_short_text_untouched():
     from hotkey_channel import make_speakable
 

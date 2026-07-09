@@ -67,6 +67,19 @@ _MAX_SPOKEN_CHARS = 600
 _URL_RE = re.compile(r"https?://\S+")
 _SPOKEN_SUFFIX = " — so weit der Überblick, Sir."
 
+# Nummerierte Listen ("1. ...") liest die Stimme als "eins, zwei, drei" vor
+# (Nutzungslauf-Befund 2026-07-09). Gesprochen wird daraus "Erstens: ..." -
+# Text-Kanaele behalten die normale Nummerierung.
+_LIST_ITEM_RE = re.compile(r"(?m)^(\d+)\.\s+")
+_ORDINALS = {
+    1: "Erstens: ", 2: "Zweitens: ", 3: "Drittens: ", 4: "Viertens: ",
+    5: "Fünftens: ", 6: "Sechstens: ", 7: "Siebtens: ", 8: "Achtens: ",
+}
+
+
+def _spoken_ordinal(match: "re.Match") -> str:
+    return _ORDINALS.get(int(match.group(1)), match.group(0))
+
 
 def make_speakable(text: str) -> str:
     """Macht eine Text-Antwort vorlesbar: Quellen-Block weg, URLs weg,
@@ -79,6 +92,8 @@ def make_speakable(text: str) -> str:
         text = text[:idx]
     # Nackte URLs fliegen raus (vorgelesene Links sind wertlos).
     text = _URL_RE.sub("", text)
+    # "1. ..." -> "Erstens: ..." (natuerliches Aufzaehlen statt "eins, zwei").
+    text = _LIST_ITEM_RE.sub(_spoken_ordinal, text)
     # Aufgeraeumte Leerraeume nach den Schnitten.
     text = re.sub(r"[ \t]+", " ", text).strip()
 
