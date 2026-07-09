@@ -38,6 +38,9 @@ class Config:
     # lokal bewertet (openwakeword). Privacy-by-default AUS - bewusst per
     # Config einschalten.
     wake_word_enabled: bool = False
+    # Gesprochene Wake-Bestaetigung (beim Start einmal synthetisiert und
+    # gecacht). Leer = Piepton.
+    wake_acknowledgement: str = "Ja, Sir?"
 
     # News-Briefing (ADR-042): RSS-Feeds fuer "was gibt's Neues?". Read-only,
     # kein Key. Default: tagesschau; beliebig erweiterbar in config.json.
@@ -149,6 +152,7 @@ class Config:
             transcription_model=data.get("transcription_model", cls.transcription_model),
             ptt_enabled=data.get("ptt_enabled", cls.ptt_enabled),
             wake_word_enabled=data.get("wake_word_enabled", cls.wake_word_enabled),
+            wake_acknowledgement=data.get("wake_acknowledgement", cls.wake_acknowledgement),
             news_feeds=data.get("news_feeds") or ["https://www.tagesschau.de/index~rss2.xml"],
             weather_default_location=data.get("weather_default_location", cls.weather_default_location),
             ai_provider=data.get("ai_provider", cls.ai_provider),

@@ -141,6 +141,17 @@ def _to_wav(pcm: bytes) -> bytes:
     return buffer.getvalue()
 
 
+def _play_wav_bytes(data: bytes) -> None:
+    """Spielt WAV-Bytes direkt aus dem Speicher (winsound SND_MEMORY) -
+    fuer die gecachte Wake-Bestaetigung ("Ja, Sir?"). Darf nie werfen."""
+    try:
+        import winsound
+
+        winsound.PlaySound(data, winsound.SND_MEMORY)
+    except Exception:  # noqa: BLE001
+        logger.debug("WAV-Bytes-Wiedergabe nicht verfuegbar.", exc_info=True)
+
+
 def _beep(start: bool) -> None:
     """Kurzes akustisches Feedback fuer Aufnahme-Start/-Stopp. Darf nie
     den Ablauf brechen (winsound existiert nur unter Windows)."""
@@ -163,6 +174,7 @@ class HotkeyChannel:
         speak: Callable[[str], None],
         recorder: Optional[Callable[[], bytes]] = None,
         wake_word: bool = False,
+        wake_ack: Optional[bytes] = None,
     ):
         self.runtime = runtime
         self.transcriber = transcriber
@@ -177,6 +189,9 @@ class HotkeyChannel:
         # Jarvis ..."). speak() setzt dieses Flag um die Wiedergabe herum.
         self._speaking = threading.Event()
         self._wake_word_enabled = wake_word
+        # Gecachte gesprochene Wake-Bestaetigung ("Ja, Sir?") - beim Start
+        # einmal synthetisiert, dann piep-schnell abspielbar. None -> Piepton.
+        self._wake_ack = wake_ack
         self._wake_listener: Optional["WakeWordListener"] = None
 
     def speak(self, text: str) -> None:
@@ -411,7 +426,7 @@ class WakeWordListener:
 
             logger.info("Wake-Word erkannt (Score %.2f).", score)
             self._last_trigger = time.monotonic()
-            _beep(start=True)
+            self._announce()
             audio = self._record_until_silence(stream)
             _beep(start=False)
             if audio:
@@ -424,6 +439,20 @@ class WakeWordListener:
             # Weiterlauschen sofort erneut (Endlos-Schleife, Live-Fund).
             self._reset_model()
             self._last_trigger = time.monotonic()
+
+    def _announce(self) -> None:
+        """Wake-Bestaetigung: gesprochenes "Ja, Sir?" (gecacht, PO-Wunsch
+        2026-07-09) - Piepton nur als Rueckfall. Waehrend der Wiedergabe ist
+        das Lauschen stumm (eigene Stimme weckt nicht)."""
+        ack = self.channel._wake_ack
+        if not ack:
+            _beep(start=True)
+            return
+        self.channel._speaking.set()
+        try:
+            _play_wav_bytes(ack)
+        finally:
+            self.channel._speaking.clear()
 
     def _record_until_silence(self, stream) -> bytes:
         """Nimmt nach dem Wake-Word auf: wartet zuerst auf SPRACHBEGINN

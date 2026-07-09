@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-07-09 - Wake-Bestätigung „Ja, Sir?" statt Piepton
+
+### Neu/Geändert
+- **Auf „Hey Jarvis" antwortet Jarvis jetzt gesprochen** — „Ja, Sir?" statt Signalton (PO-Wunsch aus dem Nutzungslauf). Die Bestätigung wird beim Start **einmal** synthetisiert und im Speicher gecacht, die Wiedergabe ist damit so schnell wie der Piep. Während sie abgespielt wird, lauscht das Wake-Word nicht (kein Selbst-Aufwecken). Text konfigurierbar (`wake_acknowledgement`; leer = Piepton), Piepton bleibt automatischer Rückfall, wenn keine TTS-Stimme verfügbar ist. Der Ende-Piep (Aufnahme geschlossen) bleibt.
+
 ## 2026-07-09 - „Hey Jarvis" — Wake-Word (ADR-044)
 
 ### Neu

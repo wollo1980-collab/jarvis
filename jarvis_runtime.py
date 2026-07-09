@@ -597,11 +597,32 @@ def _start_hotkey_channel(runtime: JarvisRuntime, config: Config, transcriber):
         except Exception:  # noqa: BLE001
             logger.exception("Sprachausgabe fehlgeschlagen.")
 
+    # Gesprochene Wake-Bestaetigung ("Ja, Sir?") einmal synthetisieren und
+    # cachen - zur Laufzeit dann piep-schnell aus dem Speicher (PO-Wunsch:
+    # kein Piepton, sondern Butler). Scheitert die Synthese: Piepton-Fallback.
+    wake_ack = None
+    wake_enabled = getattr(config, "wake_word_enabled", False)
+    ack_text = getattr(config, "wake_acknowledgement", "")
+    if wake_enabled and ack_text and speech.backend is not None:
+        import tempfile
+        from pathlib import Path
+
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+                ack_path = tmp.name
+            speech.backend.synthesize_to_file(ack_text, ack_path)
+            wake_ack = Path(ack_path).read_bytes()
+            Path(ack_path).unlink(missing_ok=True)
+            logger.info('Wake-Bestaetigung gecacht: "%s"', ack_text)
+        except Exception:  # noqa: BLE001 - Piepton bleibt der Rueckfall
+            logger.warning("Wake-Bestaetigung nicht synthetisierbar - Piepton-Fallback.", exc_info=True)
+
     channel = HotkeyChannel(
         runtime,
         transcriber,
         speak,
-        wake_word=getattr(config, "wake_word_enabled", False),
+        wake_word=wake_enabled,
+        wake_ack=wake_ack,
     )
     return channel if channel.start() else None
 

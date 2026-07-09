@@ -294,7 +294,10 @@ gilt `weather_default_location` aus `config.json`.
 ## „Hey Jarvis" — Wake-Word (ADR-044)
 
 Mit `"wake_word_enabled": true` in `config.json` genügt der Zuruf **„Hey
-Jarvis"**: Signalton → sprechen → kurz still sein → gesprochene Antwort.
+Jarvis"**: Jarvis antwortet gesprochen **„Ja, Sir?"** (beim Start einmal
+synthetisiert und gecacht; Text per `wake_acknowledgement` änderbar, leer =
+Signalton, Signalton auch als Rückfall ohne TTS) → sprechen → kurz still
+sein → gesprochene Antwort.
 Die Erkennung läuft **vollständig lokal** (openwakeword, 1,3-MB-Modell) —
 kein Audio verlässt den Rechner, bis das Wake-Word erkannt ist; während
 Jarvis selbst spricht, lauscht er nicht. Standard: **aus** (bewusste

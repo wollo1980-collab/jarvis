@@ -288,6 +288,44 @@ def test_wake_word_muted_while_jarvis_speaks(monkeypatch):
     channel.process_audio.assert_not_called()
 
 
+def test_wake_announce_plays_cached_ack_and_mutes_listening(monkeypatch):
+    """PO-Wunsch 2026-07-09: statt Piepton ein gesprochenes 'Ja, Sir?' -
+    gecacht, und waehrend der Wiedergabe lauscht das Wake-Word nicht."""
+    from hotkey_channel import WakeWordListener
+
+    played = []
+    speaking_during = []
+    beeps = []
+    monkeypatch.setattr(hotkey_channel, "_beep", lambda start: beeps.append(start))
+
+    channel = _channel()
+    channel._wake_ack = b"WAV-BYTES"
+    monkeypatch.setattr(
+        hotkey_channel,
+        "_play_wav_bytes",
+        lambda data: (played.append(data), speaking_during.append(channel._speaking.is_set())),
+    )
+
+    WakeWordListener(channel, scorer=lambda f: 0.0)._announce()
+
+    assert played == [b"WAV-BYTES"]
+    assert speaking_during == [True]        # stumm geschaltet waehrend "Ja, Sir?"
+    assert not channel._speaking.is_set()   # danach wieder frei
+    assert beeps == []                      # kein Piepton
+
+
+def test_wake_announce_falls_back_to_beep_without_ack(monkeypatch):
+    from hotkey_channel import WakeWordListener
+
+    beeps = []
+    monkeypatch.setattr(hotkey_channel, "_beep", lambda start: beeps.append(start))
+    channel = _channel()  # _wake_ack ist None
+
+    WakeWordListener(channel, scorer=lambda f: 0.0)._announce()
+
+    assert beeps == [True]
+
+
 def test_wake_word_start_refuses_without_package(monkeypatch):
     from hotkey_channel import WakeWordListener
 
