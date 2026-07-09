@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-10 - **v1.0 „Alltagsassistent"** 🎉
+
+Jarvis ist Version 1.0 — PO-Abnahme nach der beschlossenen Definition: Welle 1 (Erinnerungen end-to-end mit proaktivem Push) + Welle 2 (Auto-Redaction, Planner-Fallback, Kostenbilanz) komplett, dazu ein **dokumentierter realer Nutzungslauf (09./10.07.) ohne kritischen Befund** — rund 20 Reibungen gefunden, alle behoben und live nachgetestet. Stand des Tags: drei Sprach-Zugänge (Telegram-Voice, Push-to-talk, „Hey Jarvis" mit gesprochenem „Ja, Sir?"), News-/Wetter-Briefing, Film-Persona, stop/restart per Zuruf, 561 Tests. Git-Tag: `v1.0`. Wellen 3.3/4 folgen als 1.x.
+
 ## 2026-07-10 - „Starte dich neu" — Runtime-Neustart (Welle 3.4)
 
 ### Neu

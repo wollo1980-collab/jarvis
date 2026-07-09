@@ -1,5 +1,5 @@
 ---
-version: "v0.8 P1+2 (Multi-KI) abgeschlossen; Nutzwert-Phase gestartet"
+version: "v1.0 — Alltagsassistent (Welle 1+2 komplett, Nutzungslauf abgenommen)"
 active_increment: nutzwert-phase
 tests: 561
 latest_adr: 44
@@ -14,7 +14,9 @@ Der maschinenlesbare Kopf (oben) ist die Single Source der Kern-Kennzahlen; das 
 **Hinweis (Dokument-Landkarte, siehe `CONTRIBUTING.md` §1):** Dieses Dokument ist die Heimat des *aktuellen Stands* — Version, Teststand, aktives Increment, offene Aufgaben, bekannte Schuld, Roadmap/Backlog und Known Limitations. Zeitlose Festlegungen (Leitbild/DNA, Vision, Prinzipien, Sicherheitsmodell) leben in der Verfassung (`docs/handbook/HANDBOOK.md`), der Entwicklungsprozess in `CONTRIBUTING.md`. Hier steht kein zeitloses Gesetz.
 
 ## Current Version
-`v0.8 "Multi-KI"` - **Phase 1 + Phase 2 umgesetzt, getestet und committet** (noch kein `v0.8`-Git-Tag: v0.8 ist als Version nicht abgeschlossen, da bewusst kein weiterer Phasenausbau jetzt erfolgt - siehe „Next Planned Version").
+**`v1.0` „Alltagsassistent" — getaggt am 10.07.2026 (PO-Freigabe).** Erfüllte 1.0-Definition (PO-Beschluss 09.07.2026): Welle 1 komplett (Einträge/Erinnerungen end-to-end inkl. Scheduler-Push, Gedächtnis-Vorrang, list_facts) + Welle 2 komplett (Auto-Redaction ADR-040, Planner-Heuristik-Fallback, Kosten-Zwischenbilanz) + **dokumentierter realer Nutzungslauf 09./10.07.2026 ohne kritischen Befund** (~20 Reibungen gefunden, alle behoben und live nachgetestet — siehe logbook). Live bewiesen außerdem: alle drei Sprach-Zugänge (Telegram-Voice ADR-038, Push-to-talk ADR-041, Wake-Word „Hey Jarvis" ADR-044 mit gesprochener Bestätigung), News/Wetter (ADR-042/043), stop/restart_runtime. Wellen 3.3/4 folgen als 1.x.
+
+Davor: `v0.8` "Multi-KI" — Phase 1 + Phase 2 umgesetzt und committet, bewusst nie getaggt (kein weiterer Phasenausbau; der damalige Stand ist in v1.0 aufgegangen).
 
 Davor abgeschlossen und getaggt: `v0.7` "PC-Admin" (`v0.7` → `a7eb86d`); der **Infrastruktur-/Runtime-Baustein** (ADR-024 bis ADR-028, ohne eigene Versionsnummer/Tag), konsolidiert in Handbook v3.7. `v0.4`/`v0.5`/`v0.6`/`v0.7` sind alle abgeschlossen und getaggt.
 
@@ -153,4 +155,4 @@ Davor - v0.8 „Multi-KI", Phase 1+2 (ADR-029/030): Die KI-Anbindung ist nicht m
 - Jarvis-Eigenstart (ADR-028): fester HKCU-Run-Key-Eintragsname `"Jarvis"` setzt eine einzige Installation pro Windows-Benutzerkonto voraus; veraltete Registry-Pfade nach Projekt-/Interpreter-Umzug werden nicht automatisch repariert (Selbstbedienung per erneutem `enable_jarvis_autostart`).
 
 ## Git
-Die Commit-Historie wird hier nicht mehr gespiegelt — sie ist über `git log` und die getaggten Versionen (`v0.4`–`v0.7`) direkt ableitbar (Granularitäts-Leitplanke, Framework-Übernahme M2). Nicht aus Git ableitbar und deshalb hier festgehalten: Frühere Versionen (v0.1–v0.3) existieren nur als Text in `docs/CHANGELOG.md`/`docs/logbook.md`; `v0.8` ist bewusst nicht getaggt (Version nicht abgeschlossen, siehe „Current Version").
+Die Commit-Historie wird hier nicht mehr gespiegelt — sie ist über `git log` und die getaggten Versionen (`v0.4`–`v0.7`, `v1.0`) direkt ableitbar (Granularitäts-Leitplanke, Framework-Übernahme M2). Nicht aus Git ableitbar und deshalb hier festgehalten: Frühere Versionen (v0.1–v0.3) existieren nur als Text in `docs/CHANGELOG.md`/`docs/logbook.md`; `v0.8` ist bewusst nicht getaggt (Version nicht abgeschlossen, siehe „Current Version").
