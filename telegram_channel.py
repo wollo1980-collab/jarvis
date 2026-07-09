@@ -165,6 +165,35 @@ class TelegramChannel:
         self._flush_pending_sends()
         loop.call_soon_threadsafe(app.stop_running)
 
+    def push(self, text: str) -> None:
+        """Proaktive Nachricht an den autorisierten Chat (A2, ADR-039) -
+        das Gegenstueck zum reply_callback, nur OHNE vorausgehende Nachricht:
+        der Scheduler der Runtime meldet faellige Eintraege. Gleiche
+        threadsichere Loop-Bruecke, gleiches Pending-Tracking (die Nachricht
+        wird beim Stop noch zugestellt, Zusage-vor-Teardown)."""
+        app = self._application
+        if app is None:
+            logger.warning("push() ohne laufende Application - Nachricht verworfen: %r", text)
+            return
+        self._loop_ready.wait(timeout=5.0)
+        loop = self._loop
+        if loop is None:
+            logger.warning("push(): Event-Loop nicht verfuegbar - Nachricht verworfen: %r", text)
+            return
+
+        future = asyncio.run_coroutine_threadsafe(
+            _send_reply_chunks(app.bot, chat_id=self.allowed_chat_id, text=text), loop
+        )
+        with self._pending_lock:
+            self._pending_sends.add(future)
+
+        def _done(f: Future) -> None:
+            with self._pending_lock:
+                self._pending_sends.discard(f)
+            _log_send_future(f)
+
+        future.add_done_callback(_done)
+
     def _flush_pending_sends(self, timeout: float = _SEND_FLUSH_TIMEOUT) -> None:
         """Wartet, bis alle noch ausstehenden Antwort-Sends zugestellt sind (der
         Event-Loop laeuft zu diesem Zeitpunkt noch, future.result() blockiert

@@ -1,8 +1,8 @@
 ---
 version: "v0.8 P1+2 (Multi-KI) abgeschlossen; Nutzwert-Phase gestartet"
 active_increment: nutzwert-phase
-tests: 477
-latest_adr: 38
+tests: 486
+latest_adr: 39
 stand: 2026-07-09
 ---
 

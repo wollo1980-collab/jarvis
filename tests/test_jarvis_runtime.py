@@ -300,6 +300,73 @@ def test_stop_cleanly_terminates_worker_thread(tmp_path):
     assert runtime._worker.is_alive() is False
 
 
+def test_scheduler_fires_due_entry_once(tmp_path, monkeypatch):
+    """A2 (ADR-039): ein faelliger, ungemeldeter Eintrag wird GENAU EINMAL
+    ueber den injizierten Notifier gemeldet und als notified markiert."""
+    monkeypatch.setattr(jarvis_runtime, "_SCHEDULER_POLL_SECONDS", 0.05)
+    runtime = JarvisRuntime(_make_config(tmp_path), ai=FakeAI())
+    store = runtime._entry_store
+    entry = store.add("Zahnarzt", when="2099-01-01T09:00")  # Zukunft -> unnotified
+    # Zeit "verstreicht": when in die Vergangenheit ziehen, Flag bleibt False.
+    data = store._read()
+    data[0]["when"] = "2020-01-01T09:00"
+    store._write(data)
+
+    fired = []
+    got_one = threading.Event()
+
+    def notifier(text):
+        fired.append(text)
+        got_one.set()
+
+    runtime.set_notifier(notifier)
+    runtime.start_scheduler()
+    try:
+        assert got_one.wait(timeout=2.0), "Scheduler hat nicht gefeuert"
+        time.sleep(0.2)  # weitere Ticks abwarten -> darf NICHT erneut feuern
+        assert len(fired) == 1
+        assert "Zahnarzt" in fired[0] and fired[0].startswith("🔔")
+        assert store.due_unnotified() == []  # markiert
+        assert entry.id  # Eintrag existiert weiter (nicht geloescht)
+    finally:
+        runtime.stop()
+
+
+def test_scheduler_does_not_start_without_notifier(tmp_path):
+    runtime = JarvisRuntime(_make_config(tmp_path), ai=FakeAI())
+    runtime.start_scheduler()
+    assert runtime._scheduler_thread is None
+    runtime.stop()  # darf ohne Scheduler nicht haengen/werfen
+
+
+def test_stop_terminates_scheduler_promptly(tmp_path, monkeypatch):
+    monkeypatch.setattr(jarvis_runtime, "_SCHEDULER_POLL_SECONDS", 30.0)  # langer Tick
+    runtime = JarvisRuntime(_make_config(tmp_path), ai=FakeAI())
+    runtime.set_notifier(lambda text: None)
+    runtime.start_scheduler()
+    runtime.start()
+
+    runtime.stop()  # Stop-Event bricht den 30s-wait sofort ab
+
+    assert runtime._scheduler_thread.is_alive() is False
+
+
+def test_format_due_message_late_and_star():
+    from memory.entries import Entry
+
+    on_time = Entry(text="Zahnarzt", when="2099-07-10T09:00")
+    assert "verspätet" not in jarvis_runtime._format_due_message(on_time)
+
+    late = Entry(text="Zahnarzt", when="2020-01-01T09:00")
+    msg = jarvis_runtime._format_due_message(late)
+    assert "verspätet" in msg and "01.01.2020 09:00" in msg
+
+    # Ganztaegig (reines Datum) gilt nie als verspaetet - Tages-Erinnerung.
+    day = Entry(text="Audit", when="2020-01-01", important=True)
+    msg_day = jarvis_runtime._format_due_message(day)
+    assert "verspätet" not in msg_day and "⭐" in msg_day
+
+
 def test_shutdown_hook_is_wired_to_runtime(tmp_path):
     # Der stop_runtime-Befehl bekommt beim Runtime-Aufbau den Hook injiziert
     # (Verdrahtungsschicht) - genau wie delegate/plan ihr Backend.

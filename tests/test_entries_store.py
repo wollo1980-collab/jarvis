@@ -109,6 +109,48 @@ def test_is_past_date_only_counts_until_end_of_day():
     assert is_past("kein-datum") is False  # fail-safe: unparsebar = offen
 
 
+def test_add_sets_notified_for_past_and_undated(tmp_path: Path):
+    """A2 (ADR-039): nichts zu melden bei fehlendem/vergangenem when -
+    rueckdatierte Merkposten (Audit-Fall) feuern NIE; Zukunft feuert."""
+    store = EntryStore(tmp_path)
+    assert store.add("Ohne Zeit").notified is True
+    assert store.add("Vergangen", when=_past_iso()).notified is True
+    assert store.add("Zukunft", when=_future_iso()).notified is False
+
+
+def test_due_unnotified_and_mark_notified(tmp_path: Path):
+    store = EntryStore(tmp_path)
+    future = store.add("Zukunft", when=_future_iso(hours=24))
+    # Faellig-aber-ungemeldet laesst sich nicht ueber add() erzeugen (das
+    # markiert Vergangenes sofort) - Flag zuruecksetzen simuliert den echten
+    # Ablauf: bei Anlage Zukunft, dann verstreicht die Zeit.
+    due = store.add("Jetzt faellig", when=_past_iso(hours=0.01))
+    data = store._read()
+    for d in data:
+        if d["id"] == due.id:
+            d["notified"] = False
+    store._write(data)
+
+    due_list = store.due_unnotified()
+    assert [e.text for e in due_list] == ["Jetzt faellig"]  # Zukunft nicht dabei
+
+    assert store.mark_notified(due.id) is True
+    assert store.due_unnotified() == []  # genau einmal
+    # persistiert: neue Instanz sieht das Flag
+    assert EntryStore(tmp_path).due_unnotified() == []
+    assert store.mark_notified("gibtsnicht") is False
+    assert future.notified is False  # unberuehrt
+
+
+def test_from_dict_migration_for_a1_entries():
+    """A1-Eintraege (ohne notified-Feld): Vergangenes gilt als gemeldet
+    (kein Nachfeuern beim ersten Scheduler-Start), Zukunft feuert normal."""
+    old_past = Entry.from_dict({"id": "a", "text": "alt", "when": "2020-01-01"})
+    old_future = Entry.from_dict({"id": "b", "text": "neu", "when": "2099-01-01T09:00"})
+    assert old_past.notified is True
+    assert old_future.notified is False
+
+
 def test_corrupt_when_entry_stays_visible(tmp_path: Path):
     # Fail-safe: ein Eintrag mit kaputtem when verschwindet nicht still.
     store = EntryStore(tmp_path)

@@ -266,8 +266,14 @@ Jarvis: 🗑 Eintrag gelöscht: «Zahnarzt»
   Nachfrage.
 - Abgrenzung: dauerhafte Fakten über dich → „merk dir …" (`remember_fact`);
   Einmaliges/Terminiertes → Eintrag.
-- **Noch ohne selbstständiges Melden** zur Fälligkeit — das kommt mit dem
-  Scheduler (A2, ADR-039). Daten liegen in `memory_data/entries.json`.
+- **Jarvis meldet sich von selbst** (A2, ADR-039): Wird ein Eintrag fällig,
+  pusht die Runtime eine Erinnerung an den autorisierten Telegram-Chat —
+  „🔔 Erinnerung: «Zahnarzt» — fällig 09:00" (⭐ bei wichtig). War Jarvis zur
+  Fälligkeit aus, kommt die Nachholung beim nächsten Start, ehrlich als
+  „verspätet" markiert. Ganztägige Einträge melden sich morgens. Jeder
+  Eintrag feuert genau einmal; rückdatierte Merkposten feuern nie. Der Push
+  erfüllt deinen expliziten Auftrag und ist rein informativ (Governance-
+  Invariante gewahrt). Daten liegen in `memory_data/entries.json`.
 
 ## Sprachnachricht an Jarvis (Sprach-Eingabe, ADR-038)
 

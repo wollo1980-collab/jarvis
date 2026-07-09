@@ -42,7 +42,7 @@ import os
 import queue
 import sys
 import threading
-from datetime import date
+from datetime import date, datetime
 from typing import Callable, Optional
 
 import commands.delegate as delegate_commands
@@ -62,6 +62,7 @@ from core.models import Message, Plan
 from core.planner import Planner
 from core.single_instance import InstanceAlreadyRunningError, SingleInstanceLock
 from executor.executor import ExecutionReport, Executor
+from memory.entries import Entry, format_when
 from memory.long_term import LongTermMemory
 from memory.store import JsonMemoryStore
 
@@ -83,6 +84,33 @@ _DELEGATION_JOIN_TIMEOUT = 15.0
 # eine legitime synchrone Konsolen-Delegation nie faelschlich abgeschnitten wird;
 # er verhindert nur einen kuenftigen Endlos-Hang bei ausbleibendem reply_callback.
 _CONSOLE_REPLY_TIMEOUT = 600.0
+
+# Scheduler (A2, ADR-039): Poll-Intervall der Faelligkeits-Pruefung. 30 s ist
+# fuer minutengenaue Erinnerungen mehr als ausreichend und praktisch lastfrei.
+_SCHEDULER_POLL_SECONDS = 30.0
+# Zeitlimit fuers Einsammeln des Scheduler-Threads beim Stop.
+_SCHEDULER_JOIN_TIMEOUT = 5.0
+# Ab dieser Verspaetung (Sekunden) wird eine Nachholung ehrlich als
+# "verspaetet" markiert (z. B. Jarvis war zur Faelligkeit nicht an).
+_LATE_THRESHOLD_SECONDS = 120.0
+
+
+def _format_due_message(entry: Entry) -> str:
+    """Baut die proaktive Erinnerungs-Nachricht (A2). Ganztaegige Eintraege
+    (reines Datum, faellig ab Mitternacht) gelten nie als 'verspaetet' -
+    die Tages-Erinnerung kommt planmaessig morgens beim ersten Tick."""
+    star = "⭐ " if entry.important else ""
+    late = False
+    if len(entry.when) > 10:
+        try:
+            due = datetime.fromisoformat(entry.when)
+            now = datetime.now(due.tzinfo) if due.tzinfo else datetime.now()
+            late = (now - due).total_seconds() > _LATE_THRESHOLD_SECONDS
+        except ValueError:
+            pass
+    if late:
+        return f"🔔 {star}Erinnerung (verspätet - war fällig {format_when(entry.when)}): «{entry.text}»"
+    return f"🔔 {star}Erinnerung: «{entry.text}» — fällig {format_when(entry.when)}"
 
 EXIT_WORDS = {"exit", "quit", "beenden", "ende", "stop", "stopp", "tschuess", "tschüss", "bye"}
 
@@ -122,8 +150,9 @@ class JarvisRuntime:
         # beim Modul-Import instanziiert, bevor Config/AIEngine existieren.
         memory_commands.configure(config.memory_dir)
         # Eintraege (A1): Erinnerungen/Aufgaben/Merkposten, eigener Store
-        # neben dem Langzeitgedaechtnis (memory/entries.py).
-        entries_commands.configure(config.memory_dir)
+        # neben dem Langzeitgedaechtnis (memory/entries.py). DIESELBE Instanz
+        # dient dem Scheduler (A2) - zwei Instanzen haetten getrennte Locks.
+        self._entry_store = entries_commands.configure(config.memory_dir)
         reports_commands.configure(self.ai)
         monitor_commands.configure(self.ai)
         web_commands.configure(self.ai, timeout_seconds=config.timeout)
@@ -155,6 +184,13 @@ class JarvisRuntime:
         self._delegation_thread: Optional[threading.Thread] = None
         self._delegation_cancel: Optional[threading.Event] = None
 
+        # Scheduler (A2, ADR-039): meldet faellige Eintraege proaktiv ueber
+        # einen injizierten Notifier (main() verdrahtet channel.push). Ohne
+        # Notifier laeuft KEIN Scheduler - nichts feuert ins Leere.
+        self._notifier: Optional[Callable[[str], None]] = None
+        self._scheduler_thread: Optional[threading.Thread] = None
+        self._scheduler_stop = threading.Event()
+
     def start(self) -> None:
         """Startet den Worker-Thread. Nicht blockierend - Kanäle laufen
         unabhängig davon weiter."""
@@ -163,6 +199,46 @@ class JarvisRuntime:
         )
         self._worker.start()
         logger.info("Jarvis-Runtime gestartet (Worker-Thread aktiv).")
+
+    def set_notifier(self, notifier: Callable[[str], None]) -> None:
+        """Injiziert den Push-Kanal fuer proaktive Meldungen (A2) - main()
+        verdrahtet hier TelegramChannel.push. Die Runtime kennt Telegram
+        nicht (gleiche Entkopplung wie beim Agenten-Backend, ADR-027/036)."""
+        self._notifier = notifier
+
+    def start_scheduler(self) -> None:
+        """Startet den Erinnerungs-Scheduler (A2, ADR-039) - nur wenn ein
+        Notifier injiziert wurde. Governance-Einordnung: der Push erfuellt
+        einen EXPLIZITEN frueheren Auftrag ('erinnere mich...') und ist rein
+        informativ - keine autonome Aktion (Handbook 4.2 gewahrt)."""
+        if self._notifier is None:
+            logger.info("Kein Notifier injiziert - Erinnerungs-Scheduler bleibt aus.")
+            return
+        self._scheduler_thread = threading.Thread(
+            target=self._run_scheduler, name="jarvis-scheduler", daemon=False
+        )
+        self._scheduler_thread.start()
+        logger.info("Erinnerungs-Scheduler gestartet (Poll alle %.0fs).", _SCHEDULER_POLL_SECONDS)
+
+    def _run_scheduler(self) -> None:
+        """Poll-Schleife: prueft faellige, ungemeldete Eintraege und pusht sie.
+        stop_event.wait() dient zugleich als Sleep und als promptes Stop-Signal.
+        Markiert VOR dem Push (at-most-once, ADR-039): lieber geht im seltenen
+        Sendefehler-Fall eine Erinnerung verloren (steht im Log), als dass eine
+        Fehlschleife den Nutzer mit Wiederholungen flutet."""
+        while not self._scheduler_stop.wait(timeout=_SCHEDULER_POLL_SECONDS):
+            try:
+                for entry in self._entry_store.due_unnotified():
+                    self._entry_store.mark_notified(entry.id)
+                    message = _format_due_message(entry)
+                    logger.info("Erinnerung faellig - pushe: %s", entry.text)
+                    try:
+                        self._notifier(message)
+                    except Exception:
+                        logger.exception("Erinnerungs-Push fehlgeschlagen: %r", entry.text)
+            except Exception:
+                # Die Schleife darf nie sterben - naechster Tick versucht es neu.
+                logger.exception("Scheduler-Tick fehlgeschlagen.")
 
     def _request_shutdown(self) -> None:
         """Hook fuer den stop_runtime-Befehl (aus der Verdrahtungsschicht
@@ -195,6 +271,17 @@ class JarvisRuntime:
                 logger.warning(
                     "Delegations-Thread nach %.0fs noch aktiv - Shutdown wird fortgesetzt.",
                     _DELEGATION_JOIN_TIMEOUT,
+                )
+
+        # Scheduler (A2) einsammeln: Stop-Event beendet den wait() sofort.
+        self._scheduler_stop.set()
+        scheduler = self._scheduler_thread
+        if scheduler is not None and scheduler.is_alive():
+            scheduler.join(timeout=_SCHEDULER_JOIN_TIMEOUT)
+            if scheduler.is_alive():
+                logger.warning(
+                    "Scheduler-Thread nach %.0fs noch aktiv - Shutdown wird fortgesetzt.",
+                    _SCHEDULER_JOIN_TIMEOUT,
                 )
         logger.info("Jarvis-Runtime gestoppt.")
 
@@ -526,6 +613,14 @@ def main() -> None:
         runtime.start()
 
         telegram = _start_telegram_channel(runtime, config)
+
+        # Erinnerungs-Scheduler (A2, ADR-039): nur mit push-faehigem Kanal.
+        # Verdrahtung hier statt in der Runtime - sie kennt Telegram nicht.
+        if telegram is not None:
+            runtime.set_notifier(telegram[0].push)
+            runtime.start_scheduler()
+        else:
+            logger.info("Kein Telegram-Kanal - Erinnerungs-Scheduler bleibt aus.")
 
         try:
             if sys.stdin is not None:

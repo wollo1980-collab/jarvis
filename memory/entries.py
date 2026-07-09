@@ -42,6 +42,9 @@ class Entry:
     text: str
     when: str = ""  # ISO 8601 ("2026-07-10T09:00" / "2025-07-12") oder leer
     important: bool = False
+    # A2 (ADR-039): True = der Scheduler hat diesen Eintrag bereits gemeldet
+    # (oder es gibt nichts zu melden: kein when / bei Anlage schon vergangen).
+    notified: bool = False
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
     created: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
@@ -51,15 +54,21 @@ class Entry:
             "text": self.text,
             "when": self.when,
             "important": self.important,
+            "notified": self.notified,
             "created": self.created,
         }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Entry":
+        when = data.get("when", "") or ""
         return cls(
             text=data.get("text", ""),
-            when=data.get("when", "") or "",
+            when=when,
             important=bool(data.get("important", False)),
+            # Migration (A2): Eintraege aus A1 haben kein notified-Feld. Ein
+            # bereits vergangenes when gilt als gemeldet - sonst wuerden alte
+            # Merkposten beim ersten Scheduler-Start faelschlich nachfeuern.
+            notified=bool(data.get("notified", is_past(when))),
             id=data.get("id", ""),
             created=data.get("created", ""),
         )
@@ -82,6 +91,33 @@ def is_past(when: str) -> bool:
     return dt < now
 
 
+def is_due(when: str) -> bool:
+    """True, wenn der Zeitpunkt erreicht/ueberschritten ist (Scheduler, A2).
+    Bewusst anders als is_past: ein reines Datum ist ab MITTERNACHT faellig
+    (Tages-Erinnerung kommt morgens beim ersten Tick), zaehlt fuer die
+    Sichtbarkeit (is_past) aber bis Tagesende als offen."""
+    if not when:
+        return False
+    try:
+        dt = datetime.fromisoformat(when)
+    except ValueError:
+        return False
+    now = datetime.now(dt.tzinfo) if dt.tzinfo else datetime.now()
+    return dt <= now
+
+
+def format_when(when: str) -> str:
+    """ISO 8601 -> lesbares Deutsch: '12.07.2025' (ganztaegig) bzw.
+    '10.07.2026 09:00'. Nicht parsebares when kommt roh zurueck (fail-safe)."""
+    try:
+        dt = datetime.fromisoformat(when)
+    except ValueError:
+        return when
+    if len(when) == _DATE_ONLY_LEN:
+        return dt.strftime("%d.%m.%Y")
+    return dt.strftime("%d.%m.%Y %H:%M")
+
+
 def _sort_key(entry: Entry) -> tuple:
     """Terminierte Eintraege zuerst (frueheste vorn), danach die undatierten
     in Erfassungs-Reihenfolge."""
@@ -97,7 +133,16 @@ class EntryStore:
                 self._write([])
 
     def add(self, text: str, when: str = "", important: bool = False) -> Entry:
-        entry = Entry(text=text.strip(), when=(when or "").strip(), important=important)
+        clean_when = (when or "").strip()
+        # A2: nichts zu melden, wenn kein Zeitpunkt existiert ODER er bei der
+        # Anlage schon vergangen ist (rueckdatierter Merkposten, z. B. das
+        # Audit vom 12.07.25) - solche Eintraege feuern NIE.
+        entry = Entry(
+            text=text.strip(),
+            when=clean_when,
+            important=important,
+            notified=(not clean_when or is_past(clean_when)),
+        )
         with self._lock:
             data = self._read()
             data.append(entry.to_dict())
@@ -133,6 +178,26 @@ class EntryStore:
                 continue
             result.append(e)
         return sorted(result, key=_sort_key)
+
+    def due_unnotified(self) -> list[Entry]:
+        """Faellige, noch nicht gemeldete Eintraege (Scheduler, A2/ADR-039) -
+        frueheste zuerst, damit Nachholungen in sinnvoller Reihenfolge kommen."""
+        with self._lock:
+            entries = [Entry.from_dict(d) for d in self._read()]
+        due = [e for e in entries if e.when and not e.notified and is_due(e.when)]
+        return sorted(due, key=lambda e: e.when)
+
+    def mark_notified(self, entry_id: str) -> bool:
+        """Markiert einen Eintrag als gemeldet (einmaliges Feuern). True bei
+        Erfolg; False, wenn die id nicht (mehr) existiert."""
+        with self._lock:
+            data = self._read()
+            for d in data:
+                if d.get("id") == entry_id:
+                    d["notified"] = True
+                    self._write(data)
+                    return True
+        return False
 
     def delete(self, id_or_text: str) -> Optional[Entry]:
         """Loescht zuerst per exakter id, sonst den ersten Eintrag, dessen

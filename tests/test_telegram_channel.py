@@ -418,6 +418,48 @@ def test_stop_flushes_pending_sends_before_teardown():
     channel._flush_pending_sends(timeout=1.0)
 
 
+def test_push_sends_proactively_to_allowed_chat():
+    """A2 (ADR-039): push() sendet ohne vorausgehende Nachricht threadsicher
+    ueber den PTB-Loop an die allowed_chat_id und laeuft im Pending-Tracking
+    (Zustellung vor Teardown gilt auch fuer proaktive Meldungen)."""
+    calls = []
+    done = threading.Event()
+
+    async def fake_send_message(**kwargs):
+        calls.append(kwargs)
+        done.set()
+
+    loop = asyncio.new_event_loop()
+    loop_thread = threading.Thread(target=loop.run_forever, daemon=True)
+    loop_thread.start()
+    try:
+        channel = TelegramChannel(runtime=MagicMock(), bot_token="TOKEN", allowed_chat_id="111")
+        mock_app = MagicMock()
+        mock_app.bot.send_message = fake_send_message
+        channel._application = mock_app
+        channel._loop = loop
+        channel._loop_ready.set()
+
+        channel.push("🔔 Erinnerung: «Zahnarzt»")  # Aufruf aus fremdem Thread
+
+        assert done.wait(timeout=2.0), "push wurde nicht zugestellt"
+        assert calls == [{"chat_id": "111", "text": "🔔 Erinnerung: «Zahnarzt»"}]
+        # Pending-Tracking wieder leer (done_callback hat aufgeraeumt).
+        deadline = threading.Event()
+        deadline.wait(0.2)
+        with channel._pending_lock:
+            assert len(channel._pending_sends) == 0
+    finally:
+        loop.call_soon_threadsafe(loop.stop)
+        loop_thread.join(timeout=2.0)
+        loop.close()
+
+
+def test_push_without_application_is_a_safe_no_op():
+    channel = TelegramChannel(runtime=MagicMock(), bot_token="TOKEN", allowed_chat_id="111")
+    channel.push("verloren")  # darf nicht werfen (kein Application/Loop)
+
+
 # --- Sprach-Eingabe (STT, ADR-038) -------------------------------------------
 
 

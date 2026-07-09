@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-09 - Jarvis meldet sich von selbst: Erinnerungs-Push (A2, ADR-039)
+
+### Neu
+- **Erinnerungen feuern jetzt wirklich:** „Erinnere mich morgen um 9 an den Zahnarzt" → morgen um 9 kommt „🔔 Erinnerung: «Zahnarzt»" von selbst per Telegram. Die erste proaktive Fähigkeit — sie erfüllt deinen expliziten Auftrag und ist rein informativ.
+- **Nachholung statt Verlust:** War Jarvis zur Fälligkeit nicht an, kommt die Erinnerung beim nächsten Start — ehrlich als „verspätet" markiert. Ganztägige Einträge melden sich morgens.
+- Jeder Eintrag meldet sich genau **einmal**; rückdatierte wichtige Merkposten (⭐) melden sich nie — sie sind zum Nachschlagen da.
+
 ## 2026-07-09 - Vergessen wirkt wirklich + sichtbares Gedächtnis
 
 ### Behoben

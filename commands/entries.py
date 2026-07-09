@@ -14,23 +14,25 @@ commands/memory.py (Registry instanziiert vor Config.load()).
 """
 from __future__ import annotations
 
-from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 from core.models import Plan, Result, Status
-from memory.entries import EntryStore
+from memory.entries import EntryStore, format_when
 
 _store: Optional[EntryStore] = None
 
 _MAX_LIST_ENTRIES = 30
 
 
-def configure(memory_dir: Path) -> None:
+def configure(memory_dir: Path) -> EntryStore:
     """Von main.py/jarvis_runtime.py einmal beim Start aufgerufen. Tests
-    rufen dies mit tmp_path auf."""
+    rufen dies mit tmp_path auf. Gibt die Store-Instanz zurueck, damit die
+    Runtime DENSELBEN Store fuer den Scheduler nutzt (A2) - zwei Instanzen
+    haetten getrennte Locks."""
     global _store
     _store = EntryStore(memory_dir)
+    return _store
 
 
 def _require_store() -> EntryStore:
@@ -42,22 +44,9 @@ def _require_store() -> EntryStore:
     return _store
 
 
-def _format_when(when: str) -> str:
-    """ISO 8601 -> lesbares Deutsch: '12.07.2025' (ganztaegig) bzw.
-    '10.07.2026 09:00'. Nicht parsebares when kommt roh zurueck (fail-safe,
-    besser als gar keine Anzeige)."""
-    try:
-        dt = datetime.fromisoformat(when)
-    except ValueError:
-        return when
-    if len(when) == 10:
-        return dt.strftime("%d.%m.%Y")
-    return dt.strftime("%d.%m.%Y %H:%M")
-
-
 def _entry_line(entry) -> str:
     star = "⭐ " if entry.important else ""
-    when = f" — {_format_when(entry.when)}" if entry.when else ""
+    when = f" — {format_when(entry.when)}" if entry.when else ""
     return f"- {star}«{entry.text}»{when}"
 
 
@@ -84,7 +73,7 @@ class AddEntryCommand:
         entry = _require_store().add(text, when=when, important=important)
 
         prefix = "⭐ Wichtiger Eintrag gespeichert" if important else "Eintrag gespeichert"
-        when_part = f" — {_format_when(entry.when)}" if entry.when else ""
+        when_part = f" — {format_when(entry.when)}" if entry.when else ""
         return Result(
             status=Status.SUCCESS,
             message=f"{prefix}: «{entry.text}»{when_part}",
