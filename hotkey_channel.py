@@ -26,9 +26,11 @@ from __future__ import annotations
 import io
 import logging
 import re
+import sys
 import threading
 import time
 import wave
+from contextlib import contextmanager
 from typing import Callable, Optional
 
 logger = logging.getLogger("jarvis.runtime.hotkey")
@@ -296,6 +298,23 @@ class HotkeyChannel:
         return b"".join(frames)
 
 
+@contextmanager
+def _quiet_streams():
+    """Ersetzt fehlende std-Streams temporaer durch Puffer. Unter pythonw
+    sind sys.stdout/stderr None - openwakewords Modell-Download zeigt einen
+    tqdm-Fortschrittsbalken, der dann mit AttributeError crasht (Live-Fund
+    2026-07-09: 'Wake-Word-Modell nicht ladbar')."""
+    original_out, original_err = sys.stdout, sys.stderr
+    if sys.stdout is None:
+        sys.stdout = io.StringIO()
+    if sys.stderr is None:
+        sys.stderr = io.StringIO()
+    try:
+        yield
+    finally:
+        sys.stdout, sys.stderr = original_out, original_err
+
+
 def wake_word_available() -> bool:
     """True, wenn openwakeword importierbar ist (zusaetzlich zu den
     Basis-Abhaengigkeiten des Kanals)."""
@@ -328,8 +347,11 @@ class WakeWordListener:
         if self._scorer is None:
             try:
                 # Modelldateien sind klein (~7 MB) und werden nur beim ersten
-                # Start heruntergeladen (idempotent).
-                _openwakeword.utils.download_models([WAKE_WORD_MODEL])
+                # Start heruntergeladen (idempotent). _quiet_streams: der
+                # tqdm-Fortschrittsbalken des Downloads braucht stderr, das
+                # unter pythonw fehlt.
+                with _quiet_streams():
+                    _openwakeword.utils.download_models([WAKE_WORD_MODEL])
                 model = _WakeWordModel(
                     wakeword_models=[WAKE_WORD_MODEL], inference_framework="onnx"
                 )

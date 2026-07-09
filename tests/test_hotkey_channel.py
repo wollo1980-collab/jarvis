@@ -165,6 +165,22 @@ def test_make_speakable_leaves_short_text_untouched():
     assert make_speakable("") == ""
 
 
+def test_quiet_streams_bridges_missing_stderr(monkeypatch):
+    """Live-Fund 2026-07-09: unter pythonw ist stderr None - openwakewords
+    tqdm-Download crashte damit ('Wake-Word-Modell nicht ladbar'). Der
+    Kontextmanager ueberbrueckt fehlende Streams und stellt sie wieder her."""
+    import sys
+
+    from hotkey_channel import _quiet_streams
+
+    monkeypatch.setattr(sys, "stderr", None)
+    monkeypatch.setattr(sys, "stdout", None)
+    with _quiet_streams():
+        assert sys.stderr is not None and sys.stdout is not None
+        sys.stderr.write("tqdm darf schreiben")  # darf nicht werfen
+    assert sys.stderr is None and sys.stdout is None  # sauber restauriert
+
+
 # --- Wake-Word (ADR-044) ------------------------------------------------------
 
 
