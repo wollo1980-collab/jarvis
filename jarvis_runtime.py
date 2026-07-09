@@ -51,6 +51,7 @@ import commands.mail as mail_commands
 import commands.memory as memory_commands
 import commands.monitor as monitor_commands
 import commands.plan as plan_commands
+import commands.news as news_commands
 import commands.reports as reports_commands
 import commands.shutdown as shutdown_commands
 import commands.web as web_commands
@@ -160,6 +161,8 @@ class JarvisRuntime:
         reports_commands.configure(self.ai)
         monitor_commands.configure(self.ai)
         web_commands.configure(self.ai, timeout_seconds=config.timeout)
+        # News-Briefing (ADR-042): RSS-Feeds aus der Config.
+        news_commands.configure(config.news_feeds, timeout_seconds=config.timeout)
         mail_commands.configure(config)
         # Agenten-Delegation (ADR-034): read-only Repo-Analyse. Backend aus der
         # Verdrahtungsschicht injiziert (Fachlogik nennt kein Backend, ADR-036).
@@ -577,15 +580,17 @@ def _start_hotkey_channel(runtime: JarvisRuntime, config: Config, transcriber):
         logger.info("Push-to-talk aus: kein Transcriber (OpenAI-Key fehlt?).")
         return None
 
-    from hotkey_channel import HotkeyChannel
+    from hotkey_channel import HotkeyChannel, make_speakable
 
     speech = SpeechEngine(config)
 
     def speak(text: str) -> None:
         # Gesprochene Antwort darf nie den Aufrufer (Worker/PTT-Thread)
         # mitreissen - Fehler landen im Log, die Arbeit geht weiter.
+        # make_speakable: URLs/Quellen-Bloecke werden nicht vorgelesen,
+        # Laengen-Deckel gegen Monologe (Text-Kanaele bleiben vollstaendig).
         try:
-            speech.say(text)
+            speech.say(make_speakable(text))
         except Exception:  # noqa: BLE001
             logger.exception("Sprachausgabe fehlgeschlagen.")
 

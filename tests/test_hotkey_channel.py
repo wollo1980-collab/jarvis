@@ -121,6 +121,38 @@ def test_stop_without_start_is_safe():
     channel.stop()  # darf nicht werfen
 
 
+def test_make_speakable_drops_sources_and_urls():
+    """Nutzungslauf-Befund 2026-07-09: URLs und Quellen-Bloecke werden nicht
+    vorgelesen - Text-Kanaele behalten sie."""
+    from hotkey_channel import make_speakable
+
+    text = (
+        "Kurzer Ueberblick zu den Treffern. Details unter https://example.com/sehr/lange/url dazu.\n\n"
+        "Quellen:\n- https://tagesschau.de/x\n- https://spiegel.de/y"
+    )
+    spoken = make_speakable(text)
+    assert "http" not in spoken
+    assert "Quellen" not in spoken
+    assert "Kurzer Ueberblick zu den Treffern." in spoken
+
+
+def test_make_speakable_caps_long_answers_at_sentence():
+    from hotkey_channel import _MAX_SPOKEN_CHARS, make_speakable
+
+    long_text = ("Das ist ein Satz mit etwas Inhalt. " * 60).strip()
+    spoken = make_speakable(long_text)
+    assert len(spoken) < len(long_text)
+    assert len(spoken) <= _MAX_SPOKEN_CHARS + 50
+    assert spoken.endswith("— so weit der Überblick, Sir.")
+
+
+def test_make_speakable_leaves_short_text_untouched():
+    from hotkey_channel import make_speakable
+
+    assert make_speakable("Notiert, Sir: «Zahnarzt» — 09:00") == "Notiert, Sir: «Zahnarzt» — 09:00"
+    assert make_speakable("") == ""
+
+
 def test_to_wav_produces_valid_mono_16k():
     data = _to_wav(b"\x00\x01" * 160)
     with wave.open(io.BytesIO(data), "rb") as w:

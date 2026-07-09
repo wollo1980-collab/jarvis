@@ -275,6 +275,13 @@ Jarvis: 🗑 Eintrag gelöscht: «Zahnarzt»
   erfüllt deinen expliziten Auftrag und ist rein informativ (Governance-
   Invariante gewahrt). Daten liegen in `memory_data/entries.json`.
 
+## News-Briefing: „Was gibt's Neues?" (ADR-042)
+
+Jarvis trägt die aktuellen **Top-Schlagzeilen** aus RSS-Feeds vor („Die Lage,
+Sir — …") — Standard: tagesschau, erweiterbar über `news_feeds` in
+`config.json`. Read-only, kein API-Key. Abgrenzung: „was gibt's Neues?" →
+Briefing; „such im Web nach X" → Recherche mit Quellen.
+
 ## Mit Jarvis am PC sprechen (Push-to-talk, ADR-041)
 
 **`Strg+Alt+J`** drücken → Signalton → sprechen → erneut `Strg+Alt+J` (oder

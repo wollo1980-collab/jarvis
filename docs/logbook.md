@@ -1,5 +1,9 @@
 # Logbook
 
+## 2026-07-09 - Doppel-Scheibe: Sprechfassung + News-Briefing (ADR-042)
+
+**Nutzungslauf-Befund:** „Gibt es Nachrichten?" → `search_web` lieferte korrekt Suchtreffer — aber die sind für News-Fragen **Portale statt Meldungen**, und der Sprachkanal las minutenlang URLs vor. Zwei Wurzeln, zwei Fixes: **(1) Sprechfassung** (`make_speakable` im PTT-Kanal): Quellen-Blöcke und URLs werden nicht vorgelesen, Längen-Deckel ~600 Zeichen mit Satzende-Schnitt — Text-Kanäle behalten den vollen Text samt Quellen (PIS-Belege-Prinzip unangetastet). **(2) News-Briefing `get_news`** (ADR-042): neuer read-only RSS-Connector (`core/news_reader.py`, stdlib-only, Fetcher injizierbar, kaputte Feeds überspringen, Meldungen reihum über Feeds verteilt), Command im Persona-Ton („Die Lage, Sir — …"), `news_feeds` konfigurierbar (Default tagesschau), Planner-Abgrenzung get_news (Schlagzeilen) vs. search_web (gezielte Recherche). Bewusst ohne LLM-Zusammenfassung/Themenfilter; „Morgen-Briefing per Scheduler" als Kandidat notiert.
+
 ## 2026-07-09 - Bugfix: OpenAI-TTS war über winsound stumm (kaputte WAV-Header)
 
 **Nutzungslauf-Befund:** Nach dem Wechsel auf `tts_backend: "openai"` kamen Piptöne, aber keine gesprochene Antwort — ohne jeden Log-Fehler. Diagnose per Byte-Inspektion: OpenAI **streamt** WAVs (chunked) und trägt in RIFF-/data-Größenfelder den Platzhalter `0xFFFFFFFF` ein; `winsound.PlaySound` verweigert solche Dateien **stumm** (tolerante Player wie der Mediaplayer schlucken sie — deshalb klangen die Desktop-Stimmproben). Fix: `_fix_wav_header()` in `core/tts/openai_backend.py` repariert die Größenfelder vor dem Schreiben (fail-safe: Nicht-WAV passiert unverändert; idempotent). Lehre: „kein Fehler im Log" + „Player spielt's ab" beweist nichts für `winsound` — strikte Konsumenten brauchen strikte Dateien.

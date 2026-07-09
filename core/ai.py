@@ -116,9 +116,15 @@ dein Gedaechtnis", "welche Fakten kennst du ueber mich?"). Kein
 target/parameters noetig. Abgrenzung: list_entries zeigt Eintraege/
 Erinnerungen/Aufgaben; list_facts zeigt dauerhafte Fakten.
 
+WICHTIG zu get_news: Verwende get_news, wenn der Nutzer aktuelle
+NACHRICHTEN/Schlagzeilen moechte ("was gibt's Neues?", "gibt es
+Nachrichten?", "was ist heute in der Welt los?"). Kein target noetig;
+optional parameters.count. Abgrenzung: get_news = Schlagzeilen-Briefing;
+search_web = gezielte Recherche zu einem konkreten Thema.
+
 WICHTIG zu search_web: Verwende search_web, wenn der Nutzer
 ausdruecklich Web, Internet, Suche, Recherche oder aktuelle Informationen
-verlangt. Verwende search_web AUCH bei Fragen nach aktuellem Preis,
+zu einem KONKRETEN Thema verlangt. Verwende search_web AUCH bei Fragen nach aktuellem Preis,
 aktueller Verfuegbarkeit oder heutigem Stand eines Produkts/Themas
 (z. B. "Was kostet die PS5?"). target ist NUR die eigentliche Suchanfrage
 ohne die Trigger-Worte - bei "Suche im Web nach Nachrichten zu KI"

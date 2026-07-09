@@ -34,6 +34,12 @@ class Config:
     # OpenAI-Key vorhanden sind; hier laesst er sich hart abschalten.
     ptt_enabled: bool = True
 
+    # News-Briefing (ADR-042): RSS-Feeds fuer "was gibt's Neues?". Read-only,
+    # kein Key. Default: tagesschau; beliebig erweiterbar in config.json.
+    news_feeds: list = field(
+        default_factory=lambda: ["https://www.tagesschau.de/index~rss2.xml"]
+    )
+
     # Multi-KI Provider-Auswahl (v0.8 Phase 1, ADR-029): "openai" | "claude".
     # Explizite Auswahl per Config, kein Auto-Routing. Claude nutzt einen
     # eigenen Key (ANTHROPIC_API_KEY, ausschliesslich ueber Env, nie in
@@ -133,6 +139,7 @@ class Config:
             model=data.get("model", cls.model),
             transcription_model=data.get("transcription_model", cls.transcription_model),
             ptt_enabled=data.get("ptt_enabled", cls.ptt_enabled),
+            news_feeds=data.get("news_feeds") or ["https://www.tagesschau.de/index~rss2.xml"],
             ai_provider=data.get("ai_provider", cls.ai_provider),
             anthropic_api_key=anthropic_key,
             claude_model=data.get("claude_model", cls.claude_model),

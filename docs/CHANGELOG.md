@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-07-09 - News-Briefing + Sprechfassung (ADR-042)
+
+### Neu
+- **„Was gibt's Neues?"** — Jarvis trägt jetzt die **Top-Schlagzeilen** aus konfigurierbaren RSS-Feeds vor (Standard: tagesschau; `news_feeds` in der Config), statt Websites zu empfehlen: „Die Lage, Sir — die wichtigsten Meldungen: 1. …". Read-only, kein API-Key, auch per Telegram.
+- **Gesprochene Antworten sind jetzt vorlesbar:** Der Sprachkanal liest keine URLs und Quellen-Blöcke mehr vor und deckelt die Länge (sauber am Satzende, „— so weit der Überblick, Sir."). Telegram/Text behalten weiterhin den vollen Text samt Quellen.
+
 ## 2026-07-09 - Feinschliff Sprachkanal: Tempo + persönliche Ansprache
 
 ### Neu/Geändert

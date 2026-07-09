@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import io
 import logging
+import re
 import threading
 import time
 import wave
@@ -56,6 +57,38 @@ def dependencies_available() -> bool:
     """True, wenn die optionalen Pakete importierbar sind. Das Mikrofon wird
     separat beim Start geprueft (Geraete koennen zur Laufzeit fehlen)."""
     return _sounddevice is not None and _keyboard is not None
+
+
+# Sprechfassung (Nutzungslauf-Befund 2026-07-09): Text-Antworten sind fuer
+# Text-Kanaele gebaut (URLs, Quellen-Bloecke, Laenge) - vorgelesen sind sie
+# eine Qual. Vor dem Sprechen wird deshalb gekuerzt; Telegram/Konsole
+# behalten den vollen Text samt Quellen.
+_MAX_SPOKEN_CHARS = 600
+_URL_RE = re.compile(r"https?://\S+")
+_SPOKEN_SUFFIX = " — so weit der Überblick, Sir."
+
+
+def make_speakable(text: str) -> str:
+    """Macht eine Text-Antwort vorlesbar: Quellen-Block weg, URLs weg,
+    Laengen-Deckel mit sauberem Satzende. Kurze Texte passieren unveraendert."""
+    if not text:
+        return text
+    # Quellen-Block (search_web haengt ihn ans Ende) nicht vorlesen.
+    idx = text.find("Quellen:")
+    if idx != -1:
+        text = text[:idx]
+    # Nackte URLs fliegen raus (vorgelesene Links sind wertlos).
+    text = _URL_RE.sub("", text)
+    # Aufgeraeumte Leerraeume nach den Schnitten.
+    text = re.sub(r"[ \t]+", " ", text).strip()
+
+    if len(text) <= _MAX_SPOKEN_CHARS:
+        return text
+    cut = text[:_MAX_SPOKEN_CHARS]
+    sentence_end = cut.rfind(". ")
+    if sentence_end > 100:
+        cut = cut[: sentence_end + 1]
+    return cut.rstrip() + _SPOKEN_SUFFIX
 
 
 def _to_wav(pcm: bytes) -> bytes:

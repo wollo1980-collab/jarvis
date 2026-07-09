@@ -73,6 +73,8 @@ ALLOWED_INTENTS = {
     "list_facts",
     "system_status",
     "search_web",
+    # News-Briefing (ADR-042): read-only RSS-Schlagzeilen, Stufe 0.
+    "get_news",
     "check_mail",
     "show_mail_advertising",
 }
