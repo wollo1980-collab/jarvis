@@ -214,10 +214,13 @@ def test_wake_word_triggers_shared_pipeline(monkeypatch):
     monkeypatch.setattr(hotkey_channel, "_beep", lambda start: None)
     channel = _channel()
     channel.process_audio = MagicMock()
-    listener = _wake_listener(channel, scores=[0.1, 0.9])  # 2. Frame weckt
-    # Nach dem Trigger: Aufnahme bis Stille - hier sofort still (Amplitude 0),
-    # Mindestdauer erzwingt ein paar Frames.
-    stream = FakeStream([500, 500] + [0] * 40)
+    reset = MagicMock()
+    from hotkey_channel import WakeWordListener
+
+    scores = iter([0.1, 0.9])
+    listener = WakeWordListener(channel, scorer=lambda f: next(scores, 0.0), reset=reset)
+    # Nach dem Trigger: kurzer stiller Vorlauf, dann Sprache, dann Stille.
+    stream = FakeStream([500, 500] + [0] * 5 + [800] * 10 + [0] * 25)
 
     try:
         listener._listen_loop(stream)
@@ -227,6 +230,29 @@ def test_wake_word_triggers_shared_pipeline(monkeypatch):
     channel.process_audio.assert_called_once()
     audio = channel.process_audio.call_args.args[0]
     assert isinstance(audio, bytes) and len(audio) > 0
+    reset.assert_called()  # Modell-Puffer geleert (gegen Endlos-Schleife)
+
+
+def test_wake_without_speech_is_discarded_silently(monkeypatch):
+    """Live-Fund 2026-07-09: Wake ohne Anschlussfrage (Fehltrigger) wird
+    still verworfen - kein process_audio, keine genervte Ansage."""
+    monkeypatch.setattr(hotkey_channel, "_beep", lambda start: None)
+    channel = _channel()
+    channel.process_audio = MagicMock()
+    reset = MagicMock()
+    from hotkey_channel import WakeWordListener
+
+    scores = iter([0.9])
+    listener = WakeWordListener(channel, scorer=lambda f: next(scores, 0.0), reset=reset)
+    stream = FakeStream([500] + [0] * 60)  # nach dem Wake: nur Stille
+
+    try:
+        listener._listen_loop(stream)
+    except StopIteration:
+        pass
+
+    channel.process_audio.assert_not_called()
+    reset.assert_called()
 
 
 def test_wake_word_below_threshold_never_triggers(monkeypatch):

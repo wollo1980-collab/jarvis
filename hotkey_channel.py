@@ -68,10 +68,13 @@ WAKE_WORD_MODEL = "hey_jarvis"
 _WAKE_FRAME_SAMPLES = 1280
 _WAKE_SCORE_THRESHOLD = 0.5
 _WAKE_COOLDOWN_SECONDS = 3.0
-# Aufnahme-Ende nach dem Wake-Word: ~1.5 s Stille (einfacher RMS-Pegel).
+# Aufnahme nach dem Wake-Word: erst auf SPRACHBEGINN warten (Vorlauf zum
+# Formulieren), dann bis ~1.5 s Stille nach dem Sprechen (RMS-Pegel).
+# Live-Fund 2026-07-09: ohne Vorlauf endete die Aufnahme, bevor der Nutzer
+# ueberhaupt anfing zu sprechen.
 _SILENCE_RMS_THRESHOLD = 300.0
 _SILENCE_SECONDS = 1.5
-_MIN_UTTERANCE_SECONDS = 1.0
+_LEADIN_SECONDS = 4.0
 
 
 def dependencies_available() -> bool:
@@ -333,9 +336,18 @@ class WakeWordListener:
 
     scorer ist injizierbar (Tests: Funktion frame->float statt Modell)."""
 
-    def __init__(self, channel: HotkeyChannel, scorer: Optional[Callable] = None):
+    def __init__(
+        self,
+        channel: HotkeyChannel,
+        scorer: Optional[Callable] = None,
+        reset: Optional[Callable[[], None]] = None,
+    ):
         self.channel = channel
         self._scorer = scorer
+        # Modell-Reset nach jedem Trigger (Live-Fund 2026-07-09): openwakeword
+        # puffert ~1-2 s Audio - ohne Reset feuert das alte "Hey Jarvis" beim
+        # Weiterlauschen sofort erneut (Endlos-Piep-Schleife).
+        self._reset_model = reset or (lambda: None)
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self._last_trigger = 0.0
@@ -356,6 +368,8 @@ class WakeWordListener:
                     wakeword_models=[WAKE_WORD_MODEL], inference_framework="onnx"
                 )
                 self._scorer = lambda frame: float(model.predict(frame)[WAKE_WORD_MODEL])
+                if hasattr(model, "reset"):
+                    self._reset_model = model.reset
             except Exception:  # noqa: BLE001 - Wake-Word ist strikt optional
                 logger.warning("Wake-Word-Modell nicht ladbar - Wake-Word bleibt aus.", exc_info=True)
                 return False
@@ -400,27 +414,40 @@ class WakeWordListener:
             _beep(start=True)
             audio = self._record_until_silence(stream)
             _beep(start=False)
-            self.channel.process_audio(audio)
+            if audio:
+                self.channel.process_audio(audio)
+            else:
+                # Wake ohne Anschlussfrage (Fehltrigger/Schweigen): still
+                # verwerfen statt jedes Mal zu antworten.
+                logger.info("Wake-Word ohne Anschlussfrage - verworfen.")
+            # Modell-Puffer leeren, sonst feuert das alte "Hey Jarvis" beim
+            # Weiterlauschen sofort erneut (Endlos-Schleife, Live-Fund).
+            self._reset_model()
             self._last_trigger = time.monotonic()
 
     def _record_until_silence(self, stream) -> bytes:
-        """Nimmt nach dem Wake-Word auf, bis ~1.5 s Stille herrscht (RMS-
-        Pegel) oder MAX_RECORD_SECONDS erreicht sind. Nur im Speicher.
-        Gerechnet wird in AUDIO-Zeit (aufgenommene Frames), nicht Wanduhr -
-        korrekt und deterministisch testbar."""
+        """Nimmt nach dem Wake-Word auf: wartet zuerst auf SPRACHBEGINN
+        (Vorlauf _LEADIN_SECONDS - der Nutzer braucht einen Moment zum
+        Formulieren), dann bis ~1.5 s Stille nach dem Sprechen. Kommt gar
+        keine Sprache: leeres Ergebnis (der Aufrufer verwirft still). Nur im
+        Speicher; gerechnet in AUDIO-Zeit (deterministisch testbar)."""
         frames: list[bytes] = []
         frame_seconds = _WAKE_FRAME_SAMPLES / SAMPLE_RATE
         recorded_seconds = 0.0
         silent_seconds = 0.0
+        speech_seen = False
         while recorded_seconds < MAX_RECORD_SECONDS:
             data, _overflowed = stream.read(_WAKE_FRAME_SAMPLES)
             frames.append(data.tobytes())
             recorded_seconds += frame_seconds
             rms = float(_np.sqrt(_np.mean(data.astype(_np.float64) ** 2)))
-            if rms < _SILENCE_RMS_THRESHOLD:
-                silent_seconds += frame_seconds
-                if silent_seconds >= _SILENCE_SECONDS and recorded_seconds > _MIN_UTTERANCE_SECONDS:
-                    break
-            else:
+            if rms >= _SILENCE_RMS_THRESHOLD:
+                speech_seen = True
                 silent_seconds = 0.0
-        return b"".join(frames)
+            elif speech_seen:
+                silent_seconds += frame_seconds
+                if silent_seconds >= _SILENCE_SECONDS:
+                    break
+            elif recorded_seconds >= _LEADIN_SECONDS:
+                return b""  # nie gesprochen - Fehltrigger/Schweigen
+        return b"".join(frames) if speech_seen else b""
