@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-10 - News-Briefing entschlackt (Quellen-Ballast, Dubletten, Promo)
+
+### Geändert
+- **Quelle nur noch einmal:** Kommt das ganze Briefing aus einer Quelle, steht sie einmal im Kopf („Die Lage, Sir — die wichtigsten Meldungen (Quelle: tagesschau.de):") statt hinter jeder Meldung; bei gemischten Quellen bleibt die Zuordnung pro Meldung (Belege-Prinzip). Werbeslogans in Feed-Titeln („- die erste Adresse für …") werden abgeschnitten.
+- **Titel-Dubletten weg:** Meldungen, deren Beschreibung nur den Titel wiederholt („Merz verteidigt … — Merz verteidigt …"), werden ohne die Dublette vorgetragen.
+- **Programm-Promo raus:** „Livestream: …"-Einträge sind keine Meldungen und fliegen jetzt auch aus dem Standard-Briefing (der Füllstoff-Filter der Themen-Suche greift überall).
+- Nebeneffekt: Die Sprechfassung schneidet nicht mehr echte Meldungen ab — der eingesparte Ballast machte zuvor den Längen-Deckel voll, bevor alle Meldungen dran waren.
+
 ## 2026-07-09 - Wake-Bestätigung „Ja, Sir?" statt Piepton
 
 ### Neu/Geändert

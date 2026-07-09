@@ -59,6 +59,19 @@ def _clean(text: Optional[str]) -> str:
     return text
 
 
+def _dedupe_summary(title: str, summary: str) -> str:
+    """tagesschau & Co. spiegeln bei manchen Meldungen den Titel 1:1 in die
+    description - vorgetragen klingt das doppelt ("Merz verteidigt ... — Merz
+    verteidigt ...", Nutzungslauf-Befund 2026-07-09). Redundanz verwerfen."""
+    if not summary:
+        return ""
+    t = title.casefold().strip()
+    s = summary.casefold().rstrip(" .…").strip()
+    if s and (s in t or t in s):
+        return ""
+    return summary
+
+
 def _parse_feed(data: bytes) -> tuple[str, list[Headline]]:
     """Parst RSS 2.0 (channel/item) oder Atom (feed/entry)."""
     root = ET.fromstring(data)
@@ -73,6 +86,10 @@ def _parse_feed(data: bytes) -> tuple[str, list[Headline]]:
         # ("Schlagzeile - Verlag"). Deshalb: description verwerfen, Verlag
         # als Quelle abtrennen.
         is_google_news = "google news" in source.lower()
+        if not is_google_news:
+            # Feed-Titel tragen oft einen Werbeslogan ("tagesschau.de - die
+            # erste Adresse fuer ..."), der sonst an jeder Meldung klebt.
+            source = source.split(" - ")[0].strip() or source
         for item in channel.findall("item"):
             title = _clean(item.findtext("title"))
             if not title:
@@ -82,9 +99,8 @@ def _parse_feed(data: bytes) -> tuple[str, list[Headline]]:
                 item_source = publisher if sep and publisher else source
                 headlines.append(Headline(title=head or title, summary="", source=item_source))
             else:
-                headlines.append(
-                    Headline(title=title, summary=_clean(item.findtext("description")), source=source)
-                )
+                summary = _dedupe_summary(title, _clean(item.findtext("description")))
+                headlines.append(Headline(title=title, summary=summary, source=source))
         return source, headlines
 
     if root.tag == f"{_ATOM_NS}feed":  # Atom
@@ -92,9 +108,8 @@ def _parse_feed(data: bytes) -> tuple[str, list[Headline]]:
         for entry in root.findall(f"{_ATOM_NS}entry"):
             title = _clean(entry.findtext(f"{_ATOM_NS}title"))
             if title:
-                headlines.append(
-                    Headline(title=title, summary=_clean(entry.findtext(f"{_ATOM_NS}summary")), source=source)
-                )
+                summary = _dedupe_summary(title, _clean(entry.findtext(f"{_ATOM_NS}summary")))
+                headlines.append(Headline(title=title, summary=summary, source=source))
         return source, headlines
 
     return "Unbekannte Quelle", []

@@ -15,12 +15,13 @@ from typing import Optional
 from core.models import Plan, Result, Status
 from core.news_reader import fetch_headlines, google_news_feed_url
 
-# Auto-generierte Fuellstoff-"Meldungen", die Themen-/Orts-Suchen fluten
-# (Nutzungslauf-Befund 2026-07-09: "Luftqualitaet in Usingen ..."). Fuer
-# Wetter gibt es die eigene Faehigkeit; solche Treffer fliegen raus.
-_TOPIC_JUNK_RE = re.compile(
+# Fuellstoff-"Meldungen", die kein Briefing sind (Nutzungslauf-Befunde
+# 2026-07-09): auto-generierter Junk in Themen-/Orts-Suchen ("Luftqualitaet
+# in Usingen ...") und Programm-Promo in Standard-Feeds ("Livestream: ...").
+# Fuer Wetter gibt es die eigene Faehigkeit; solche Treffer fliegen raus.
+_JUNK_RE = re.compile(
     r"(?i)\b(luftqualität|luftqualitaet|pollenflug|benzinpreis|spritpreis|"
-    r"wetter (heute|morgen|aktuell)|stau (heute|aktuell))"
+    r"wetter (heute|morgen|aktuell)|stau (heute|aktuell)|livestream)"
 )
 
 _feeds: Optional[list] = None
@@ -64,19 +65,12 @@ class GetNewsCommand:
         # Orts-/Themen-News (ADR-043): "was gibt's Neues in Usingen?" ->
         # Google-News-RSS-Suche statt der Standard-Feeds.
         topic = str(plan.parameters.get("topic") or plan.target or "").strip()
-        if topic:
-            feeds = [google_news_feed_url(topic)]
-            header = f"Die Lage zu «{topic}», Sir:"
-        else:
-            feeds = _require_feeds()
-            header = "Die Lage, Sir — die wichtigsten Meldungen:"
+        feeds = [google_news_feed_url(topic)] if topic else _require_feeds()
 
-        # Bei Themen-Suchen mehr holen und Fuellstoff aussieben - lieber zwei
-        # echte Meldungen als vier ueber Feinstaub.
-        fetch_limit = limit * 3 if topic else limit
-        headlines = fetch_headlines(feeds, limit=fetch_limit, timeout=_timeout)
-        if topic:
-            headlines = [h for h in headlines if not _TOPIC_JUNK_RE.search(h.title)][:limit]
+        # Mehr holen und Fuellstoff aussieben (Wetter-Junk, Livestream-Promo) -
+        # lieber zwei echte Meldungen als vier ueber Feinstaub.
+        headlines = fetch_headlines(feeds, limit=limit * 3, timeout=_timeout)
+        headlines = [h for h in headlines if not _JUNK_RE.search(h.title)][:limit]
         if not headlines:
             detail = f" zu «{topic}»" if topic else ""
             return Result(
@@ -84,10 +78,23 @@ class GetNewsCommand:
                 message=f"Die Nachrichtenlage{detail} ist gerade nicht abrufbar, Sir.",
             )
 
+        # Eine einzige Quelle wird nur einmal im Kopf genannt statt an jeder
+        # Meldung (Nutzungslauf-Befund 2026-07-09: "(tagesschau.de - ...)"
+        # hinter jeder Zeile ist Ballast - gesprochen frisst er den
+        # Laengen-Deckel auf, Meldungen fallen hinten runter).
+        sources = {h.source for h in headlines}
+        single_source = sources.pop() if len(sources) == 1 else None
+        src_note = f" (Quelle: {single_source})" if single_source else ""
+        if topic:
+            header = f"Die Lage zu «{topic}», Sir{src_note}:"
+        else:
+            header = f"Die Lage, Sir — die wichtigsten Meldungen{src_note}:"
+
         lines = []
         for i, h in enumerate(headlines, start=1):
             summary = f" — {h.summary}" if h.summary else ""
-            lines.append(f"{i}. {h.title}{summary} ({h.source})")
+            source = "" if single_source else f" ({h.source})"
+            lines.append(f"{i}. {h.title}{summary}{source}")
         body = "\n".join(lines)
         return Result(
             status=Status.SUCCESS,
