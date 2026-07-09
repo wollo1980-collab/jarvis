@@ -386,6 +386,17 @@ def test_chat_prompt_enforces_informal_personal_address():
     assert "Hotline" in CHAT_SYSTEM_PROMPT
 
 
+def test_chat_prompt_leans_into_film_jarvis_persona():
+    """PO-Wunsch 2026-07-09: deutlich an den Film-J.A.R.V.I.S. anlehnen -
+    Gelassenheit, Understatement, trockener Witz, dosiertes 'Sir'; bei
+    kritischen Themen weicht der Witz der Praezision."""
+    assert "Iron-Man" in CHAT_SYSTEM_PROMPT
+    assert "Understatement" in CHAT_SYSTEM_PROMPT
+    assert '"Sir"' in CHAT_SYSTEM_PROMPT
+    assert "trockener, britischer Humor" in CHAT_SYSTEM_PROMPT
+    assert "weicht der Witz" in CHAT_SYSTEM_PROMPT
+
+
 def test_build_chat_system_prompt_empty_memory_states_it_explicitly():
     """Welle 1.2 ('Meister'-Fix): auch bei LEEREM Gedaechtnis wird der Stand
     explizit genannt + Vorrang-Regel angehaengt - sonst wirkt eine geloeschte
