@@ -83,6 +83,7 @@ class Config:
     # OpenAI-TTS (Cloud) - nutzt denselben openai_api_key wie oben.
     openai_tts_model: str = "gpt-4o-mini-tts"
     openai_tts_voice: str = "onyx"
+    openai_tts_speed: float = 1.0  # 0.25-4.0; PO nutzt 1.3 (config.json)
 
     # ElevenLabs-TTS (Cloud) - eigener API-Key noetig, siehe README.
     elevenlabs_api_key: str = ""
@@ -148,6 +149,7 @@ class Config:
             tts_backend=data.get("tts_backend", cls.tts_backend),
             openai_tts_model=data.get("openai_tts_model", cls.openai_tts_model),
             openai_tts_voice=data.get("openai_tts_voice", cls.openai_tts_voice),
+            openai_tts_speed=float(data.get("openai_tts_speed", cls.openai_tts_speed)),
             elevenlabs_api_key=elevenlabs_key,
             elevenlabs_voice_id=data.get("elevenlabs_voice_id", cls.elevenlabs_voice_id),
             elevenlabs_model=data.get("elevenlabs_model", cls.elevenlabs_model),

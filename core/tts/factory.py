@@ -37,6 +37,7 @@ def create_backend(config: Config) -> Optional[TTSBackend]:
                 model=config.openai_tts_model,
                 voice=config.openai_tts_voice,
                 timeout=config.timeout,
+                speed=config.openai_tts_speed,
             )
 
         if backend_name == "elevenlabs":

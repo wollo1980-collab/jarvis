@@ -42,7 +42,7 @@ def test_creates_openai_backend_when_configured():
         result = create_backend(config)
 
     cls.assert_called_once_with(
-        api_key="test-key", model="tts-1", voice="onyx", timeout=config.timeout
+        api_key="test-key", model="tts-1", voice="onyx", timeout=config.timeout, speed=1.0
     )
     assert result is fake_backend
 

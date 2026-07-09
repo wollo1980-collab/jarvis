@@ -378,6 +378,14 @@ def test_system_prompt_mentions_web_command():
     assert "Was kostet die PS5?" in prompt
 
 
+def test_chat_prompt_enforces_informal_personal_address():
+    """Nutzungslauf-Befund 2026-07-09: 'Wie kann ich Ihnen helfen' ist zu
+    foermlich - Jarvis duzt Wolfgang grundsaetzlich, kein Hotline-Ton."""
+    assert "DUZT" in CHAT_SYSTEM_PROMPT
+    assert 'niemals "Sie"' in CHAT_SYSTEM_PROMPT
+    assert "Hotline" in CHAT_SYSTEM_PROMPT
+
+
 def test_build_chat_system_prompt_empty_memory_states_it_explicitly():
     """Welle 1.2 ('Meister'-Fix): auch bei LEEREM Gedaechtnis wird der Stand
     explizit genannt + Vorrang-Regel angehaengt - sonst wirkt eine geloeschte

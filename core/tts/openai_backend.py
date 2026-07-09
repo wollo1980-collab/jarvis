@@ -47,12 +47,16 @@ class OpenAITTSBackend:
         model: str = "gpt-4o-mini-tts",
         voice: str = "onyx",
         timeout: float = 15.0,
+        speed: float = 1.0,
     ):
         if not api_key:
             raise RuntimeError("TTS-Backend 'openai' braucht einen OPENAI_API_KEY.")
         self.client = OpenAI(api_key=api_key, timeout=timeout)
         self.model = model
         self.voice = voice
+        # Sprechtempo (0.25-4.0; API-Default 1.0). Nutzungslauf-Wunsch
+        # 2026-07-09: PO empfindet 1.0 als zu langsam, waehlte 1.3.
+        self.speed = speed
 
     def synthesize_to_file(self, text: str, output_path: str) -> None:
         response = self.client.audio.speech.create(
@@ -60,6 +64,7 @@ class OpenAITTSBackend:
             voice=self.voice,
             input=text,
             response_format="wav",
+            speed=self.speed,
         )
         # Header reparieren statt direkt zu streamen - sonst spielt winsound
         # die Datei stumm nicht ab (siehe _fix_wav_header).

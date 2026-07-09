@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-07-09 - Feinschliff Sprachkanal: Tempo + persönliche Ansprache
+
+### Neu/Geändert
+- **Sprechtempo konfigurierbar** (`openai_tts_speed`, 0.25–4.0) — Wolfgang fährt 1.3.
+- **Jarvis duzt jetzt konsequent** — kein „Wie kann ich Ihnen helfen?"-Hotline-Ton mehr; persönlich-vertraute Ansprache, Charakter unverändert ruhig und präzise.
+
 ## 2026-07-09 - Mit Jarvis am PC sprechen: Push-to-talk + lokale Stimme (ADR-041)
 
 ### Neu

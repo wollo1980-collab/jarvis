@@ -83,12 +83,26 @@ def test_openai_backend_writes_repaired_wav(tmp_path):
         backend.synthesize_to_file("Hallo", str(output_path))
 
     create.assert_called_once_with(
-        model="tts-1", voice="onyx", input="Hallo", response_format="wav"
+        model="tts-1", voice="onyx", input="Hallo", response_format="wav", speed=1.0
     )
     data = output_path.read_bytes()
     assert int.from_bytes(data[4:8], "little") == len(data) - 8  # RIFF repariert
     i = data.find(b"data", 12)
     assert int.from_bytes(data[i + 4 : i + 8], "little") == len(data) - i - 8  # data repariert
+
+
+def test_openai_backend_passes_configured_speed(tmp_path):
+    """Nutzungslauf-Wunsch 2026-07-09: konfigurierbares Sprechtempo."""
+    backend = OpenAITTSBackend(api_key="test-key", speed=1.3)
+    fake_response = MagicMock()
+    fake_response.content = _broken_openai_wav()
+
+    with patch.object(
+        backend.client.audio.speech, "create", return_value=fake_response
+    ) as create:
+        backend.synthesize_to_file("Hallo", str(tmp_path / "out.wav"))
+
+    assert create.call_args.kwargs["speed"] == 1.3
 
 
 def test_fix_wav_header_leaves_valid_and_foreign_data_untouched():
