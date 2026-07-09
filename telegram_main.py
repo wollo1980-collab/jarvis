@@ -68,6 +68,9 @@ ALLOWED_INTENTS = {
     "chat",
     "remember_fact",
     "forget_fact",
+    # Sichtbares Gedaechtnis (Welle 1.3): rein lesend, Sicherheitsstufe 0 -
+    # gehoert in dieselbe Klasse wie remember/forget/check_mail.
+    "list_facts",
     "system_status",
     "search_web",
     "check_mail",

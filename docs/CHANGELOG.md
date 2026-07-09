@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-09 - Vergessen wirkt wirklich + sichtbares Gedächtnis
+
+### Behoben
+- **Gelöschte Präferenzen wirken nicht mehr nach:** Nach „vergiss, dass du mich Meister nennst" nannte Jarvis dich trotzdem weiter so (der alte Wortlaut stand noch im Gesprächsverlauf). Jetzt hat der aktuelle Gedächtnis-Stand ausdrücklich Vorrang, und die Lösch-Bestätigung entwertet den Fakt („…gilt ab sofort nicht mehr").
+
+### Neu
+- **„Was hast du dir gemerkt?"** — `list_facts` zeigt dein komplettes Langzeitgedächtnis mit Kategorien (nur lesend, auch über Telegram).
+
 ## 2026-07-09 - Einträge: Erinnerungen, Aufgaben & wichtige Merkposten (A1)
 
 ### Neu

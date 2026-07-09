@@ -77,9 +77,16 @@ class ForgetFactCommand:
             )
 
         if _require_long_term().forget(text):
+            # Formulierung entwertet den Fakt ausdruecklich (Welle 1.2,
+            # "Meister"-Fix): die Bestaetigung landet im Gespraechsverlauf -
+            # "gilt ab sofort nicht mehr" verstaerkt das Loeschen, statt den
+            # alten Wortlaut nur zu wiederholen.
             return Result(
                 status=Status.SUCCESS,
-                message=f"In Ordnung. Das habe ich aus meinem Langzeitgedächtnis entfernt: {text}",
+                message=(
+                    f"Erledigt - das habe ich aus meinem Langzeitgedächtnis entfernt "
+                    f"und es gilt ab sofort nicht mehr: {text}"
+                ),
             )
         return Result(
             status=Status.FAILED,
@@ -87,6 +94,30 @@ class ForgetFactCommand:
         )
 
 
+class ListFactsCommand:
+    name = "list_facts"
+    description = (
+        "Zeigt alle dauerhaft gemerkten Fakten des Langzeitgedaechtnisses mit "
+        "Kategorie (z. B. 'was hast du dir gemerkt?', 'zeig dein Gedaechtnis', "
+        "'welche Fakten kennst du ueber mich?'). Nur lesend."
+    )
+    requires_confirmation = False
+
+    def execute(self, plan: Plan) -> Result:
+        facts = _require_long_term().all_facts()
+        if not facts:
+            return Result(
+                status=Status.SUCCESS,
+                message="Mein Langzeitgedächtnis ist aktuell leer - ich habe mir nichts dauerhaft gemerkt.",
+            )
+        lines = "\n".join(f"- ({f.category}) {f.text}" for f in facts)
+        return Result(
+            status=Status.SUCCESS,
+            message=f"Das habe ich mir dauerhaft gemerkt ({len(facts)}):\n{lines}",
+            data={"count": len(facts)},
+        )
+
+
 # Registrierungspunkt fuer dieses Modul - commands/__init__.py liest
 # diese Liste beim Start ein.
-COMMANDS = [RememberFactCommand(), ForgetFactCommand()]
+COMMANDS = [RememberFactCommand(), ForgetFactCommand(), ListFactsCommand()]

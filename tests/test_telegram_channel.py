@@ -246,6 +246,14 @@ def test_runtime_whitelist_allows_stop_runtime():
     assert len(steps) == 1
 
 
+def test_whitelist_allows_list_facts_everywhere():
+    """Welle 1.3: list_facts ist rein lesend (Stufe 0) und deshalb - wie
+    remember/forget_fact - schon im Standalone-Set erlaubt (und damit
+    automatisch auch im Runtime-Set)."""
+    assert "list_facts" in telegram_main.ALLOWED_INTENTS
+    assert "list_facts" in telegram_channel.RUNTIME_ALLOWED_INTENTS
+
+
 def test_runtime_whitelist_allows_entry_intents():
     """Eintraege (A1): add/list/delete_entry sind ueber den Runtime-Kanal
     erreichbar (harmlos, eigener Datenlayer - wie remember_fact), aber nicht

@@ -339,9 +339,14 @@ def test_system_prompt_mentions_web_command():
     assert "Was kostet die PS5?" in prompt
 
 
-def test_build_chat_system_prompt_without_summary_unchanged():
-    assert build_chat_system_prompt("") == CHAT_SYSTEM_PROMPT
-    assert build_chat_system_prompt() == CHAT_SYSTEM_PROMPT
+def test_build_chat_system_prompt_empty_memory_states_it_explicitly():
+    """Welle 1.2 ('Meister'-Fix): auch bei LEEREM Gedaechtnis wird der Stand
+    explizit genannt + Vorrang-Regel angehaengt - sonst wirkt eine geloeschte
+    Praeferenz ueber den Gespraechsverlauf weiter (frueher: Prompt unveraendert)."""
+    for prompt in (build_chat_system_prompt(""), build_chat_system_prompt()):
+        assert CHAT_SYSTEM_PROMPT in prompt
+        assert "keine dauerhaft gemerkten Fakten" in prompt
+        assert "Vorrang" in prompt
 
 
 def test_build_chat_system_prompt_includes_long_term_summary():
@@ -350,6 +355,10 @@ def test_build_chat_system_prompt_includes_long_term_summary():
     assert CHAT_SYSTEM_PROMPT in prompt
     assert "arbeitet an Jarvis" in prompt
     assert "Langzeitgedächtnis" in prompt
+    # Welle 1.2: Vorrang-Regel steht NACH dem Gedaechtnis-Stand - der aktuelle
+    # Stand schlaegt aeltere Aussagen im Gespraechsverlauf (Anrede/Praeferenzen).
+    assert "Vorrang" in prompt
+    assert "gilt nicht mehr" in prompt
 
 
 def test_answer_passes_long_term_summary_into_system_prompt():

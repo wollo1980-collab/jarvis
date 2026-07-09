@@ -106,7 +106,14 @@ Kategorien: "projekt", "gewohnheit", "praeferenz" oder "allgemein"
 WICHTIG zu forget_fact: target ist der Text (oder ein eindeutiger
 Teil davon), an dem der vorher gemerkte Fakt wiedererkannt werden
 kann - z. B. bei "Vergiss, dass ich montags Reports mache" ist
-target = "montags Reports".
+target = "montags Reports". Auch "merk dir X nicht mehr" ist
+forget_fact, NICHT remember_fact.
+
+WICHTIG zu list_facts: Verwende list_facts, wenn der Nutzer sehen will,
+was du dir dauerhaft gemerkt hast ("was hast du dir gemerkt?", "zeig
+dein Gedaechtnis", "welche Fakten kennst du ueber mich?"). Kein
+target/parameters noetig. Abgrenzung: list_entries zeigt Eintraege/
+Erinnerungen/Aufgaben; list_facts zeigt dauerhafte Fakten.
 
 WICHTIG zu search_web: Verwende search_web, wenn der Nutzer
 ausdruecklich Web, Internet, Suche, Recherche oder aktuelle Informationen
@@ -184,20 +191,36 @@ Wenn ein Thema kritisch, folgenreich oder unsicher ist, werde noch klarer,
 knapper und formeller."""
 
 
+# Vorrang-Regel (Welle 1.2, "Meister"-Bugfix): Ein per forget_fact geloeschter
+# Fakt lebte im Gespraechsverlauf weiter (das Modell fuehrte das Muster aus den
+# letzten 20 Nachrichten fort, Dogfooding-Fund 2026-07-08). Die Regel stellt
+# klar: der AKTUELLE Gedaechtnis-Stand schlaegt aeltere Verlaufs-Aussagen.
+_MEMORY_PRECEDENCE_RULE = (
+    "WICHTIG: Der aktuelle Stand des Langzeitgedächtnisses hat Vorrang vor "
+    "älteren Aussagen im Gesprächsverlauf - insbesondere bei Anrede und "
+    "Präferenzen. Was dort nicht (mehr) steht, gilt nicht mehr, auch wenn es "
+    "früher im Gespräch gesagt oder bestätigt wurde."
+)
+
+
 def build_chat_system_prompt(long_term_summary: str = "") -> str:
-    """Ergänzt CHAT_SYSTEM_PROMPT bei Bedarf um eine kompakte
-    Zusammenfassung des Langzeitgedächtnisses (v0.4, ADR-009) - so
-    kann Jarvis in Antworten auf zuvor gemerkte Fakten (Projekte,
-    Gewohnheiten, Präferenzen) zurückgreifen, auch über einzelne
-    Gespräche hinweg. Leerer String -> Prompt bleibt unverändert
-    (kein leerer Abschnitt im Kontext)."""
+    """Ergänzt CHAT_SYSTEM_PROMPT um den Langzeitgedächtnis-Stand (v0.4,
+    ADR-009) und die Vorrang-Regel (Welle 1.2). Auch bei LEEREM Gedächtnis
+    wird der Stand explizit genannt - sonst wirkt eine geloeschte Praeferenz
+    ueber den Gespraechsverlauf weiter (genau der 'Meister'-Fall, wenn der
+    geloeschte Fakt der einzige war)."""
     if not long_term_summary:
-        return CHAT_SYSTEM_PROMPT
+        return (
+            f"{CHAT_SYSTEM_PROMPT}\n\n"
+            f"Dein Langzeitgedächtnis enthält aktuell keine dauerhaft gemerkten Fakten.\n"
+            f"{_MEMORY_PRECEDENCE_RULE}"
+        )
 
     return (
         f"{CHAT_SYSTEM_PROMPT}\n\n"
         f"Was du dir über Wolfgang dauerhaft gemerkt hast "
-        f"(Langzeitgedächtnis):\n{long_term_summary}"
+        f"(Langzeitgedächtnis):\n{long_term_summary}\n\n"
+        f"{_MEMORY_PRECEDENCE_RULE}"
     )
 
 
