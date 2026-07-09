@@ -1,5 +1,11 @@
 # Logbook
 
+## 2026-07-09 - Welle 2.3 Kosten-Zwischenbilanz (Auswertung der Logs 01.–09.07.)
+
+**Agenten-Arm (Claude, `claude -p`):** 11 Läufe sichtbar — 7 erfolgreich, 4 gescheitert (alle 4 am 08.07. Vormittag an der Pro-Session-Wand; seit Max strukturell entschärft). Erfolgreiche Delegationen: Ø **$0,13/Lauf** (Spanne $0,08–0,22), Ø 5,9 Turns. **Wirknachweis Kontext-Optimierung:** `plan_next_step` 17 Turns/99 s (vorher) → 4 Turns/64 s (nachher). Wichtig zur Einordnung: die $-Werte sind **API-Gegenwert**, nicht abgerechnet — die Läufe laufen über den Abo-Login (Pro→Max), Grenzkosten $0. **Befund Observability:** `delegate` loggt `kosten=`, `plan` nicht — kleiner Angleichungs-Kandidat.
+**Planner/Chat (OpenAI, metered):** 213 Router-Aufrufe in 9 Tagen (gpt-4o-mini) ≈ **<$0,10 gesamt** — das €19-Guthaben hält bei diesem Tempo weit über ein Jahr. STT (Whisper) im Cent-Bereich.
+**Fazit für die Kostenstrategie:** Variable Kosten praktisch null (<1 €/Monat); die reale Kostenbasis sind die Abos (Max + GPT Plus), die gemischt (persönlich + Jarvis) genutzt werden. Der dedizierte Anthropic-API-Key bleibt **unnötig** — die Beobachtung bestätigt die Entscheidung vom 08.07. Nächster Messpunkt: nach dem 1.0-Nutzungslauf.
+
 ## 2026-07-09 - Welle 2.2 Planner-Heuristik-Fallback: kritische Intents überleben API-Ausfall
 
 Befund aus dem Architekturvergleich (rezaulhreza: „LLM routing with heuristic fallback"): Scheiterte der Planner-Aufruf (API down, kaputtes JSON), fiel `get_plan()` auf `chat` zurück — das ebenfalls die API braucht → Jarvis komplett taub, auch für „beende dich". Fix: `_critical_intent_fallback` in `core/ai.py` — enge Teilstring-Muster **nur für** `stop_runtime` und `system_status`, **nur im Fehlerpfad** aktiv (Test sichert ab: im Normalbetrieb gewinnt immer die Modell-Antwort, auch wenn die Eingabe eine kritische Phrase enthält). Konservative Abgrenzung getestet („beende die Analyse" / „fahr den PC runter" ≠ stop_runtime). Kein ADR (Robustheits-Fix im bestehenden Fehlerpfad).
