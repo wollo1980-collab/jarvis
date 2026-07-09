@@ -165,6 +165,13 @@ beenden, der Rechner laeuft weiter. Bloße Abschiedsworte wie "Tschuess", "Ende"
 Jarvis selbst gerichteter Beenden-Wunsch waehlt stop_runtime. Kein
 target/parameters noetig.
 
+WICHTIG zu restart_runtime: Verwende restart_runtime, wenn der Nutzer JARVIS
+SELBST neu starten moechte - z. B. "starte dich neu", "Neustart", "restarte
+dich", "starte Jarvis neu". Abgrenzung: stop_runtime = nur beenden;
+restart_pc = den RECHNER neu starten ("starte den PC neu"). Nur ein klar auf
+Jarvis selbst gerichteter Neustart-Wunsch waehlt restart_runtime. Kein
+target/parameters noetig.
+
 WICHTIG zu add_entry/list_entries/delete_entry (Eintraege = Erinnerungen,
 Aufgaben, wichtige Merkposten): Verwende add_entry, wenn der Nutzer sich
 etwas EINMALIGES vormerken will - z. B. "erinnere mich morgen um 9 an den
@@ -196,6 +203,12 @@ z. B. "mach das Ding auf")."""
 # der LLM-Planner die einzige Quelle. Alles andere faellt weiter ehrlich auf
 # chat/confidence 0.0 zurueck.
 _CRITICAL_INTENT_PHRASES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        # Neustart VOR stop_runtime pruefen: "starte dich neu" darf nie als
+        # blosses Beenden fehlgedeutet werden.
+        "restart_runtime",
+        ("starte dich neu", "starte jarvis neu", "restarte dich", "jarvis neustart"),
+    ),
     (
         "stop_runtime",
         ("beende dich", "beende jarvis", "fahr dich runter", "stell dich ab", "jarvis herunterfahren"),

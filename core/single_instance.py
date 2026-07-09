@@ -20,6 +20,7 @@ import json
 import logging
 import msvcrt
 import os
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -57,7 +58,31 @@ class SingleInstanceLock:
         self.entry_point = entry_point
         self._fh = None
 
-    def acquire(self) -> None:
+    def acquire(self, retry_seconds: float = 0.0, poll_interval: float = 0.5) -> None:
+        """Erwirbt den Lock. retry_seconds > 0 erlaubt den Staffelstab-Wechsel
+        beim Neustart (restart_runtime, Welle 3.4): der Nachfolger-Prozess
+        wartet, bis der Vorgaenger den Lock freigibt, statt sofort zu sterben.
+        Default 0.0 = heutiges Verhalten - ein versehentlicher Doppelstart
+        bricht unveraendert sofort ab (ADR-026 bleibt unangetastet)."""
+        deadline = time.monotonic() + retry_seconds
+        waiting_logged = False
+        while True:
+            try:
+                self._acquire_once()
+                return
+            except InstanceAlreadyRunningError:
+                if time.monotonic() >= deadline:
+                    raise
+                if not waiting_logged:
+                    logger.info(
+                        "Lock belegt - warte bis zu %.0fs auf die Uebernahme "
+                        "(Neustart-Staffelstab).",
+                        retry_seconds,
+                    )
+                    waiting_logged = True
+                time.sleep(poll_interval)
+
+    def _acquire_once(self) -> None:
         self._clear_if_stale()
         try:
             fd = os.open(self.lock_path, os.O_CREAT | os.O_EXCL | os.O_RDWR)

@@ -252,6 +252,61 @@ def test_corrupt_lock_file_is_treated_as_stale(tmp_path):
     lock.release()
 
 
+def test_retry_acquire_takes_over_after_predecessor_releases(tmp_path):
+    """Neustart-Staffelstab (restart_runtime, Welle 3.4): der Nachfolger
+    wartet mit retry_seconds auf die Lock-Freigabe des Vorgaengers und
+    uebernimmt dann - statt sofort zu sterben."""
+    import threading
+
+    memory_dir = _make_memory_dir(tmp_path)
+    predecessor = SingleInstanceLock(memory_dir, entry_point="jarvis_runtime.py")
+    predecessor.acquire()
+
+    releaser = threading.Timer(0.3, predecessor.release)
+    releaser.start()
+    try:
+        successor = SingleInstanceLock(memory_dir, entry_point="jarvis_runtime.py")
+        successor.acquire(retry_seconds=5.0, poll_interval=0.05)  # darf nicht werfen
+        try:
+            assert _read_locked_content(successor)["pid"] == os.getpid()
+        finally:
+            successor.release()
+    finally:
+        releaser.join()
+
+
+def test_retry_acquire_gives_up_after_timeout(tmp_path):
+    """Haengt der Vorgaenger, gibt der Nachfolger nach dem Warte-Budget mit
+    der normalen Fehlermeldung auf - kein Endlos-Warten."""
+    memory_dir = _make_memory_dir(tmp_path)
+    holder = SingleInstanceLock(memory_dir, entry_point="jarvis_runtime.py")
+    holder.acquire()
+    try:
+        waiter = SingleInstanceLock(memory_dir, entry_point="jarvis_runtime.py")
+        with pytest.raises(InstanceAlreadyRunningError):
+            waiter.acquire(retry_seconds=0.2, poll_interval=0.05)
+        assert waiter._fh is None
+    finally:
+        holder.release()
+
+
+def test_acquire_default_still_fails_immediately(tmp_path):
+    """Ohne retry_seconds bleibt das heutige Verhalten exakt erhalten -
+    ein versehentlicher Doppelstart stirbt sofort (ADR-026 unangetastet)."""
+    import time
+
+    memory_dir = _make_memory_dir(tmp_path)
+    holder = SingleInstanceLock(memory_dir, entry_point="main.py")
+    holder.acquire()
+    try:
+        started = time.monotonic()
+        with pytest.raises(InstanceAlreadyRunningError):
+            SingleInstanceLock(memory_dir, entry_point="main.py").acquire()
+        assert time.monotonic() - started < 0.4  # kein verstecktes Warten
+    finally:
+        holder.release()
+
+
 def test_acquire_after_clean_release_succeeds_again(tmp_path):
     memory_dir = _make_memory_dir(tmp_path)
     lock = SingleInstanceLock(memory_dir, entry_point="main.py")

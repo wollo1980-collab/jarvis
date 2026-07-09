@@ -377,6 +377,58 @@ def test_shutdown_hook_is_wired_to_runtime(tmp_path):
     assert shutdown_commands._shutdown_hook == runtime._request_shutdown
 
 
+def test_restart_hook_is_wired_to_runtime(tmp_path):
+    # Der restart_runtime-Befehl bekommt beim Runtime-Aufbau den Hook
+    # injiziert (Verdrahtungsschicht) - gleiches Muster wie stop_runtime.
+    import commands.restart as restart_commands
+
+    runtime = JarvisRuntime(_make_config(tmp_path), ai=FakeAI())
+
+    assert restart_commands._restart_hook == runtime._request_restart
+
+
+def test_request_restart_spawns_successor_then_stops_worker(tmp_path):
+    # _request_restart startet ERST den Nachfolger (injizierter Spawner),
+    # dann Stop-Sentinel - der Worker beendet sich in der naechsten Runde.
+    runtime = JarvisRuntime(_make_config(tmp_path), ai=FakeAI())
+    spawned = []
+    runtime._spawn_successor = lambda: (spawned.append(True), True)[1]
+    runtime.start()
+
+    assert runtime._request_restart() is True
+    runtime._worker.join(timeout=5.0)
+
+    assert spawned == [True]
+    assert runtime._worker.is_alive() is False
+
+
+def test_request_restart_stays_alive_when_spawn_fails(tmp_path):
+    # Scheitert der Nachfolger-Start, wird NICHT heruntergefahren -
+    # lieber im Dienst bleiben als tot (und ehrlich False melden).
+    runtime = JarvisRuntime(_make_config(tmp_path), ai=FakeAI())
+    runtime._spawn_successor = lambda: False
+    runtime.start()
+    try:
+        assert runtime._request_restart() is False
+        runtime._worker.join(timeout=0.5)
+        assert runtime._worker.is_alive() is True  # laeuft weiter
+    finally:
+        runtime.stop()
+
+
+def test_lock_wait_seconds_reads_env(monkeypatch):
+    # Warte-Flag: nur vom Vorgaenger gesetzt; ungesetzt/kaputt -> 0.0
+    # (Doppelstart-Schutz bleibt hart).
+    monkeypatch.delenv(jarvis_runtime.WAIT_FOR_LOCK_ENV, raising=False)
+    assert jarvis_runtime._lock_wait_seconds() == 0.0
+    monkeypatch.setenv(jarvis_runtime.WAIT_FOR_LOCK_ENV, "30")
+    assert jarvis_runtime._lock_wait_seconds() == 30.0
+    monkeypatch.setenv(jarvis_runtime.WAIT_FOR_LOCK_ENV, "quatsch")
+    assert jarvis_runtime._lock_wait_seconds() == 0.0
+    monkeypatch.setenv(jarvis_runtime.WAIT_FOR_LOCK_ENV, "-5")
+    assert jarvis_runtime._lock_wait_seconds() == 0.0
+
+
 def test_request_shutdown_stops_worker(tmp_path):
     # _request_shutdown legt nur das Stop-Sentinel in die Queue (kein
     # Selbst-Join) -> der Worker beendet sich sauber in der naechsten Runde.

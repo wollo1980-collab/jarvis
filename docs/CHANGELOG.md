@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-07-10 - „Starte dich neu" — Runtime-Neustart (Welle 3.4)
+
+### Neu
+- **`restart_runtime`:** Jarvis startet sich auf Zuruf selbst neu („starte dich neu", „Neustart" — per Sprache oder Telegram). Ablauf: Zusage („ich starte mich neu — gleich wieder da"), abgekoppelten Nachfolger-Prozess starten, sauber herunterfahren; der Nachfolger übernimmt den Single-Instance-Lock per Staffelstab (wartet bis zu 30 s auf die Freigabe, `JARVIS_WAIT_FOR_LOCK`). Schlägt der Nachfolger-Start fehl, bleibt Jarvis im Dienst und meldet es ehrlich. Der Doppelstart-Schutz (ADR-026) bleibt für normale Starts unverändert hart. Funktioniert wie `stop_runtime` auch bei toter Planner-API (Notfall-Heuristik).
+
 ## 2026-07-10 - News-Briefing entschlackt (Quellen-Ballast, Dubletten, Promo)
 
 ### Geändert

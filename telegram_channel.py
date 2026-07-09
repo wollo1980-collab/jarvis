@@ -49,6 +49,9 @@ RUNTIME_ALLOWED_INTENTS = ALLOWED_INTENTS | {
     "delegate_analysis",
     "plan_next_step",
     "stop_runtime",
+    # Neustart (Welle 3.4): gleiche Kontrollaktion wie stop_runtime - die
+    # "gleich wieder da"-Zusage sichert derselbe Send-Flush vor dem Teardown.
+    "restart_runtime",
     # Eintraege (A1): reiner eigener Datenlayer, harmlos wie remember_fact.
     "add_entry",
     "list_entries",

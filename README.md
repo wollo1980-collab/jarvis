@@ -244,6 +244,16 @@ schickt zuerst die Zusage („ich fahre herunter"), stellt sie sicher zu und
 beendet dann die Runtime. Zum Wiederanlauf den Autostart bzw.
 `pythonw jarvis_runtime.py` nutzen. (Die Konsole hat weiterhin ihr Exit-Wort.)
 
+## Jarvis neu starten (`restart_runtime`)
+
+Auf „**starte dich neu**" / „**Neustart**" startet Jarvis sich selbst neu:
+Er startet zuerst einen abgekoppelten Nachfolger-Prozess (gleicher
+Interpreter, wartet per `JARVIS_WAIT_FOR_LOCK` bis zu 30 s auf die Freigabe
+des Single-Instance-Locks — Staffelstab statt Doppelstart) und fährt sich
+dann sauber herunter. Scheitert schon der Nachfolger-Start, bleibt Jarvis
+im Dienst und sagt das ehrlich. Ein versehentlicher Doppelstart ohne das
+Flag bricht unverändert sofort ab (ADR-026).
+
 ## Einträge: Erinnerungen, Aufgaben & wichtige Merkposten (A1)
 
 Jarvis merkt sich Einmaliges — per Text oder Sprachnachricht:

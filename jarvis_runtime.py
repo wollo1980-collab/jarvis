@@ -53,6 +53,7 @@ import commands.monitor as monitor_commands
 import commands.plan as plan_commands
 import commands.news as news_commands
 import commands.reports as reports_commands
+import commands.restart as restart_commands
 import commands.shutdown as shutdown_commands
 import commands.weather as weather_commands
 import commands.web as web_commands
@@ -87,6 +88,14 @@ _DELEGATION_JOIN_TIMEOUT = 15.0
 # eine legitime synchrone Konsolen-Delegation nie faelschlich abgeschnitten wird;
 # er verhindert nur einen kuenftigen Endlos-Hang bei ausbleibendem reply_callback.
 _CONSOLE_REPLY_TIMEOUT = 600.0
+
+# Neustart (restart_runtime, Welle 3.4): Der Nachfolger-Prozess erbt dieses
+# Env-Flag und wartet damit bis zu N Sekunden auf die Freigabe des
+# Single-Instance-Locks (Staffelstab), statt am noch laufenden Vorgaenger
+# sofort zu sterben. Ohne das Flag (normaler Start) bleibt der
+# Doppelstart-Schutz unveraendert hart.
+WAIT_FOR_LOCK_ENV = "JARVIS_WAIT_FOR_LOCK"
+_RESTART_WAIT_SECONDS = 30.0
 
 # Scheduler (A2, ADR-039): Poll-Intervall der Faelligkeits-Pruefung. 30 s ist
 # fuer minutengenaue Erinnerungen mehr als ausreichend und praktisch lastfrei.
@@ -179,6 +188,11 @@ class JarvisRuntime:
         # weil nur die Queue befuellt wird, gibt es keinen Selbst-Join des
         # Worker-Threads (Deadlock-Falle vermieden).
         shutdown_commands.configure(self._request_shutdown)
+        # Neustart-Befehl (restart_runtime, Welle 3.4): gleiches Muster -
+        # Nachfolger-Prozess starten, dann Stop-Sentinel. Der Spawner ist als
+        # Instanz-Attribut injizierbar (Tests starten keinen echten Prozess).
+        self._spawn_successor: Callable[[], bool] = _spawn_successor_process
+        restart_commands.configure(self._request_restart)
 
         self._queue: "queue.Queue" = queue.Queue()
         self._worker: Optional[threading.Thread] = None
@@ -260,6 +274,18 @@ class JarvisRuntime:
         (der Befehl wird dort ausgefuehrt) - ein join wuerde sich selbst
         blockieren."""
         self._queue.put(_STOP)
+
+    def _request_restart(self) -> bool:
+        """Hook fuer den restart_runtime-Befehl: startet den abgekoppelten
+        Nachfolger-Prozess und legt DANACH das Stop-Sentinel in die Queue
+        (gleiche Deadlock-Vermeidung wie _request_shutdown - kein join auf
+        dem eigenen Worker-Thread). Schlaegt der Prozess-Start fehl, wird
+        NICHT heruntergefahren - lieber im Dienst bleiben als tot; der
+        Befehl meldet das ehrlich (False)."""
+        if not self._spawn_successor():
+            return False
+        self._queue.put(_STOP)
+        return True
 
     def stop(self) -> None:
         """Legt den Stop-Sentinel in die Queue und wartet, bis der
@@ -558,6 +584,41 @@ TELEGRAM_BOT_TOKEN_ENV = "JARVIS_TELEGRAM_BOT_TOKEN"
 TELEGRAM_ALLOWED_CHAT_ID_ENV = "JARVIS_TELEGRAM_ALLOWED_CHAT_ID"
 
 
+def _spawn_successor_process() -> bool:
+    """Startet den Nachfolger-Prozess fuer restart_runtime (Welle 3.4):
+    gleicher Interpreter (pythonw bleibt pythonw), gleicher Entry-Point,
+    vollstaendig vom aktuellen Prozess abgekoppelt. Das Env-Flag laesst den
+    Nachfolger auf die Lock-Freigabe warten (Staffelstab, ADR-026 bleibt)."""
+    import subprocess
+
+    entry_point = os.path.abspath(__file__)
+    env = {**os.environ, WAIT_FOR_LOCK_ENV: str(int(_RESTART_WAIT_SECONDS))}
+    flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+    try:
+        subprocess.Popen(
+            [sys.executable, entry_point],
+            env=env,
+            creationflags=flags,
+            close_fds=True,
+            cwd=os.path.dirname(entry_point),
+        )
+        logger.info("Nachfolger-Prozess gestartet (%s) - fahre herunter.", sys.executable)
+        return True
+    except Exception:  # noqa: BLE001 - lieber weiterlaufen als tot
+        logger.exception("Nachfolger-Prozess konnte nicht gestartet werden.")
+        return False
+
+
+def _lock_wait_seconds() -> float:
+    """Liest das Neustart-Warte-Flag (gesetzt nur vom Vorgaenger-Prozess).
+    Ungesetzt/unlesbar -> 0.0 = heutiges Sofort-Abbruch-Verhalten."""
+    raw = os.environ.get(WAIT_FOR_LOCK_ENV, "")
+    try:
+        return max(float(raw), 0.0) if raw else 0.0
+    except ValueError:
+        return 0.0
+
+
 def _build_transcriber(config: Config):
     """Baut den Whisper-Transcriber (ADR-038) einmal - genutzt vom Telegram-
     Voice-Handler UND vom Push-to-talk-Kanal (ADR-041). Ohne OpenAI-Key oder
@@ -671,12 +732,18 @@ def main() -> None:
     # keinerlei Locking hat.
     lock = SingleInstanceLock(config.memory_dir, entry_point="jarvis_runtime.py")
     try:
-        lock.acquire()
+        # Neustart-Staffelstab (restart_runtime): nur der vom Vorgaenger
+        # gestartete Nachfolger wartet auf die Lock-Freigabe; ein normaler
+        # (Doppel-)Start bricht unveraendert sofort ab.
+        lock.acquire(retry_seconds=_lock_wait_seconds())
     except InstanceAlreadyRunningError as e:
         logger.error("Start abgebrochen: %s", e)
         if sys.stdout is not None:
             print(f"Jarvis-Runtime konnte nicht gestartet werden: {e}")
         return
+    # Flag nicht weitervererben: kuenftige eigene Nachfolger bekommen es vom
+    # Neustart-Spawner explizit neu gesetzt.
+    os.environ.pop(WAIT_FOR_LOCK_ENV, None)
 
     try:
         runtime = JarvisRuntime(config)

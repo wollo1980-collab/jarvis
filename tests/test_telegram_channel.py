@@ -246,6 +246,16 @@ def test_runtime_whitelist_allows_stop_runtime():
     assert len(steps) == 1
 
 
+def test_runtime_whitelist_allows_restart_runtime():
+    """restart_runtime (Welle 3.4) ist wie stop_runtime nur ueber den
+    Runtime-Kanal erreichbar - der Standalone-Bot hat keinen Neustart-Hook."""
+    assert "restart_runtime" in telegram_channel.RUNTIME_ALLOWED_INTENTS
+    assert "restart_runtime" not in telegram_main.ALLOWED_INTENTS
+    steps, rejection = telegram_channel._runtime_filter_plan([Plan(intent="restart_runtime")])
+    assert rejection is None
+    assert len(steps) == 1
+
+
 def test_whitelist_allows_get_news_everywhere():
     """ADR-042: get_news ist rein lesend (Stufe 0) und wie check_mail schon
     im Standalone-Set erlaubt."""

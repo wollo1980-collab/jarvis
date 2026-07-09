@@ -84,6 +84,16 @@ def test_api_error_with_stop_phrase_triggers_heuristic_fallback():
     assert plan.intent == "stop_runtime"
 
 
+def test_api_error_with_restart_phrase_triggers_heuristic_fallback():
+    """Welle 3.4: 'starte dich neu' muss auch bei toter API wirken - und darf
+    dabei nie als blosses Beenden (stop_runtime) fehlgedeutet werden."""
+    ai = _make_ai()
+    with patch.object(ai.provider, "chat", side_effect=RuntimeError("api down")):
+        plan = ai.get_plan("Jarvis, starte dich neu", [])
+
+    assert plan.intent == "restart_runtime"
+
+
 def test_broken_json_with_status_phrase_triggers_heuristic_fallback():
     ai = _make_ai()
     with patch.object(ai.provider, "chat", return_value="kein json"):
