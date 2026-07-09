@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import logging
 import platform
+import sys
 import tempfile
 from pathlib import Path
 
@@ -42,10 +43,12 @@ class SpeechEngine:
         return input("Du: ").strip()
 
     def say(self, text: str) -> None:
-        """Gibt eine Antwort aus: immer auf der Konsole (Transkript/
-        Log), zusätzlich per TTS-Backend gesprochen, wenn eins geladen
-        werden konnte und Jarvis unter Windows läuft."""
-        print(f"Jarvis: {text}")
+        """Gibt eine Antwort aus: auf der Konsole (falls vorhanden - unter
+        pythonw ist sys.stdout None, ADR-041/PTT), zusätzlich per TTS-Backend
+        gesprochen, wenn eins geladen werden konnte und Jarvis unter Windows
+        läuft."""
+        if sys.stdout is not None:
+            print(f"Jarvis: {text}")
 
         if self.backend is None:
             return

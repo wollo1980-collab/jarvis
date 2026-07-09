@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-07-09 - Mit Jarvis am PC sprechen: Push-to-talk + lokale Stimme (ADR-041)
+
+### Neu
+- **`Strg+Alt+J` → sprechen → Jarvis antwortet hörbar.** Der dritte Kanal neben Telegram und Konsole: Aufnahme per Mikrofon (nur im Speicher), Whisper-Transkription, Antwort **lokal gesprochen** mit Piper **Thorsten-high** (per Stimmproben-Vergleich gewählt — kostenlos, offline, sofort).
+- Voller Befehlsumfang wie an der Konsole; kritische Aktionen bleiben wie gehabt gesperrt. Ohne Mikrofon/Pakete startet der Kanal einfach nicht (`"ptt_enabled": false` schaltet ihn ab).
+
 ## 2026-07-09 - „Beende dich" funktioniert auch bei KI-Ausfall
 
 ### Behoben

@@ -29,6 +29,11 @@ class Config:
     # Sprachnachrichten. Nutzt denselben openai_api_key wie oben.
     transcription_model: str = "whisper-1"
 
+    # Push-to-talk am PC (ADR-041): globaler Hotkey -> Mikrofon -> Whisper ->
+    # gesprochene Antwort. Startet nur, wenn sounddevice/pynput/Mikrofon/
+    # OpenAI-Key vorhanden sind; hier laesst er sich hart abschalten.
+    ptt_enabled: bool = True
+
     # Multi-KI Provider-Auswahl (v0.8 Phase 1, ADR-029): "openai" | "claude".
     # Explizite Auswahl per Config, kein Auto-Routing. Claude nutzt einen
     # eigenen Key (ANTHROPIC_API_KEY, ausschliesslich ueber Env, nie in
@@ -126,6 +131,7 @@ class Config:
             openai_api_key=api_key,
             model=data.get("model", cls.model),
             transcription_model=data.get("transcription_model", cls.transcription_model),
+            ptt_enabled=data.get("ptt_enabled", cls.ptt_enabled),
             ai_provider=data.get("ai_provider", cls.ai_provider),
             anthropic_api_key=anthropic_key,
             claude_model=data.get("claude_model", cls.claude_model),

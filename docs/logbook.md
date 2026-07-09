@@ -1,5 +1,9 @@
 # Logbook
 
+## 2026-07-09 - Welle 3.1+3.2 Push-to-talk am PC (ADR-041): PO-Ziel #3 erreicht
+
+**Machbarkeits-Check (3.1):** sounddevice 0.5.5 + pynput laufen auf Py 3.13, Sound-Blaster-Mikro vorhanden; **Fund:** Piper-Modell Thorsten lag seit 01.07. in `voices/` — nur das Paket fehlte; `piper-tts` läuft auf 3.13 (WAV-Beweis). Thorsten-**high** (108 MB) nachgeladen; **PO wählte high per A/B-Stimmprobe.** **Umsetzung (3.2):** neuer optionaler Kanal `hotkey_channel.py` — `Strg+Alt+J`-Toggle → Aufnahme im Speicher (16 kHz, kein Datei-Write) → geteilter `OpenAITranscriber` (aus `main()` gehoben, Telegram+PTT nutzen dieselbe Instanz) → `runtime.submit` (volle Intents wie Konsole, `allow_async`, fail-closed unberührt) → Antwort **lokal gesprochen** (SpeechEngine, jetzt pythonw-sicher). Transkripte nicht geloggt (nur Länge). 3 neue Runtime-Deps (piper-tts/sounddevice/pynput) in requirements-runtime. **Wake-Word bewusst Folge-Scheibe 3.2b** (tauscht nur den Auslöser). Latenz ehrlich: ~3–6 s bis zur hörbaren Antwort.
+
 ## 2026-07-09 - Welle 2.3 Kosten-Zwischenbilanz (Auswertung der Logs 01.–09.07.)
 
 **Agenten-Arm (Claude, `claude -p`):** 11 Läufe sichtbar — 7 erfolgreich, 4 gescheitert (alle 4 am 08.07. Vormittag an der Pro-Session-Wand; seit Max strukturell entschärft). Erfolgreiche Delegationen: Ø **$0,13/Lauf** (Spanne $0,08–0,22), Ø 5,9 Turns. **Wirknachweis Kontext-Optimierung:** `plan_next_step` 17 Turns/99 s (vorher) → 4 Turns/64 s (nachher). Wichtig zur Einordnung: die $-Werte sind **API-Gegenwert**, nicht abgerechnet — die Läufe laufen über den Abo-Login (Pro→Max), Grenzkosten $0. **Befund Observability:** `delegate` loggt `kosten=`, `plan` nicht — kleiner Angleichungs-Kandidat.

@@ -61,6 +61,7 @@ from core.config import Config
 from core.models import Message, Plan
 from core.planner import Planner
 from core.single_instance import InstanceAlreadyRunningError, SingleInstanceLock
+from core.speech import SpeechEngine
 from executor.executor import ExecutionReport, Executor
 from memory.entries import Entry, format_when
 from memory.long_term import LongTermMemory
@@ -548,7 +549,48 @@ TELEGRAM_BOT_TOKEN_ENV = "JARVIS_TELEGRAM_BOT_TOKEN"
 TELEGRAM_ALLOWED_CHAT_ID_ENV = "JARVIS_TELEGRAM_ALLOWED_CHAT_ID"
 
 
-def _start_telegram_channel(runtime: JarvisRuntime, config: Config):
+def _build_transcriber(config: Config):
+    """Baut den Whisper-Transcriber (ADR-038) einmal - genutzt vom Telegram-
+    Voice-Handler UND vom Push-to-talk-Kanal (ADR-041). Ohne OpenAI-Key oder
+    bei Fehler: None (beide Sprach-Eingaenge bleiben dann aus, Text laeuft)."""
+    if not config.openai_api_key:
+        return None
+    try:
+        from core.transcribe import OpenAITranscriber
+
+        return OpenAITranscriber(config.openai_api_key, config.transcription_model)
+    except Exception:  # noqa: BLE001
+        logger.warning("Transcriber nicht verfuegbar - Sprach-Eingabe deaktiviert.", exc_info=True)
+        return None
+
+
+def _start_hotkey_channel(runtime: JarvisRuntime, config: Config, transcriber):
+    """Startet den Push-to-talk-Kanal (ADR-041), wenn Config, Transcriber,
+    Pakete und Mikrofon es hergeben - sonst None (alles andere unveraendert)."""
+    if not getattr(config, "ptt_enabled", True):
+        logger.info("Push-to-talk per Config deaktiviert.")
+        return None
+    if transcriber is None:
+        logger.info("Push-to-talk aus: kein Transcriber (OpenAI-Key fehlt?).")
+        return None
+
+    from hotkey_channel import HotkeyChannel
+
+    speech = SpeechEngine(config)
+
+    def speak(text: str) -> None:
+        # Gesprochene Antwort darf nie den Aufrufer (Worker/PTT-Thread)
+        # mitreissen - Fehler landen im Log, die Arbeit geht weiter.
+        try:
+            speech.say(text)
+        except Exception:  # noqa: BLE001
+            logger.exception("Sprachausgabe fehlgeschlagen.")
+
+    channel = HotkeyChannel(runtime, transcriber, speak)
+    return channel if channel.start() else None
+
+
+def _start_telegram_channel(runtime: JarvisRuntime, config: Config, transcriber=None):
     """Startet TelegramChannel (ADR-027) in einem eigenen Thread, falls
     die bekannten Umgebungsvariablen gesetzt UND python-telegram-bot
     installiert ist - liefert (channel, thread) oder None. Ohne
@@ -573,17 +615,8 @@ def _start_telegram_channel(runtime: JarvisRuntime, config: Config):
         )
         return None
 
-    # Sprach-Eingabe (ADR-038): Transcriber aus dem OpenAI-Key bauen. Ohne Key
-    # bleibt er None -> nur Text (der Voice-Handler wird dann nicht registriert).
-    transcriber = None
-    if config.openai_api_key:
-        try:
-            from core.transcribe import OpenAITranscriber
-
-            transcriber = OpenAITranscriber(config.openai_api_key, config.transcription_model)
-        except Exception:
-            logger.warning("Transcriber nicht verfuegbar - Sprach-Eingabe deaktiviert.", exc_info=True)
-
+    # Sprach-Eingabe (ADR-038): Transcriber kommt seit ADR-041 aus main()
+    # (_build_transcriber) - Telegram-Voice und Push-to-talk teilen ihn.
     channel = TelegramChannel(runtime, bot_token, allowed_chat_id, transcriber=transcriber)
     thread = threading.Thread(target=channel.run, name="jarvis-runtime-telegram", daemon=True)
     thread.start()
@@ -612,7 +645,8 @@ def main() -> None:
         runtime = JarvisRuntime(config)
         runtime.start()
 
-        telegram = _start_telegram_channel(runtime, config)
+        transcriber = _build_transcriber(config)
+        telegram = _start_telegram_channel(runtime, config, transcriber)
 
         # Erinnerungs-Scheduler (A2, ADR-039): nur mit push-faehigem Kanal.
         # Verdrahtung hier statt in der Runtime - sie kennt Telegram nicht.
@@ -621,6 +655,10 @@ def main() -> None:
             runtime.start_scheduler()
         else:
             logger.info("Kein Telegram-Kanal - Erinnerungs-Scheduler bleibt aus.")
+
+        # Push-to-talk (ADR-041): Hotkey -> Mikro -> Whisper -> gesprochene
+        # Antwort. Optional; ohne Pakete/Mikro/Key laeuft alles wie bisher.
+        hotkey = _start_hotkey_channel(runtime, config, transcriber)
 
         try:
             if sys.stdin is not None:
@@ -638,6 +676,8 @@ def main() -> None:
                 )
                 runtime._worker.join()
         finally:
+            if hotkey is not None:
+                hotkey.stop()
             if telegram is not None:
                 telegram_channel_obj, telegram_thread = telegram
                 telegram_channel_obj.stop()

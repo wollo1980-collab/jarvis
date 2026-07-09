@@ -275,6 +275,22 @@ Jarvis: 🗑 Eintrag gelöscht: «Zahnarzt»
   erfüllt deinen expliziten Auftrag und ist rein informativ (Governance-
   Invariante gewahrt). Daten liegen in `memory_data/entries.json`.
 
+## Mit Jarvis am PC sprechen (Push-to-talk, ADR-041)
+
+**`Strg+Alt+J`** drücken → Signalton → sprechen → erneut `Strg+Alt+J` (oder
+max. 15 s) → Jarvis **antwortet gesprochen** (lokal, Piper/Thorsten-high —
+kostenlos, offline; Wechsel auf OpenAI-Stimme per `tts_backend: "openai"`).
+
+- Aufnahme nur im Speicher (keine Datei); Transkription über denselben
+  Whisper-Weg wie Telegram-Sprachnachrichten; Transkript-Inhalte werden nicht
+  geloggt.
+- Voller Befehlsumfang wie an der Konsole; Stufe-2/3-Aktionen bleiben
+  fail-closed gesperrt.
+- Strikt optional: ohne `sounddevice`/`pynput`/Mikrofon/OpenAI-Key startet
+  der Kanal nicht; `"ptt_enabled": false` schaltet ihn hart ab.
+- Voraussetzungen: `pip install -r requirements-runtime.txt` (bringt
+  `piper-tts`, `sounddevice`, `pynput` mit) + Thorsten-Modell in `voices/`.
+
 ## Sprachnachricht an Jarvis (Sprach-Eingabe, ADR-038)
 
 Über den **Runtime-Telegram-Kanal** kannst du Jarvis eine **Sprachnachricht**
