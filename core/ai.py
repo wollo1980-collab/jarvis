@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime
+from typing import Optional
 
 from commands import REGISTRY
 from core.config import Config
@@ -172,6 +173,35 @@ Gib bei confidence an, wie sicher du dir beim erkannten Intent bist
 z. B. "mach das Ding auf")."""
 
 
+# Notfall-Heuristik (Welle 2.2): Wenn der Planner-Aufruf scheitert (API down,
+# Timeout, kaputtes JSON), darf Jarvis fuer KRITISCHE Intents nicht taub sein -
+# allen voran stop_runtime ("beende dich" muss auch bei toter API wirken; der
+# chat-Fallback braeuchte dieselbe tote API). Bewusst eng gehalten: nur
+# eindeutige Formulierungen, NUR im Fehlerpfad aktiv - im Normalbetrieb bleibt
+# der LLM-Planner die einzige Quelle. Alles andere faellt weiter ehrlich auf
+# chat/confidence 0.0 zurueck.
+_CRITICAL_INTENT_PHRASES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "stop_runtime",
+        ("beende dich", "beende jarvis", "fahr dich runter", "stell dich ab", "jarvis herunterfahren"),
+    ),
+    (
+        "system_status",
+        ("systemstatus", "system status", "wie ist der status", "wie ist die auslastung"),
+    ),
+)
+
+
+def _critical_intent_fallback(user_input: str) -> Optional[Plan]:
+    """Erkennt kritische Intents per Teilstring-Abgleich - nur als Notnagel
+    im Planner-Fehlerpfad gedacht (siehe _CRITICAL_INTENT_PHRASES)."""
+    lowered = (user_input or "").strip().lower()
+    for intent, phrases in _CRITICAL_INTENT_PHRASES:
+        if any(phrase in lowered for phrase in phrases):
+            return Plan(intent=intent, target=None, raw_input=user_input, confidence=0.9)
+    return None
+
+
 CHAT_SYSTEM_PROMPT = """Du bist Jarvis, der persoenliche Assistent von Wolfgang.
 In Haltung und Auftreten bist du lose an den Film-Jarvis angelehnt -
 nicht als Imitation, sondern als ruhige, praezise und loyale Assistenz.
@@ -321,10 +351,22 @@ class AIEngine:
             )
         except (json.JSONDecodeError, KeyError, IndexError, ValueError) as e:
             logger.warning("Konnte KI-Antwort nicht parsen: %s", e)
-            return Plan(intent="chat", target=None, raw_input=user_input, confidence=0.0)
+            return self._plan_error_fallback(user_input)
         except Exception as e:
             logger.error("AI-Aufruf fehlgeschlagen: %s", e)
-            return Plan(intent="chat", target=None, raw_input=user_input, confidence=0.0)
+            return self._plan_error_fallback(user_input)
+
+    @staticmethod
+    def _plan_error_fallback(user_input: str) -> Plan:
+        """Fehlerpfad des Planners (Welle 2.2): erst die Notfall-Heuristik
+        fuer kritische Intents versuchen, sonst wie bisher chat-Fallback."""
+        fallback = _critical_intent_fallback(user_input)
+        if fallback is not None:
+            logger.warning(
+                "Planner-Fehlerpfad: Notfall-Heuristik greift (intent=%s).", fallback.intent
+            )
+            return fallback
+        return Plan(intent="chat", target=None, raw_input=user_input, confidence=0.0)
 
     def answer(self, user_input: str, history: list[Message], long_term_summary: str = "") -> str:
         """Erzeugt eine echte Konversationsantwort für den chat-Intent.

@@ -1,5 +1,9 @@
 # Logbook
 
+## 2026-07-09 - Welle 2.2 Planner-Heuristik-Fallback: kritische Intents überleben API-Ausfall
+
+Befund aus dem Architekturvergleich (rezaulhreza: „LLM routing with heuristic fallback"): Scheiterte der Planner-Aufruf (API down, kaputtes JSON), fiel `get_plan()` auf `chat` zurück — das ebenfalls die API braucht → Jarvis komplett taub, auch für „beende dich". Fix: `_critical_intent_fallback` in `core/ai.py` — enge Teilstring-Muster **nur für** `stop_runtime` und `system_status`, **nur im Fehlerpfad** aktiv (Test sichert ab: im Normalbetrieb gewinnt immer die Modell-Antwort, auch wenn die Eingabe eine kritische Phrase enthält). Konservative Abgrenzung getestet („beende die Analyse" / „fahr den PC runter" ≠ stop_runtime). Kein ADR (Robustheits-Fix im bestehenden Fehlerpfad).
+
 ## 2026-07-09 - Welle 2.1 Auto-Redaction (ADR-040): Secrets nie im Klartext persistiert
 
 Befund aus dem Architekturvergleich (2× unabhängig gesichtet: isair, Open.Jarvis). Zentraler Helfer `core/redaction.py` (benannte Muster: OpenAI/Anthropic/GitHub/AWS/Slack/Telegram-Bot-Token/Bearer/Private-Key-Blöcke + Passwort-Phrasen, nur das Secret ersetzt), eingehängt an den drei Persistenz-Punkten (`append_history`, `remember`, `EntryStore.add`) — Command-Echos zeigen die Schwärzung sichtbar. **Bewusste Abweichung von den Vorbildern:** E-Mail/Telefon bleiben ungeschwärzt (Nutzdaten bei Jarvis). Ehrliche Grenze im ADR: Muster fangen bekannte Formate, Risikominderung statt Garantie; Altdaten-Bereinigung bewusst separater Schritt. **Zugleich PO-Beschluss zur 1.0-Definition:** 1.0 = Welle 1 ✓ + Welle 2 ✓ + dokumentierter realer Nutzungslauf ohne kritischen Befund (Weiterbauen parallel erlaubt; der Nutzungslauf wendet zugleich das Framework-Pattern „Nutzungslauf vor Abschluss" an → M4-Bewährung, möglicher n=2-Rückfluss).

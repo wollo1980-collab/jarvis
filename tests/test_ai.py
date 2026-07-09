@@ -74,6 +74,45 @@ def test_get_plan_falls_back_to_chat_on_api_error():
     assert plan.confidence == 0.0
 
 
+def test_api_error_with_stop_phrase_triggers_heuristic_fallback():
+    """Welle 2.2: 'beende dich' muss auch bei toter API wirken - der
+    chat-Fallback braeuchte dieselbe tote API."""
+    ai = _make_ai()
+    with patch.object(ai.provider, "chat", side_effect=RuntimeError("api down")):
+        plan = ai.get_plan("Jarvis, beende dich bitte", [])
+
+    assert plan.intent == "stop_runtime"
+
+
+def test_broken_json_with_status_phrase_triggers_heuristic_fallback():
+    ai = _make_ai()
+    with patch.object(ai.provider, "chat", return_value="kein json"):
+        plan = ai.get_plan("wie ist der Systemstatus?", [])
+
+    assert plan.intent == "system_status"
+
+
+def test_heuristic_is_never_active_in_normal_operation():
+    """Im Normalbetrieb bleibt der LLM-Planner die einzige Quelle - auch wenn
+    die Eingabe eine kritische Phrase enthaelt, gilt die Modell-Antwort."""
+    ai = _make_ai()
+    payload = json.dumps({"intent": "chat", "target": None, "parameters": {}, "confidence": 0.8})
+    with patch.object(ai.provider, "chat", return_value=payload):
+        plan = ai.get_plan("erzaehl mir, wie ich jarvis herunterfahren kann", [])
+
+    assert plan.intent == "chat"  # Modell-Antwort gewinnt, Heuristik schweigt
+
+
+def test_heuristic_patterns_are_conservative():
+    """Abgrenzung: aehnliche, aber nicht eindeutige Formulierungen loesen
+    KEINEN kritischen Intent aus - lieber ehrlicher chat-Fallback."""
+    ai = _make_ai()
+    with patch.object(ai.provider, "chat", side_effect=RuntimeError("api down")):
+        for text in ("beende die Analyse", "hallo wie geht's", "fahr den PC runter"):
+            plan = ai.get_plan(text, [])
+            assert plan.intent == "chat", f"faelschlich kritisch: {text}"
+
+
 def test_get_plan_requests_json_mode_from_provider():
     """get_plan muss den Provider im JSON-Modus aufrufen (bei OpenAI ->
     response_format json_object, bei Claude Prompt-JSON) - sonst kann die

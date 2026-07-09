@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-07-09 - „Beende dich" funktioniert auch bei KI-Ausfall
+
+### Behoben
+- Fiel die KI-API aus, war Jarvis komplett taub — sogar für „beende dich". Jetzt greift im Fehlerfall eine enge Notfall-Erkennung für kritische Befehle (`stop_runtime`, `system_status`); im Normalbetrieb bleibt der KI-Planner allein zuständig.
+
 ## 2026-07-09 - Auto-Redaction: Secrets landen nie im Klartext auf Platte (ADR-040)
 
 ### Neu
