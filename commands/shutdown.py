@@ -61,7 +61,7 @@ class StopRuntimeCommand:
         _shutdown_hook()
         return Result(
             status=Status.SUCCESS,
-            message="Verstanden - ich fahre herunter. Bis bald!",
+            message="Wie du wünschst, Sir — ich fahre herunter. Bis bald.",
         )
 
 

@@ -37,7 +37,7 @@ def test_add_entry_important_gets_star_and_date_only_format(tmp_path: Path):
     )
 
     assert result.status == Status.SUCCESS
-    assert result.message.startswith("⭐ Wichtiger Eintrag gespeichert")
+    assert result.message.startswith("⭐ Als wichtig vermerkt, Sir")  # Persona-Pass 2026-07-09
     assert "12.07.2025" in result.message  # ganztaegig ohne Uhrzeit
 
 

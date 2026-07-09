@@ -156,24 +156,24 @@ class HotkeyChannel:
         except Exception:  # noqa: BLE001
             logger.exception("PTT-Aufnahme fehlgeschlagen.")
             self._recording.clear()
-            self.speak("Die Aufnahme hat nicht geklappt.")
+            self.speak("Verzeihung, Sir - die Aufnahme hat nicht geklappt.")
             return
         finally:
             self._recording.clear()
 
         if not audio:
-            self.speak("Ich habe nichts aufgenommen.")
+            self.speak("Da wurde nichts aufgenommen, Sir - das Mikrofon blieb stumm.")
             return
 
         try:
             transcript = self.transcriber.transcribe(_to_wav(audio), "ptt.wav")
         except Exception:  # noqa: BLE001
             logger.exception("PTT-Transkription fehlgeschlagen.")
-            self.speak("Ich konnte die Aufnahme nicht verstehen.")
+            self.speak("Verzeihung, Sir - ich konnte die Aufnahme nicht verstehen.")
             return
 
         if not transcript:
-            self.speak("Ich habe nichts verstanden - bitte nochmal.")
+            self.speak("Ich habe nichts verstanden, Sir - bitte noch einmal.")
             return
 
         # Kein Inhalt im Log (nur Laenge) - gesprochene Eingaben koennen

@@ -65,14 +65,16 @@ class AddEntryCommand:
         if not text:
             return Result(
                 status=Status.NEEDS_CLARIFICATION,
-                message="Was genau soll ich eintragen?",
+                message="Was genau darf ich notieren, Sir?",
             )
 
         when = str(plan.parameters.get("when") or "").strip()
         important = bool(plan.parameters.get("important", False))
         entry = _require_store().add(text, when=when, important=important)
 
-        prefix = "⭐ Wichtiger Eintrag gespeichert" if important else "Eintrag gespeichert"
+        # Persona-Pass (PO-Freigabe 2026-07-09): Formulierungen im Film-Jarvis-
+        # Ton - Fakten (Zeiten/Texte) bleiben exakt, nur der Rahmen spricht.
+        prefix = "⭐ Als wichtig vermerkt, Sir" if important else "Notiert, Sir"
         when_part = f" — {format_when(entry.when)}" if entry.when else ""
         return Result(
             status=Status.SUCCESS,
@@ -101,7 +103,7 @@ class ListEntriesCommand:
         if not entries:
             return Result(
                 status=Status.SUCCESS,
-                message="Es stehen keine passenden Einträge an.",
+                message="Keine anstehenden Einträge, Sir — die Liste ist erfreulich leer.",
             )
 
         shown = entries[:_MAX_LIST_ENTRIES]
@@ -113,7 +115,7 @@ class ListEntriesCommand:
         )
         return Result(
             status=Status.SUCCESS,
-            message=f"Deine Einträge:\n{lines}{more}",
+            message=f"Deine Einträge, Sir:\n{lines}{more}",
             data={"count": len(entries)},
         )
 
@@ -131,7 +133,7 @@ class DeleteEntryCommand:
         if not needle:
             return Result(
                 status=Status.NEEDS_CLARIFICATION,
-                message="Welchen Eintrag soll ich löschen?",
+                message="Welchen Eintrag darf ich streichen, Sir?",
             )
 
         removed = _require_store().delete(needle)
@@ -142,7 +144,7 @@ class DeleteEntryCommand:
             )
         return Result(
             status=Status.SUCCESS,
-            message=f"🗑 Eintrag gelöscht: «{removed.text}»",
+            message=f"🗑 Erledigt, Sir — «{removed.text}» ist gestrichen.",
         )
 
 

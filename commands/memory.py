@@ -52,14 +52,16 @@ class RememberFactCommand:
         if not text:
             return Result(
                 status=Status.NEEDS_CLARIFICATION,
-                message="Was soll ich mir genau merken?",
+                message="Was genau darf ich mir merken, Sir?",
             )
 
         category = plan.parameters.get("category", "allgemein")
-        _require_long_term().remember(text, category=category)
+        fact = _require_long_term().remember(text, category=category)
+        # Persona-Pass (2026-07-09); fact.text statt text, damit das Echo eine
+        # etwaige Redaction (ADR-040) sichtbar macht.
         return Result(
             status=Status.SUCCESS,
-            message=f"Verstanden. Ich habe mir das gemerkt: {text}",
+            message=f"Gemerkt, Sir — dauerhaft: {fact.text}",
         )
 
 
@@ -108,12 +110,12 @@ class ListFactsCommand:
         if not facts:
             return Result(
                 status=Status.SUCCESS,
-                message="Mein Langzeitgedächtnis ist aktuell leer - ich habe mir nichts dauerhaft gemerkt.",
+                message="Mein Langzeitgedächtnis ist leer, Sir — ein unbeschriebenes Blatt.",
             )
         lines = "\n".join(f"- ({f.category}) {f.text}" for f in facts)
         return Result(
             status=Status.SUCCESS,
-            message=f"Das habe ich mir dauerhaft gemerkt ({len(facts)}):\n{lines}",
+            message=f"Mein Langzeitgedächtnis, Sir — {len(facts)} Einträge:\n{lines}",
             data={"count": len(facts)},
         )
 

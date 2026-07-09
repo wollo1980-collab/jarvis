@@ -534,7 +534,7 @@ def test_async_delegation_pushes_error_on_backend_exception(tmp_path):
 
         runtime.submit("analysiere jarvis: frage", cb, allow_async=True)
         assert two.wait(timeout=5.0)
-        assert replies[0].startswith("Verstanden")       # Quittung
+        assert replies[0].startswith("Ich kümmere mich darum, Sir")       # Quittung
         assert "fehlgeschlagen" in replies[1]             # finaler Fehler-Push
     finally:
         runtime.stop()
@@ -724,7 +724,7 @@ def test_async_delegation_sends_quittung_then_push(tmp_path):
 
         runtime.submit("analysiere jarvis: frage", cb, allow_async=True)
         assert two.wait(timeout=5.0)
-        assert replies[0].startswith("Verstanden")  # sofortige Quittung
+        assert replies[0].startswith("Ich kümmere mich darum, Sir")  # sofortige Quittung
         assert "Ergebnis XY." in replies[1]          # spaeterer Ergebnis-Push
     finally:
         runtime.stop()
@@ -879,7 +879,7 @@ def test_async_delegation_writes_consistent_history(tmp_path):
         assert history[0].content == "analysiere jarvis: frage"
         assert "Ergebnis." in history[1].content
         # Die transiente Quittung wird NICHT persistiert.
-        assert all("Verstanden" not in m.content for m in history)
+        assert all("Ich kümmere mich darum" not in m.content for m in history)
     finally:
         runtime.stop()
 
@@ -909,7 +909,7 @@ def test_async_plan_next_step_reuses_the_async_path(tmp_path):
 
         runtime.submit("plane den nächsten schritt", cb, allow_async=True)
         assert two.wait(timeout=5.0)
-        assert replies[0].startswith("Verstanden")   # generische Quittung
+        assert replies[0].startswith("Ich kümmere mich darum, Sir")   # generische Quittung
         assert "Scheibe X." in replies[1]             # Push mit dem Vorschlag
     finally:
         runtime.stop()

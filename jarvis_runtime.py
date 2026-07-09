@@ -110,8 +110,11 @@ def _format_due_message(entry: Entry) -> str:
         except ValueError:
             pass
     if late:
-        return f"🔔 {star}Erinnerung (verspätet - war fällig {format_when(entry.when)}): «{entry.text}»"
-    return f"🔔 {star}Erinnerung: «{entry.text}» — fällig {format_when(entry.when)}"
+        return (
+            f"🔔 {star}Erinnerung (verspätet - war fällig {format_when(entry.when)}): "
+            f"«{entry.text}» — ich war kurz außer Dienst, Sir."
+        )
+    return f"🔔 {star}Eine Erinnerung, Sir: «{entry.text}» — fällig {format_when(entry.when)}."
 
 EXIT_WORDS = {"exit", "quit", "beenden", "ende", "stop", "stopp", "tschuess", "tschüss", "bye"}
 
@@ -416,7 +419,7 @@ class JarvisRuntime:
         if busy:
             self._safe_reply(
                 reply_callback,
-                "Es läuft bereits eine Analyse - ich melde mich, sobald sie fertig ist.",
+                "Es läuft bereits eine Analyse, Sir - eins nach dem anderen; ich melde mich.",
                 text,
             )
             return
@@ -425,7 +428,7 @@ class JarvisRuntime:
         # Command nicht (ADR-036) - kein hartkodiertes "analysiere '<repo>'".
         self._safe_reply(
             reply_callback,
-            "Verstanden - ich kümmere mich darum und melde mich, sobald das Ergebnis da ist.",
+            "Ich kümmere mich darum, Sir - Bericht folgt, sobald das Ergebnis vorliegt.",
             text,
         )
         cancel_event = threading.Event()

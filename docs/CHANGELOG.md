@@ -5,6 +5,7 @@
 ### Neu/Geändert
 - **Sprechtempo konfigurierbar** (`openai_tts_speed`, 0.25–4.0) — Wolfgang fährt 1.3.
 - **Jarvis duzt jetzt konsequent** — kein „Wie kann ich Ihnen helfen?"-Hotline-Ton mehr; persönlich-vertraute Ansprache, Charakter unverändert ruhig und präzise.
+- **Film-Persona überall (Persona-Pass):** Auch die festen Befehls-Antworten sprechen jetzt im J.A.R.V.I.S.-Ton — „Notiert, Sir: «Zahnarzt» — 09:00", „🔔 Eine Erinnerung, Sir: …", „Wie du wünschst, Sir — ich fahre herunter." Fakten/Zeiten bleiben exakt; Fehlermeldungen bleiben nüchtern; alles per Git jederzeit revidierbar.
 
 ## 2026-07-09 - Mit Jarvis am PC sprechen: Push-to-talk + lokale Stimme (ADR-041)
 

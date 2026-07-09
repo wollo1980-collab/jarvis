@@ -32,7 +32,7 @@ def test_remember_fact_stores_with_category(tmp_path: Path):
     )
 
     assert result.status == Status.SUCCESS
-    assert "Ich habe mir das gemerkt" in result.message
+    assert "Gemerkt, Sir" in result.message  # Persona-Pass 2026-07-09
     facts = memory_commands._require_long_term().all_facts()
     assert facts[0].text == "macht montags Reports"
     assert facts[0].category == "gewohnheit"
