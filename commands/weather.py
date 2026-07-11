@@ -1,0 +1,129 @@
+"""
+Wetter-Command (ADR-043) - "Wie wird das Wetter morgen in Berlin?" ueber
+core/weather.py (Open-Meteo, keyless). Ohne Ortsangabe gilt der Standard-Ort
+aus der Config (weather_default_location); ein genannter Ort gewinnt nur
+fuer diese Frage. Read-only, Stufe 0.
+"""
+from __future__ import annotations
+
+import logging
+from datetime import date, datetime
+
+from core.models import Plan, Result, Status
+from core.weather import PlaceNotFoundError, get_forecast
+
+logger = logging.getLogger("jarvis.commands.weather")
+
+_default_location: str = ""
+_timeout: float = 10.0
+
+_DAY_WORDS = {"heute": 0, "morgen": 1, "übermorgen": 2, "uebermorgen": 2}
+_DAY_LABELS = {0: "Heute", 1: "Morgen", 2: "Übermorgen"}
+
+
+def configure(default_location: str, timeout_seconds: float = 10.0) -> None:
+    """Von main.py/jarvis_runtime.py beim Start aufgerufen."""
+    global _default_location, _timeout
+    _default_location = (default_location or "").strip()
+    _timeout = timeout_seconds
+
+
+def _resolve_day(raw: str) -> int:
+    """'heute'/'morgen'/'übermorgen' oder ISO-Datum -> Tages-Offset (0-6).
+    Unbekanntes faellt fail-safe auf heute zurueck."""
+    value = (raw or "").strip().lower()
+    if not value:
+        return 0
+    if value in _DAY_WORDS:
+        return _DAY_WORDS[value]
+    try:
+        offset = (datetime.fromisoformat(value).date() - date.today()).days
+        return max(0, min(offset, 6))
+    except ValueError:
+        return 0
+
+
+def _day_label(offset: int, iso_date: str) -> str:
+    if offset in _DAY_LABELS:
+        return _DAY_LABELS[offset]
+    try:
+        return "Am " + datetime.fromisoformat(iso_date).strftime("%d.%m.")
+    except ValueError:
+        return "Dann"
+
+
+class GetWeatherCommand:
+    name = "get_weather"
+    description = (
+        "Sagt das Wetter fuer einen Ort und Tag an (z. B. 'wie wird das Wetter "
+        "morgen in Berlin?', 'Wetter heute?'). Ohne Ortsangabe gilt der "
+        "konfigurierte Standard-Ort. Read-only."
+    )
+    requires_confirmation = False
+
+    def execute(self, plan: Plan) -> Result:
+        place = str(plan.parameters.get("location") or plan.target or "").strip() or _default_location
+        if not place:
+            return Result(
+                status=Status.NEEDS_CLARIFICATION,
+                message="Für welchen Ort, Sir? (Ein Standard-Ort lässt sich in der Config hinterlegen.)",
+            )
+
+        offset = _resolve_day(str(plan.parameters.get("day") or ""))
+        try:
+            forecast = get_forecast(place, day_offset=offset, timeout=_timeout)
+        except PlaceNotFoundError:
+            return Result(
+                status=Status.FAILED,
+                message=f"Den Ort «{place}» finde ich nicht, Sir — ein Tippfehler vielleicht?",
+            )
+        except Exception:  # noqa: BLE001 - Netz/API koennen vielfaeltig scheitern
+            logger.exception("Wetterabruf fehlgeschlagen (%s).", place)
+            return Result(
+                status=Status.FAILED,
+                message="Der Wetterdienst antwortet gerade nicht, Sir.",
+            )
+
+        rain = (
+            f", Regenrisiko {forecast.rain_probability} Prozent"
+            if forecast.rain_probability is not None
+            else ""
+        )
+        # Tages-Spanne nur OHNE Verlauf (PO-Befund 2026-07-10, wie auf der
+        # UI-Karte): mit Jetzt-Wert und Bloecken ist "12 bis 29 Grad" doppelt.
+        has_course = forecast.current_temp is not None or bool(forecast.segments)
+        span = (
+            "" if has_course
+            else f", {forecast.temp_min:.0f} bis {forecast.temp_max:.0f} Grad"
+        )
+        headline = (
+            f"{_day_label(offset, forecast.date)} in {forecast.place}, Sir: "
+            f"{forecast.condition}{span}{rain}."
+        )
+
+        # Tagesverlauf (PO-Wunsch 2026-07-10): Jetzt-Wert + drei Bloecke.
+        # Ohne Stundendaten bleibt die Antwort exakt wie frueher.
+        details = []
+        if forecast.current_temp is not None:
+            cur_cond = f" ({forecast.current_condition})" if forecast.current_condition else ""
+            details.append(f"Jetzt {forecast.current_temp:.0f} Grad{cur_cond}")
+        details += [f"{seg.label} bis {seg.temp:.0f}°" for seg in forecast.segments]
+        detail_line = f" {' · '.join(details)}." if details else ""
+
+        rain_segments = [
+            s for s in forecast.segments
+            if s.rain_probability is not None and s.rain_probability >= 20
+        ]
+        rain_line = (
+            " Regen: " + ", ".join(f"{s.label} {s.rain_probability} %" for s in rain_segments) + "."
+            if rain_segments else ""
+        )
+
+        return Result(
+            status=Status.SUCCESS,
+            message=headline + detail_line + rain_line,
+            data={"place": forecast.place, "date": forecast.date},
+        )
+
+
+COMMANDS = [GetWeatherCommand()]

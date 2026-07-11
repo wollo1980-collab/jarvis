@@ -1,0 +1,22 @@
+config.json
+memory_data/
+logs/
+# Begriffsliste des Release-Scanners (Welle 4.1) - bleibt lokal.
+release_scan_local_terms.txt
+__pycache__/
+*.pyc
+.pytest_cache/
+.pytest_tmp/
+.venv/
+.vendor/
+Voices/
+# Claude-Code-Arbeitsdateien (launch.json fuer UI-Vorschau etc.) - lokal.
+.claude/
+
+# Reste eines fruehen, abgebrochenen git-init-Versuchs (kein
+# gueltiges .git-Verzeichnis) - bewusst ausgeschlossen statt geloescht,
+# da unklar war, ob es noch gebraucht wird.
+.git_broken_5/
+
+# Ersetzungstabelle des Schaufenster-Exports (Welle 4.2 Phase 3) - bleibt lokal.
+export_replacements_local.txt

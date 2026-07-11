@@ -1,0 +1,13 @@
+# Vollstaendiger Laufzeit-Stack fuer den realen Jarvis-Betrieb (Telegram-Runtime).
+# Kern-Deps (requirements.txt) + die dort als optional markierten, real genutzten
+# Pakete. Neuaufbau des venv wird damit ein Befehl statt Detektivarbeit:
+#   pip install -r requirements-runtime.txt
+-r requirements.txt
+python-telegram-bot>=22.0   # Telegram-Runtime (jarvis_runtime.py / telegram_channel.py)
+numpy>=2.0                  # TTS-Backend "kokoro" + Tests + PTT-Audiopuffer
+anthropic>=0.40.0           # KI-Provider "claude" (ADR-029/030)
+python-docx>=1.1.0          # Word-Export
+piper-tts>=1.2.0            # lokale Sprach-Ausgabe (Thorsten, ADR-041)
+sounddevice>=0.5.0          # Push-to-talk Mikrofonaufnahme (ADR-041)
+pynput>=1.7.0               # Push-to-talk globaler Hotkey (ADR-041)
+openwakeword>=0.6.0         # Wake-Word "Hey Jarvis", lokal (ADR-044)

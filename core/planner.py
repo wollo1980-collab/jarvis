@@ -1,0 +1,224 @@
+"""
+Planner: zerlegt eine Nutzereingabe in eine geordnete Liste von Plänen
+(Schritten). v0.3-Ansatz bewusst einfach (siehe ADR-004): keine eigene
+Multi-Step-JSON-Struktur in der KI-Antwort, stattdessen wird die
+Eingabe an einfachen Konnektoren ("und", "und dann", "danach", ";")
+in Teilsätze gesplittet und jeder Teilsatz einzeln an die KI
+geschickt (get_plan bleibt unverändert - kein Bruch an core/ai.py).
+
+Warum so einfach? Regel 6 (Keine Architecture Astronautics) und
+Regel 4 (90/10-Prinzip): eine naive Trennung deckt den heutigen
+Bedarf (2-3 Aktionen pro Satz) ab. Eine "echte" Multi-Step-Planung
+mit Rückfrage-Loops ist ein Later-Feature (siehe Handbook Kap. 27).
+
+Falsifizierbarkeit: gilt als unzureichend, wenn Nutzer regelmäßig
+zusammengesetzte Sätze verwenden, die die Splitter-Heuristik nicht
+sauber trennt (z. B. verschachtelte "und" in einem Objektnamen).
+Dann Review in v0.4.
+"""
+from __future__ import annotations
+
+import logging
+import re
+
+from core.ai import AIEngine
+from core.models import Message, Plan
+
+logger = logging.getLogger("jarvis.planner")
+
+# Reihenfolge wichtig: längere Konnektoren zuerst prüfen, damit
+# "und dann" nicht schon beim kürzeren "und" auseinandergerissen wird.
+_SPLIT_PATTERN = re.compile(r"\s+(?:und dann|danach|und)\s+|;\s*", flags=re.IGNORECASE)
+
+# Ideen-Vertiefung (Angestellten-Vision Stufe 2, Live-Befund 11.07.2026
+# nachts): "recherchier Idee 2" soll das THEMA der Idee im Web
+# recherchieren - das LLM führte stattdessen zweimal den in der Idee
+# genannten Befehl aus (Prompt-Schärfung half nicht). Deshalb
+# deterministisch VOR dem LLM: Muster erkennen, Idee-Wortlaut aus der
+# letzten IDEEN-Antwort holen, search_web bauen.
+_IDEA_DEEPEN_RE = re.compile(
+    r"\b(?:recherchier\w*|vertiefe?\w*|informier\w*)\b.{0,40}?"
+    r"\b(?:idee|nummer|punkt|vorschlag)\s*(\d+)",
+    flags=re.IGNORECASE,
+)
+_IDEA_LINE_RE = re.compile(r"^\s*(\d+)\.\s+(.+?)\s*$", flags=re.MULTILINE)
+# Der Ausloese-Satz ("Sag einfach: ...") gehoert nicht ins Suchthema.
+_IDEA_TRIGGER_TAIL_RE = re.compile(r"\s*Sag einfach:.*$", flags=re.IGNORECASE)
+# Signatur einer propose_ideas-Antwort (Audit-Fund 1, 11.07.2026): NUR
+# eine echte Ideen-Antwort darf die Vertiefung ausloesen. News, Listen und
+# der Wochen-Rueckblick erzeugen dasselbe "1. ..."-Format - wuerde die
+# Heuristik die LETZTE beliebige Nummernliste nehmen, recherchierte sie am
+# LLM vorbei das falsche Thema. commands/ideas.py haengt diesen Satz an
+# JEDE Ideen-Antwort ("... Sag einfach: recherchier Idee 2.").
+_IDEA_ANSWER_MARKER = "recherchier idee"
+
+
+def _idea_deepening_plan(user_input: str, history: list[Message]) -> Plan | None:
+    """Baut deterministisch einen search_web-Plan, wenn der Nutzer eine
+    nummerierte Idee aus einer ECHTEN Ideen-Antwort vertiefen will. None =
+    kein Treffer, normaler Weg (LLM) übernimmt."""
+    match = _IDEA_DEEPEN_RE.search(user_input)
+    if match is None:
+        return None
+    wanted = match.group(1)
+    for message in reversed(history):
+        if message.role != "assistant":
+            continue
+        # Audit-Fund 1: nur eine propose_ideas-Antwort zaehlt (Signatur),
+        # nicht irgendeine Nummernliste (News/Listen/Wochen-Rueckblick).
+        if _IDEA_ANSWER_MARKER not in message.content.lower():
+            continue
+        numbered = {num: text for num, text in _IDEA_LINE_RE.findall(message.content)}
+        if not numbered:
+            continue
+        idea_text = numbered.get(wanted)
+        if idea_text is None:
+            return None  # Ideen-Liste da, aber Nummer nicht - LLM darf nachfragen
+        topic = _IDEA_TRIGGER_TAIL_RE.sub("", idea_text).strip().rstrip(".!?–- ")
+        if not topic:
+            return None
+        logger.info("Ideen-Vertiefung erkannt: Idee %s -> Websuche.", wanted)
+        return Plan(intent="search_web", target=topic, confidence=1.0, raw_input=user_input)
+    return None
+
+
+# Anzeigename auf Zuruf (ADR-057): "nenn mich X" soll Chat UND Dashboard
+# umbenennen (set_owner_name), nicht als loser Fakt versacken. Deterministisch
+# VOR dem LLM, damit es zuverlaessig UND eng greift: NUR echte Selbst-
+# Benennung. Ein Fakt wie "Max ist mein Sohn" enthaelt kein Benennungs-
+# Verb und faellt bewusst durch -> normaler Weg (merk dir). _NAME = ein
+# einzelnes Namenswort (>=2 Zeichen), damit die "zu mir"/"nennen"-Anker sauber
+# greifen und keine Satzreste einsammeln.
+_NAME = r"(?P<name>[A-Za-zÄÖÜäöüß][A-Za-zÄÖÜäöüß'\-]+)"
+_OWNER_NAME_RES = [
+    re.compile(r"\bnenn(?:e)?\s+mich(?:\s+bitte)?(?:\s+ab\s+(?:jetzt|sofort))?\s+" + _NAME, re.IGNORECASE),
+    re.compile(r"\bich\s+hei(?:ß|ss)e\s+" + _NAME, re.IGNORECASE),
+    re.compile(r"\bmein\s+name\s+ist\s+" + _NAME, re.IGNORECASE),
+    re.compile(r"\bsag(?:\s+bitte)?\s+" + _NAME + r"\s+zu\s+mir\b", re.IGNORECASE),
+    re.compile(r"\bdu\s+(?:darfst|kannst|sollst)\s+mich\s+" + _NAME + r"\s+nennen\b", re.IGNORECASE),
+]
+# Woerter, die die Muster grammatikalisch treffen, aber KEIN Name sind
+# ("nenn mich nicht so", "ich heiße dich willkommen") - Fehlanzeige statt
+# Fehl-Umbenennung. Klein geschrieben verglichen.
+_OWNER_NAME_STOPWORDS = frozenset({
+    "dich", "mich", "euch", "ihn", "sie", "uns", "bitte", "nicht", "willkommen",
+    "gut", "doch", "mal", "jetzt", "sofort", "immer", "nie", "so", "gerne",
+    "gern", "wieder", "auch", "einfach", "ruhig", "halt", "eben",
+})
+
+
+def _owner_name_plan(user_input: str) -> Plan | None:
+    """Erkennt eine ausdrueckliche Selbst-Benennung und baut den
+    set_owner_name-Plan. None = keine (oder unplausible) Benennung, normaler
+    Weg uebernimmt. Bewusst eng: lieber eine echte Umbenennung verpassen (LLM
+    faengt sie als Fallback) als "Max ist mein Sohn" zur Anrede machen."""
+    for rx in _OWNER_NAME_RES:
+        match = rx.search(user_input)
+        if match is None:
+            continue
+        name = match.group("name").strip().strip("'-")
+        if len(name) < 2 or name.lower() in _OWNER_NAME_STOPWORDS:
+            continue
+        # Eigenname gross schreiben (Sprach-/Kleinschreibung glaetten), Rest
+        # unangetastet (McLeod, von-Namen bleiben, wie sie sind).
+        name = name[:1].upper() + name[1:]
+        logger.info("Anzeigename-Wunsch erkannt -> set_owner_name (%s).", name)
+        return Plan(intent="set_owner_name", target=name, confidence=1.0, raw_input=user_input)
+    return None
+
+
+# Vorschlag verwerfen auf Zuruf (PO-Reibung 2026-07-11): "Deinen Entwurf
+# verwerfen" fand kein Intent und wurde vom LLM als stop_runtime gedeutet ->
+# Jarvis fuhr herunter. Deterministisch VOR dem LLM: eine Verwerf-Formulierung
+# + Vorschlags-Objekt -> dismiss_proposal. Kurze Befehle -> Teilstring genuegt.
+_DISMISS_VERBS = ("verwirf", "verwerf", "ablehn", "weg mit", "weg damit")
+_DISMISS_OBJECTS = ("vorschlag", "entwurf", "empfehlung")
+
+
+def _dismiss_proposal_plan(user_input: str) -> Plan | None:
+    """Erkennt den Wunsch, Jarvis' offenen Eigenvorschlag zu verwerfen. None =
+    kein Treffer. Bewusst eng auf das Vorschlags-Objekt begrenzt, damit es nie
+    ein Loeschen von Notizen/Fakten kapert."""
+    low = (user_input or "").lower()
+    has_verb = any(v in low for v in _DISMISS_VERBS) or ("lehn" in low and "ab" in low)
+    has_object = any(o in low for o in _DISMISS_OBJECTS)
+    if has_verb and has_object:
+        logger.info("Vorschlag-Verwerfen erkannt -> dismiss_proposal.")
+        return Plan(intent="dismiss_proposal", target=None, confidence=1.0, raw_input=user_input)
+    return None
+
+
+# Fehlrouting-Schutz fuer STILL wirkende, disruptive Intents (PO-Reibung
+# 2026-07-11: "Deinen Entwurf verwerfen" -> stop_runtime -> Jarvis 2 Min
+# offline). stop_runtime laeuft OHNE Rueckfrage (ueber Telegram waere eine
+# gesperrt) - ein Fehlgriff des schnellen Planners nimmt Jarvis also still aus
+# dem Dienst. Deshalb: stop_runtime feuert NUR, wenn die Eingabe wirklich eine
+# Abschalt-Formulierung traegt; sonst ist es fast sicher ein Fehlrouting -> chat
+# (der Nutzer bekommt eine Antwort statt eines stillen Shutdowns).
+_SHUTDOWN_TRIGGER_RE = re.compile(
+    r"(?i)(beende?\s+(dich|jarvis)|beenden?\b.{0,12}\bjarvis|fahr\w*\s+dich\s+(runter|herunter)"
+    r"|stell\s+dich\s+ab|schalt\w*\s+dich\s+(ab|aus)|leg\s+dich\s+schlafen"
+    r"|geh\s+(offline|schlafen)|mach\s+dich\s+aus|herunterfahren|runterfahren)"
+)
+
+
+def _guard_disruptive(plan: Plan) -> Plan:
+    """Faengt ein Fehlrouting auf stop_runtime ab: fehlt in der Eingabe eine
+    klare Abschalt-Formulierung, wird der Intent zu chat entschaerft (statt
+    Jarvis still herunterzufahren). Nur stop_runtime - shutdown_pc hat als
+    Stufe-3-Befehl ohnehin eine Rueckfrage als Netz."""
+    if plan.intent == "stop_runtime" and not _SHUTDOWN_TRIGGER_RE.search(plan.raw_input or ""):
+        logger.info(
+            "stop_runtime ohne klare Abschalt-Formulierung in %r -> chat (Fehlrouting-Schutz).",
+            plan.raw_input,
+        )
+        return Plan(intent="chat", target=None, confidence=0.0, raw_input=plan.raw_input)
+    return plan
+
+
+class Planner:
+    def __init__(self, ai: AIEngine):
+        self.ai = ai
+
+    def plan(self, user_input: str, history: list[Message]) -> list[Plan]:
+        """Zerlegt user_input in 1..n Teilsätze und holt für jeden
+        Teilsatz einen eigenen Plan von der KI. Reihenfolge bleibt
+        erhalten - Schritt 1 wird vor Schritt 2 ausgeführt.
+
+        AUSNAHME (Live-Befund 2026-07-10, Falsifizierbarkeit aus dem
+        Moduldoc eingetreten): Ein ':' markiert "Befehl: Nutzlast"
+        ("erledige in jkc: ...", "analysiere X: ...", "notiere: ...") -
+        die Nutzlast darf Konnektoren wie "und" enthalten und wird NIE
+        gesplittet. Der lange AP1-Delegations-Auftrag wurde sonst an
+        jedem "und" zerhackt: Doppel-Rueckfragen, und der Agent bekam
+        nur Spezifikations-Fragmente."""
+        deepening = _idea_deepening_plan(user_input, history)
+        if deepening is not None:
+            return [deepening]
+
+        # Anzeigename auf Zuruf (ADR-057): VOR dem Split, damit "nenn mich X"
+        # nicht am "und" zerhackt wird und der Name-Wunsch zuverlaessig greift.
+        naming = _owner_name_plan(user_input)
+        if naming is not None:
+            return [naming]
+
+        # Vorschlag verwerfen (PO-Reibung 2026-07-11): deterministisch, damit
+        # "verwirf den Entwurf" nie mehr als Herunterfahren fehlgedeutet wird.
+        dismiss = _dismiss_proposal_plan(user_input)
+        if dismiss is not None:
+            return [dismiss]
+
+        if ":" in user_input:
+            return [_guard_disruptive(self.ai.get_plan(user_input, history))]
+
+        parts = [p.strip() for p in _SPLIT_PATTERN.split(user_input) if p.strip()]
+
+        if not parts:
+            parts = [user_input]
+
+        if len(parts) > 1:
+            logger.info("Eingabe in %d Schritte zerlegt: %s", len(parts), parts)
+
+        # _guard_disruptive faengt ein Fehlrouting auf stop_runtime ab (still
+        # wirkender Shutdown ohne klare Ansage -> chat).
+        return [_guard_disruptive(self.ai.get_plan(part, history)) for part in parts]
