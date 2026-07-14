@@ -84,6 +84,14 @@ RUNTIME_ALLOWED_INTENTS = ALLOWED_INTENTS | {
     "disable_autostart_entry",
     "enable_jarvis_autostart",
     "disable_jarvis_autostart",
+    # Fernbedienung (ADR-058): lock/volume/media sind Stufe 1 (jederzeit
+    # umkehrbar, bestaetigungsfrei) - Sperren von unterwegs ist sogar ein
+    # Sicherheitsgewinn. sleep_pc ist Stufe 2 und laeuft wie die anderen
+    # Stufe-2-Intents ueber den ConfirmationGate-Dialog (ADR-045).
+    "lock_pc",
+    "set_volume",
+    "media_control",
+    "sleep_pc",
 }
 
 __all__ = [

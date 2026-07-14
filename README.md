@@ -402,6 +402,31 @@ Antwort in 120 s, „nein" oder eine falsche Phrase ⇒ Abbruch (fail-closed).
 Sprachnachrichten zählen nicht als Bestätigung; PTT/Wake-Word/Konsole der
 Runtime bleiben ohne Bestätigungsweg (dort weiterhin kein Stufe 2/3).
 
+## Fernbedienung: Sperren, Lautstärke, Medien, Ruhezustand (ADR-058)
+
+Jarvis steuert den PC wie eine Fernbedienung — per Sprachbefehl vom Sofa
+oder per Telegram von unterwegs:
+
+```
+Du: Sperr den Bildschirm
+Jarvis: Bildschirm gesperrt, Sir.
+
+Du: Mach leiser            → Lautstärke −10 % (Medientasten, ±2 % je Druck)
+Du: Ton aus                → Stumm-Umschalter
+Du: Nächstes Lied          → Medientaste „Weiter" (wirkt auf Spotify, Browser, VLC …)
+Du: Schick den PC schlafen → Rückfrage (Stufe 2, Ja/Nein), dann Ruhezustand
+```
+
+`lock_pc`, `set_volume` und `media_control` sind Sicherheitsstufe 1
+(jederzeit umkehrbar, keine Bestätigung — Sperren aus der Ferne ist sogar
+ein Sicherheitsgewinn). `sleep_pc` ist Stufe 2: einfache Ja/Nein-Bestätigung
+(remote über das ConfirmationGate, ADR-045) — anders als `shutdown_pc`
+(Stufe 3, exakte Phrase) ist der Rechner per Tastendruck wieder da. Ehrliche
+Grenze: nach dem Ruhezustand ist auch Jarvis bis zum Wecken weg (kein
+Wake-on-LAN). Alles Windows-Bordmittel (virtuelle Medientasten, `rundll32`),
+keine neue Abhängigkeit; auf anderen Plattformen lehnt die
+Lautstärke-/Mediensteuerung ehrlich ab.
+
 ## Jarvis neu starten (`restart_runtime`)
 
 Auf „**starte dich neu**" / „**Neustart**" startet Jarvis sich selbst neu:

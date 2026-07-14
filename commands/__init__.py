@@ -56,9 +56,9 @@ def dispatch(plan: Plan) -> Result:
 
 
 def _register_all() -> None:
-    from commands import briefing, delegate, entries, excel, ideas, installer, lists, mail, memory, monitor, news, owner, plan, project, restart, review, shutdown, system, verify, weather, web
+    from commands import briefing, delegate, entries, excel, ideas, installer, lists, mail, memory, monitor, news, owner, plan, project, remote, restart, review, shutdown, system, verify, weather, web
 
-    for module in (system, memory, owner, entries, lists, monitor, installer, excel, mail, web, news, weather, briefing, ideas, review, verify, delegate, plan, project, shutdown, restart):
+    for module in (system, remote, memory, owner, entries, lists, monitor, installer, excel, mail, web, news, weather, briefing, ideas, review, verify, delegate, plan, project, shutdown, restart):
         for command in getattr(module, "COMMANDS", []):
             register(command)
 
