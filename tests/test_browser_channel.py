@@ -88,12 +88,78 @@ def test_post_message_reaches_runtime_with_full_access():
         channel.stop()
 
 
+def test_spotify_control_dispatches_silently():
+    """Media-Controls (ADR-058): POST /spotify/control feuert den passenden
+    Intent direkt (kein Planner, kein runtime.submit, kein Chat-Echo)."""
+    import commands.spotify as spotify_commands
+
+    class _Stub:
+        def __init__(self):
+            self.calls = []
+
+        def pause(self):
+            self.calls.append("pause")
+
+    stub = _Stub()
+    spotify_commands.configure(config=None, client=stub)
+    runtime = FakeRuntime()
+    channel = _start_channel(runtime)
+    try:
+        conn = http.client.HTTPConnection("127.0.0.1", channel.port, timeout=5)
+        conn.request("POST", "/spotify/control", json.dumps({"action": "pause"}),
+                     {"Content-Type": "application/json"})
+        resp = conn.getresponse()
+        body = json.loads(resp.read().decode("utf-8"))
+        conn.close()
+        assert resp.status == 200 and body["ok"] is True
+        assert stub.calls == ["pause"]
+        assert runtime.submitted == []          # nicht durch die Pipeline
+    finally:
+        channel.stop()
+
+
+def test_spotify_control_rejects_unknown_action():
+    import commands.spotify as spotify_commands
+
+    spotify_commands.configure(config=None, client=object())
+    channel = _start_channel()
+    try:
+        conn = http.client.HTTPConnection("127.0.0.1", channel.port, timeout=5)
+        conn.request("POST", "/spotify/control", json.dumps({"action": "explode"}),
+                     {"Content-Type": "application/json"})
+        resp = conn.getresponse()
+        conn.close()
+        assert resp.status == 400
+    finally:
+        channel.stop()
+
+
+def test_spotify_now_returns_state():
+    import commands.spotify as spotify_commands
+
+    class _Stub:
+        def playback(self):
+            return {"title": "S", "artist": "A", "is_playing": True}
+
+    spotify_commands.configure(config=None, client=_Stub())
+    channel = _start_channel()
+    try:
+        conn = http.client.HTTPConnection("127.0.0.1", channel.port, timeout=5)
+        conn.request("GET", "/spotify/now")
+        resp = conn.getresponse()
+        body = json.loads(resp.read().decode("utf-8"))
+        conn.close()
+        assert resp.status == 200
+        assert body == {"configured": True, "playing": True, "title": "S", "artist": "A"}
+    finally:
+        channel.stop()
+
+
 def test_entry_delete_endpoint_is_silent_and_direct(tmp_path):
     """PO 2026-07-10 'ein Klick ist keine Konversation': POST /entry/delete
     loescht direkt ueber delete_entry (kein Planner, kein runtime.submit,
     kein Chat-Echo). Fail-closed: nur dieser eine Intent, hart verdrahtet."""
     import commands.entries as entries_commands
-    from core.models import Plan
 
     store = entries_commands.configure(tmp_path)
     store.add("Zahnarzt anrufen")

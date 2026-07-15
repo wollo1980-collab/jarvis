@@ -16,6 +16,87 @@ def _past_iso(hours: float = 24.0) -> str:
     return (datetime.now() - timedelta(hours=hours)).isoformat(timespec="minutes")
 
 
+# --- Natuerliche Zeit-Formulierung (Reibung 12.07.: "12.07.2026 14:45" = 1998) --
+
+def test_format_when_is_relative_and_natural():
+    from memory.entries import format_when
+
+    now = datetime.now()
+    heute = now.replace(hour=14, minute=45, second=0, microsecond=0)
+    assert format_when(heute.strftime("%Y-%m-%dT%H:%M")) == "heute um 14:45"
+
+    morgen = (now + timedelta(days=1)).replace(hour=9, minute=0, second=0, microsecond=0)
+    assert format_when(morgen.strftime("%Y-%m-%dT%H:%M")) == "morgen um 09:00"
+
+    assert format_when(now.strftime("%Y-%m-%d")) == "heute"          # ganztaegig
+    in_vier = (now + timedelta(days=4)).replace(hour=9, minute=0)
+    assert format_when(in_vier.strftime("%Y-%m-%dT%H:%M")).startswith("am ")  # Wochentag
+    assert format_when("2099-07-12T14:45") == "12.07.2099 um 14:45"  # weit weg absolut
+
+
+def test_format_when_marks_past_when_asked():
+    """Kundenreview 13.07. ('Eine gemeinsame Wahrheit'): ein 09:00-Termin darf
+    abends nirgends mehr wie anstehend klingen. mark_past=True kennzeichnet
+    Vergangenes als 'war fällig ...'; Zukunft und der Default bleiben exakt
+    wie bisher (Anlege-Echos nennen nie Vergangenes)."""
+    from memory.entries import format_when
+
+    vorbei = _past_iso(2)
+    assert format_when(vorbei, mark_past=True).startswith("war fällig ")
+    assert not format_when(vorbei).startswith("war fällig ")   # Default unveraendert
+
+    bald = _future_iso(2)
+    assert not format_when(bald, mark_past=True).startswith("war fällig ")
+
+    # Ganztaegig heute: bis Tagesende offen (is_past-Semantik), kein Marker.
+    assert format_when(datetime.now().strftime("%Y-%m-%d"), mark_past=True) == "heute"
+
+
+# --- Eintrag aendern/verschieben (Reibung 12.07.: kein Duplikat) ----------
+
+def test_update_changes_when_same_entry_no_duplicate(tmp_path: Path):
+    store = EntryStore(tmp_path)
+    e = store.add("Fahre zu meiner Mutter", when=_future_iso(6), important=True)
+
+    updated = store.update("mutter", when=_future_iso(3))
+
+    assert updated is not None
+    assert updated.id == e.id                 # DERSELBE Eintrag - kein Duplikat
+    assert updated.important is True          # nicht uebergebenes Feld bleibt
+    assert updated.notified is False          # zukuenftig -> wieder meldbar
+    assert len(store.list_open()) == 1        # es entstand KEIN zweiter Eintrag
+
+
+def test_update_matches_by_time_when_text_fails(tmp_path: Path):
+    """Der Nutzer benennt den Termin oft ueber die ZEIT ('den 15-Uhr-Termin')
+    statt ueber den Text - dann per Uhrzeit im when finden."""
+    store = EntryStore(tmp_path)
+    store.add("Fahre zu meiner Mutter", when="2099-07-12T15:00", important=True)
+
+    updated = store.update("15 Uhr", when="2099-07-12T14:45")
+
+    assert updated is not None
+    assert "Mutter" in updated.text            # per Uhrzeit gefunden
+    assert updated.when == "2099-07-12T14:45"
+
+
+def test_update_no_match_returns_none(tmp_path: Path):
+    store = EntryStore(tmp_path)
+    store.add("Zahnarzt", when=_future_iso(5))
+    assert store.update("gibt es nicht", when=_future_iso(2)) is None
+
+
+def test_update_important_only_keeps_when(tmp_path: Path):
+    store = EntryStore(tmp_path)
+    when = _future_iso(4)
+    store.add("Meeting", when=when, important=False)
+
+    updated = store.update("meeting", important=True)
+
+    assert updated.important is True
+    assert updated.when == when               # when unveraendert, wenn nicht gesetzt
+
+
 # --- Wiederkehrende Erinnerungen (ADR-052) --------------------------------
 
 def test_repeat_normalization_and_migration(tmp_path: Path):
@@ -174,6 +255,64 @@ def test_delete_not_found_returns_none(tmp_path: Path):
     assert store.delete("gibtsnicht") is None
     assert store.delete("") is None
     assert len(store.list_open()) == 1  # nichts faelschlich geloescht
+
+
+# --- Papierkorb (Bestaetigungs-Diaet 14.07., Muster memory/long_term.py) ----
+
+def test_delete_moves_entry_to_trash_and_restore_brings_it_back(tmp_path: Path):
+    store = EntryStore(tmp_path)
+    entry = store.add("Zahnarzt", when=_future_iso(), important=True)
+    store.delete("Zahnarzt")
+
+    assert store.list_open() == []
+    assert [e.text for e in store.trash_entries()] == ["Zahnarzt"]
+
+    restored = store.restore("zahnarzt")
+    assert restored is not None and restored.text == "Zahnarzt"
+    # UNVERAENDERT zurueck: gleiche id, Stern und Termin bleiben.
+    assert restored.id == entry.id
+    assert restored.important is True
+    assert restored.when == entry.when
+    assert store.trash_entries() == []
+    assert [e.text for e in store.list_open()] == ["Zahnarzt"]
+    # Persistenz: eine NEUE Instanz sieht den wiederhergestellten Eintrag.
+    assert [e.text for e in EntryStore(tmp_path).list_open()] == ["Zahnarzt"]
+
+
+def test_restore_without_text_returns_last_deleted(tmp_path: Path):
+    """Undo-Geste: «stell den Eintrag wieder her» ohne Suchtext holt den
+    ZULETZT geloeschten zurueck."""
+    store = EntryStore(tmp_path)
+    store.add("Erster")
+    store.add("Zweiter")
+    store.delete("Erster")
+    store.delete("Zweiter")
+
+    restored = store.restore()
+    assert restored is not None and restored.text == "Zweiter"
+    assert [e.text for e in store.trash_entries()] == ["Erster"]
+
+
+def test_restore_not_found_returns_none(tmp_path: Path):
+    store = EntryStore(tmp_path)
+    assert store.restore() is None          # leerer Papierkorb
+    store.add("Etwas")
+    store.delete("Etwas")
+    assert store.restore("gibtsnicht") is None
+    assert [e.text for e in store.trash_entries()] == ["Etwas"]  # bleibt liegen
+
+
+def test_trash_is_capped(tmp_path: Path):
+    from memory.entries import _TRASH_CAP
+
+    store = EntryStore(tmp_path)
+    for i in range(_TRASH_CAP + 5):
+        store.add(f"Eintrag {i}")
+        store.delete(f"Eintrag {i}", exact=True)
+
+    trash = store.trash_entries()
+    assert len(trash) == _TRASH_CAP
+    assert trash[-1].text == f"Eintrag {_TRASH_CAP + 4}"   # juengste ueberleben
 
 
 def test_is_past_date_only_counts_until_end_of_day():

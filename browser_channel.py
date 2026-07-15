@@ -223,7 +223,7 @@ def _make_handler(channel: BrowserChannel):
         def do_POST(self):  # noqa: N802
             if self._deny_forbidden_origin():
                 return
-            if self.path not in ("/message", "/entry/delete", "/fact/forget", "/impulse/dismiss", "/agent/stop", "/agent/redirect", "/proposal/dismiss"):
+            if self.path not in ("/message", "/entry/delete", "/fact/forget", "/impulse/dismiss", "/agent/stop", "/agent/redirect", "/proposal/dismiss", "/spotify/control"):
                 self._drain_request_body()
                 self._respond(404, {"error": "Unbekannter Pfad."})
                 return
@@ -238,6 +238,31 @@ def _make_handler(channel: BrowserChannel):
                     logger.exception("Agenten-Stopp fehlgeschlagen.")
                 logger.info("UI-Still-Aktion Stopp: %s", "gestoppt" if stopped else "nichts aktiv")
                 self._respond(200, {"ok": True, "stopped": stopped})
+                return
+            if self.path == "/spotify/control":
+                # Media-Controls der Kachel (ADR-058): direkter Stufe-0-Dispatch
+                # des passenden Spotify-Intents - kein Planner, kein Chat-Echo,
+                # keine TTS-Ansage (Media-Knopf soll lautlos wirken). Body traegt
+                # "action", nicht "text" - deshalb ein eigener frueher Zweig.
+                try:
+                    length = min(int(self.headers.get("Content-Length", 0)), _MAX_BODY_BYTES)
+                    action = str(json.loads(self.rfile.read(length).decode("utf-8")).get("action", "")).strip().lower()
+                except (ValueError, json.JSONDecodeError):
+                    self._respond(400, {"error": "Ungueltiger JSON-Body."})
+                    return
+                intents = {"play": "spotify_play", "pause": "spotify_pause",
+                           "next": "spotify_next", "previous": "spotify_previous"}
+                intent = intents.get(action)
+                if not intent:
+                    self._respond(400, {"error": "Unbekannte Aktion."})
+                    return
+                from commands import dispatch
+                from core.models import Plan
+
+                result = dispatch(Plan(intent=intent))
+                logger.info("UI-Still-Aktion Spotify %s: %s", action,
+                            "ok" if result.ok else result.message[:80])
+                self._respond(200 if result.ok else 502, {"ok": result.ok, "message": result.message})
                 return
             try:
                 length = min(int(self.headers.get("Content-Length", 0)), _MAX_BODY_BYTES)
@@ -318,6 +343,12 @@ def _make_handler(channel: BrowserChannel):
                 return
             if self.path == "/health":
                 self._respond(200, {"ok": True, "channel": "browser"})
+                return
+            if self.path == "/spotify/now":
+                # Read-only Zustand fuer die Kachel (ADR-058), fail-safe.
+                from commands.spotify import now_playing_state
+
+                self._respond(200, now_playing_state())
                 return
             if self.path != "/events":
                 self._respond(404, {"error": "Unbekannter Pfad."})

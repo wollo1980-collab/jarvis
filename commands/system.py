@@ -101,7 +101,8 @@ class ShutdownPcCommand:
         system_name = platform.system()
         try:
             if system_name == "Windows":
-                subprocess.run(["shutdown", "/s", "/t", "0"], check=True)
+                subprocess.run(["shutdown", "/s", "/t", "0"], check=True,
+                               creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
             else:
                 subprocess.run(["shutdown", "-h", "now"], check=True)
         except (subprocess.CalledProcessError, PermissionError) as e:

@@ -83,6 +83,8 @@ def tracked_files(repo_root: Path) -> list[str]:
         text=True,
         encoding="utf-8",
         check=True,
+        # Kein Konsolen-Aufblitzen unter pythonw (PO-Befund 13.07.).
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
     return [line.strip() for line in result.stdout.splitlines() if line.strip()]
 

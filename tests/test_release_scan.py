@@ -3,7 +3,7 @@ Veroeffentlichung. Alle 'Secrets' hier sind erfundene Beispiele.
 release-scan: datei-ok (Fixture-Secrets sind der Testgegenstand)."""
 from __future__ import annotations
 
-from core.release_scan import Finding, load_local_terms, mask, scan_repo, scan_text
+from core.release_scan import load_local_terms, mask, scan_repo, scan_text
 
 
 def test_detects_api_key_and_masks_it():

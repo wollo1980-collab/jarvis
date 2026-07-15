@@ -123,6 +123,30 @@ def test_executor_stufe3_requires_exact_phrase_not_just_ja():
     assert report.results[0].status == Status.NEEDS_CLARIFICATION
 
 
+def test_confirmation_required_dynamic_hook_can_only_waive():
+    """Bestaetigungs-Diaet (PO 14.07., Ampel-Prinzip): needs_confirmation(plan)
+    darf eine statische Stufe-2-Frage ERLASSEN, nie eine erzeugen; wirft der
+    Hook, wird gefragt (fail-closed). Auto-Mock-Attribute duerfen nie eine
+    Frage ausloesen (MagicMock-Falle)."""
+    from types import SimpleNamespace
+
+    from executor.executor import confirmation_required
+
+    plan = Plan(intent="x", raw_input="x")
+    assert confirmation_required(SimpleNamespace(), plan) is False
+    assert confirmation_required(SimpleNamespace(requires_confirmation=True), plan) is True
+
+    erlassen = SimpleNamespace(requires_confirmation=True, needs_confirmation=lambda p: False)
+    assert confirmation_required(erlassen, plan) is False
+
+    kaputt = SimpleNamespace(requires_confirmation=True,
+                             needs_confirmation=lambda p: (_ for _ in ()).throw(RuntimeError()))
+    assert confirmation_required(kaputt, plan) is True
+
+    auto_mock = MagicMock(requires_confirmation=False)
+    assert confirmation_required(auto_mock, plan) is False
+
+
 def test_executor_stufe3_proceeds_with_exact_phrase():
     speech = MagicMock()
     speech.listen.return_value = "HERUNTERFAHREN"
@@ -198,7 +222,12 @@ def test_executor_confirmation_unchanged_when_command_has_no_preview():
 
     report = executor.run([Plan(intent="x", raw_input="tu etwas kritisches")])
 
-    speech.say.assert_called_once_with("Ich würde jetzt ausführen: x. Bestätigen?")
+    # Live-Reibung 13.07. spät ('bei ja/nein muss ich raten'): die Frage sagt,
+    # was Ja und Nein bewirken; unbekannter Intent bleibt ehrlich roh.
+    speech.say.assert_called_once_with(
+        "Bevor ich loslege, Sir — ich möchte: x. Sag «ja», dann mache ich "
+        "genau das — «nein» (oder etwas anderes), dann passiert nichts."
+    )
     assert report.all_ok
 
 
@@ -217,10 +246,11 @@ def test_executor_stufe3_confirmation_unchanged_when_command_has_no_preview():
 
     executor.run([Plan(intent="shutdown_pc", raw_input="fahr den pc runter")])
 
-    speech.say.assert_called_once_with(
-        "Ich würde jetzt ausführen: shutdown_pc. Das ist eine kritische "
-        "Aktion (Sicherheitsstufe 3). Bitte tippe zur Bestätigung genau: HERUNTERFAHREN"
-    )
+    say_text = speech.say.call_args.args[0]
+    assert "PC herunterfahren" in say_text          # deutscher Aktions-Name
+    assert "shutdown_pc" not in say_text            # kein Maschinen-Name mehr
+    assert "genau: HERUNTERFAHREN" in say_text
+    assert "dann passiert nichts" in say_text       # Nein-Wirkung benannt
 
 
 def test_executor_shows_preview_text_before_stufe2_confirmation():
@@ -239,10 +269,11 @@ def test_executor_shows_preview_text_before_stufe2_confirmation():
 
     executor.run([Plan(intent="clean_temp_files", raw_input="bereinige temp")])
 
-    speech.say.assert_called_once_with(
-        "Ich würde jetzt ausführen: clean_temp_files. Ich würde 10 Dateien mit "
-        "2.0 GB löschen. Bestätigen?"
-    )
+    say_text = speech.say.call_args.args[0]
+    assert "Temp-Dateien aufräumen" in say_text     # deutscher Aktions-Name
+    assert "clean_temp_files" not in say_text
+    assert "Ich würde 10 Dateien mit 2.0 GB löschen." in say_text
+    assert "Sag «ja»" in say_text and "dann passiert nichts" in say_text
     command.preview.assert_called_once()
 
 
@@ -284,7 +315,10 @@ def test_executor_falls_back_to_old_text_when_preview_returns_none():
 
     executor.run([Plan(intent="x", raw_input="tu etwas")])
 
-    speech.say.assert_called_once_with("Ich würde jetzt ausführen: x. Bestätigen?")
+    speech.say.assert_called_once_with(
+        "Bevor ich loslege, Sir — ich möchte: x. Sag «ja», dann mache ich "
+        "genau das — «nein» (oder etwas anderes), dann passiert nichts."
+    )
 
 
 def test_executor_calls_preview_before_execute_and_execute_runs_independently():

@@ -198,6 +198,72 @@ def _parse_results(html: str, max_results: int) -> list[SearchResult]:
     return _dedupe_results(parser.results)[:max_results]
 
 
+# Seiteninhalt (web v2): die Top-Treffer werden GELESEN, damit Jarvis eine
+# substanzielle Antwort geben kann statt nur Snippets zu paraphrasieren. Deckel
+# gegen Riesen-Seiten (Bytes) und gegen einen zu langen Prompt (Zeichen).
+_PAGE_MAX_BYTES = 1_500_000
+_PAGE_MAX_CHARS = 3500
+_SKIP_TAGS = {"script", "style", "noscript", "nav", "header", "footer", "aside", "form", "svg"}
+
+
+class _TextExtractor(HTMLParser):
+    """Zieht den sichtbaren Fliesstext einer Seite heraus (ohne script/style/
+    Navigation) - kein DOM, keine Aktionen, nur Text."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self._parts: list[str] = []
+        self._skip_depth = 0
+
+    def handle_starttag(self, tag: str, attrs: list) -> None:
+        if tag in _SKIP_TAGS:
+            self._skip_depth += 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in _SKIP_TAGS and self._skip_depth > 0:
+            self._skip_depth -= 1
+
+    def handle_data(self, data: str) -> None:
+        if self._skip_depth == 0:
+            text = data.strip()
+            if text:
+                self._parts.append(text)
+
+    def text(self) -> str:
+        return _clean_text(" ".join(self._parts))
+
+
+def fetch_page_text(url: str, timeout_seconds: float = 8.0, max_chars: int = _PAGE_MAX_CHARS) -> str:
+    """Holt eine Seite und extrahiert lesbaren Text (read-only, keine Aktionen).
+    Fail-safe: leerer String bei Fehler/Block/Nicht-HTML - der Aufrufer faellt
+    dann auf den Snippet zurueck. Der Inhalt ist DATEN, nie eine Anweisung
+    (ADR-061 I2 - die Werkzeug-Wahl sieht ihn nie, nur die Antwort-Generierung)."""
+    if not url:
+        return ""
+    try:
+        req = Request(url, headers={"User-Agent": _USER_AGENT})
+        with urlopen(req, timeout=timeout_seconds) as resp:
+            getter = getattr(resp.headers, "get_content_type", None)
+            ctype = getter() if callable(getter) else ""
+            if ctype and "html" not in ctype and "text" not in ctype:
+                return ""  # PDF/Binaer ueberspringen
+            charset = "utf-8"
+            get_charset = getattr(resp.headers, "get_content_charset", None)
+            if callable(get_charset):
+                charset = get_charset() or "utf-8"
+            html = resp.read(_PAGE_MAX_BYTES).decode(charset, errors="replace")
+    except (OSError, UnicodeError) as e:
+        logger.info("Seitenabruf fehlgeschlagen (%s): %s", url, e)
+        return ""
+    parser = _TextExtractor()
+    try:
+        parser.feed(html)
+        parser.close()
+    except Exception:  # noqa: BLE001 - kaputtes HTML darf nie werfen
+        return ""
+    return parser.text()[:max_chars]
+
+
 def search_web(query: str, max_results: int = 5, timeout_seconds: float = 15.0) -> list[SearchResult]:
     """Fetch top search hits for a query via DuckDuckGo HTML search."""
     clean_query = query.strip()

@@ -637,3 +637,39 @@ def test_voice_empty_transcript_does_not_execute():
     asyncio.run(telegram_channel._on_voice(update, context))
 
     channel.runtime.submit.assert_not_called()
+
+
+def test_runtime_whitelist_telegram_ausbau_b_alltags_intents():
+    """Telegram-Ausbau (b), 13.07.: die Alltags-Kur ist mobil erreichbar -
+    Kalender (add/move/cancel laufen ueber das ConfirmationGate), Meeting-Prep,
+    Personen, update_entry, self_review. Der Standalone-Bot bleibt bewusst eng."""
+    neu = {"calendar_agenda", "calendar_add_event", "calendar_move_event",
+           "calendar_cancel_event", "prepare_meeting", "who_is",
+           "remember_person", "update_entry", "self_review"}
+    assert neu <= telegram_channel.RUNTIME_ALLOWED_INTENTS
+    assert not (neu & telegram_main.ALLOWED_INTENTS)
+    for intent in sorted(neu):
+        steps, rejection = telegram_channel._runtime_filter_plan([Plan(intent=intent)])
+        assert rejection is None, intent
+        assert len(steps) == 1, intent
+
+
+def test_runtime_whitelist_build_arm_mobile_c2():
+    """c2 (PO-Go 13.07. „mach mit A weiter"): der Bau-Arm ist mobil erreichbar -
+    Bestaetigung (ConfirmationGate) + Not-Stopp (stop_agent, c1) + Ergebnis-Push
+    (ADR-035) sind da. Der Standalone-Bot bleibt bewusst ohne (kein Async-Worker)."""
+    for intent in ("build_project", "delegate_work", "project_continue"):
+        assert intent in telegram_channel.RUNTIME_ALLOWED_INTENTS, intent
+        assert intent not in telegram_main.ALLOWED_INTENTS, intent
+        steps, rejection = telegram_channel._runtime_filter_plan([Plan(intent=intent)])
+        assert rejection is None, intent
+        assert len(steps) == 1, intent
+
+
+def test_runtime_whitelist_allows_stop_agent():
+    """c1: der Agenten-Kill-Switch ist mobil erreichbar - die harte Kontrolle
+    gehoert gerade aufs Handy."""
+    assert "stop_agent" in telegram_channel.RUNTIME_ALLOWED_INTENTS
+    steps, rejection = telegram_channel._runtime_filter_plan([Plan(intent="stop_agent")])
+    assert rejection is None
+    assert len(steps) == 1

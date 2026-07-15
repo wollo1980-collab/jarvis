@@ -86,7 +86,9 @@ def test_scaffold_requires_real_framework(tmp_path):
 
 def test_command_is_stufe_2_and_failed_when_unconfigured():
     cmd = project_commands.StartProjectCommand()
-    assert cmd.requires_confirmation is True
+    # PO 14.07. (Bestaetigungs-Diaet, ADR-068): Geruest anlegen ist umkehrbar
+    # (Ordner loeschen) und fragt nicht mehr - der BAU fragt mit Vorschau.
+    assert cmd.requires_confirmation is False
     project_commands.configure("", "")
     result = cmd.execute(Plan(intent="start_project", target="jkc"))
     assert result.status == Status.FAILED
@@ -121,4 +123,4 @@ def test_start_project_is_registered():
     from commands import REGISTRY
 
     assert "start_project" in REGISTRY
-    assert REGISTRY["start_project"].requires_confirmation is True
+    assert REGISTRY["start_project"].requires_confirmation is False  # PO 14.07.

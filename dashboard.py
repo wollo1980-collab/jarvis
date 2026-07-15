@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import logging
 import sys
+import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -193,26 +194,6 @@ _PAGE = """<!DOCTYPE html>
         color:rgba(150,185,210,0.35); font-size:13px; cursor:pointer; padding:4px;
         font-family:inherit; transition:color .15s; }
   .card-x:hover { color:#e08a7a; }
-  /* Loesch-Rueckfrage (PO-Reibung 2026-07-11: Erinnerung loeschen ist
-     irreversibel - eine Frage statt ein stiller Klick). Inline auf der
-     Karte, im HUD-Look statt als Windows-Dialog. */
-  .card-confirm { position:absolute; inset:0; border-radius:inherit;
-        background:linear-gradient(180deg, rgba(10,16,26,0.93), rgba(8,13,22,0.97));
-        backdrop-filter:blur(2px); display:flex; flex-direction:column;
-        align-items:center; justify-content:center; gap:14px; text-align:center;
-        padding:14px; z-index:3; }
-  .card-confirm .cc-q { font-family:'Rajdhani','Bahnschrift','Segoe UI',sans-serif;
-        font-size:15px; font-weight:500; letter-spacing:0.4px; color:#e6f2fb; }
-  .card-confirm .cc-btns { display:flex; gap:10px; }
-  .card-confirm button { font-family:'Rajdhani','Bahnschrift','Segoe UI',sans-serif;
-        font-size:12px; letter-spacing:0.8px; text-transform:uppercase; cursor:pointer;
-        padding:7px 14px; border-radius:7px; border:1px solid transparent;
-        background:none; transition:color .15s, border-color .15s, background .15s; }
-  .card-confirm .cc-yes { color:#e79a8c; border-color:rgba(224,138,122,0.4); }
-  .card-confirm .cc-yes:hover { color:#f4b3a5; border-color:rgba(224,138,122,0.75);
-        background:rgba(224,138,122,0.1); }
-  .card-confirm .cc-no { color:rgba(185,215,235,0.7); border-color:rgba(150,185,210,0.28); }
-  .card-confirm .cc-no:hover { color:#e6f2fb; border-color:rgba(150,185,210,0.5); }
   .card .d { font-size:13px; font-weight:400; margin-top:3px; color:rgba(185,215,235,0.7); }
   .card .s { font-family:'Rajdhani','Bahnschrift','Segoe UI',sans-serif; font-size:10px;
           color:rgba(150,185,210,0.55); margin-top:9px; font-weight:300; letter-spacing:0.8px; }
@@ -282,6 +263,28 @@ _PAGE = """<!DOCTYPE html>
         font-weight:400; letter-spacing:0.5px; transition:background .15s, box-shadow .15s; }
   .qc:hover:enabled { background:rgba(56,198,244,0.14); box-shadow:0 0 12px rgba(56,198,244,0.2); }
   .qc:disabled { opacity:.3; cursor:default; }
+  /* Media-Controls der Musik-Kachel (ADR-058). */
+  .sp-btn { flex:1; padding:9px 0; font-size:17px; line-height:1; color:var(--acc);
+        background:rgba(56,198,244,0.08); border:1px solid var(--line); border-radius:8px;
+        cursor:pointer; font-family:inherit; transition:background .15s, box-shadow .15s; }
+  .sp-btn:hover { background:rgba(56,198,244,0.18); box-shadow:0 0 12px rgba(56,198,244,0.2); }
+  .sp-btn:active { transform:translateY(1px); }
+  /* Equalizer-Visualizer der Musik-Kachel (PO-Wunsch 2026-07-11). Balken
+     ruhen flach (pausiert) und tanzen nur mit der Klasse 'playing' - die
+     Animation ist reine Deko am ECHTEN is_playing-Zustand (kein Fake-Signal).
+     prefers-reduced-motion respektiert. */
+  .sp-eq { display:flex; align-items:flex-end; gap:3px; height:18px; flex:none; }
+  .sp-eq i { width:3px; height:3px; border-radius:2px; background:var(--acc); opacity:.45; }
+  .sp-eq.playing i { opacity:1; animation:sp-eq 0.9s ease-in-out infinite; }
+  .sp-eq.playing i:nth-child(1){ animation-delay:-.20s }
+  .sp-eq.playing i:nth-child(2){ animation-delay:-.55s }
+  .sp-eq.playing i:nth-child(3){ animation-delay:-.05s }
+  .sp-eq.playing i:nth-child(4){ animation-delay:-.75s }
+  .sp-eq.playing i:nth-child(5){ animation-delay:-.35s }
+  .sp-eq.playing i:nth-child(6){ animation-delay:-.60s }
+  .sp-eq.playing i:nth-child(7){ animation-delay:-.15s }
+  @keyframes sp-eq { 0%,100% { height:3px } 50% { height:18px } }
+  @media (prefers-reduced-motion: reduce) { .sp-eq.playing i { animation:none; height:10px } }
   .llm-row { display:flex; justify-content:space-between; gap:10px; font-size:12.5px;
         font-weight:400; line-height:2.0; }
   .llm-row .k { font-family:'Rajdhani','Bahnschrift','Segoe UI',sans-serif;
@@ -486,7 +489,7 @@ _PAGE = """<!DOCTYPE html>
     <button class="vn" data-view="memory">GEDÄCHTNIS</button>
   </nav>
   <div id="view-memory" class="panel" style="display:none; margin-bottom:14px;">
-    <div class="panel-head">GEDÄCHTNIS <span>JEDER PUNKT ECHT · ✕ = SOFORT WEG</span></div>
+    <div class="panel-head">GEDÄCHTNIS <span>JEDER PUNKT ECHT · ✕ RÄUMT AUF — ALLES LANDET IM PAPIERKORB</span></div>
     <div id="mem-body"></div>
   </div>
   <div class="chatbox panel" id="chat">
@@ -525,12 +528,27 @@ _PAGE = """<!DOCTYPE html>
     <button id="agent-stop" style="display:none;">■ Stopp</button>
   </div>
   <div id="llm" class="panel" style="display:none; margin-bottom:12px;">
-    <div class="panel-head">BESETZUNG <span style="letter-spacing:1px;">AUS CONFIG</span></div>
-    <div id="llm-items"></div>
+    <div class="panel-head" id="llm-head" style="cursor:pointer;" title="Details ein-/ausklappen">BESETZUNG <span id="llm-caret" style="letter-spacing:1px;">▸ DETAILS</span></div>
+    <div id="llm-items" style="display:none;"></div>
   </div>
   <div id="flow" class="panel" style="display:none;">
     <div class="panel-head">LIVE-ABLAUF</div>
     <div id="flow-items" style="font-size:12.5px; font-weight:400; color:rgba(200,225,238,0.8); line-height:1.75; font-variant-numeric:tabular-nums;"></div>
+  </div>
+  <!-- Musik-Kachel (ADR-058): read-only "laeuft gerade" + klickbare Media-
+       Controls (echte Aktionen ueber den Runtime-Kanal). Nur sichtbar, wenn
+       Spotify eingerichtet ist UND die Runtime lebt. -->
+  <div id="spotify" class="panel" style="display:none; margin-bottom:12px;">
+    <div class="panel-head">MUSIK <span id="sp-src">SPOTIFY</span></div>
+    <div id="sp-nowrow" style="display:flex; align-items:center; gap:10px;">
+      <div id="sp-eq" class="sp-eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <div id="sp-now" style="font-size:12.5px; font-weight:400; color:rgba(200,225,238,0.85); line-height:1.5;">—</div>
+    </div>
+    <div id="sp-controls" style="display:flex; gap:8px; margin-top:10px;">
+      <button class="sp-btn" data-sp="previous" title="vorheriger Titel">⏮</button>
+      <button class="sp-btn" id="sp-toggle" data-sp="play" title="Play / Pause">▶</button>
+      <button class="sp-btn" data-sp="next" title="nächster Titel">⏭</button>
+    </div>
   </div>
 </aside>
 </div>
@@ -697,20 +715,38 @@ events.onmessage = e => {
   if (ev.type === 'agent') addAgentStep(ev);
 };
 
-// Durchsicht (ADR-056 Scheibe 1): jeder Agenten-Schritt als eingerueckte
-// Zeile im Live-Ablauf - du siehst den Agenten arbeiten statt einer Kiste.
-// flowLine nutzt textContent -> kein HTML, sicher ohne Escaping.
+// Durchsicht (ADR-056 Scheibe 1) + Bau-Bullauge (Spektakulär #4): jeder
+// Agenten-Schritt als eingerueckte Zeile im Live-Ablauf - auf Deutsch
+// (ev.summary aus core/agent_narration), Wiederholungen zaehlen in place
+// hoch ('liest sich ein (7×)') statt die Spalte zu fluten, das Roh-Detail
+// (echter Befehl / englisches Denk-Fragment) bleibt transparent im
+// Hover-title. flowLine nutzt textContent -> kein HTML, sicher.
+let agentLastLine = null;    // { el, text, count } der letzten Agenten-Zeile
 function addAgentStep(ev) {
   let icon = '·', text = '';
   if (ev.kind === 'start') { icon = '⟐'; text = 'Agent gestartet'; }
   else if (ev.kind === 'done') { icon = ev.label === 'fertig' ? '✓' : '✗'; text = 'Agent ' + (ev.label || ''); }
+  else if (ev.summary) { icon = ev.kind === 'text' ? '·' : '→'; text = ev.summary; }
   else if (ev.kind === 'tool') { icon = '→'; text = (ev.label || 'Werkzeug') + (ev.detail ? ' ' + ev.detail : ''); }
   else if (ev.kind === 'text') { icon = '·'; text = 'überlegt: ' + (ev.detail || ''); }
   else if (ev.kind === 'redirect') { icon = '↳'; text = 'du: ' + (ev.detail || ''); }
   else { text = ev.label || ev.detail || ''; }
   const cls = ev.kind === 'done' ? (ev.label === 'fertig' ? '' : 'flow-fail')
             : (ev.kind === 'redirect' ? 'flow-redirect' : 'flow-work');
-  flowLine('    ' + icon + ' ' + text, cls);
+  const raw = ((ev.label || '') + (ev.detail ? ': ' + ev.detail : '')).trim();
+  // Dedupe: dieselbe Erzaehl-Zeile direkt hintereinander -> Zaehler in place.
+  const dedupable = ev.kind === 'tool' || ev.kind === 'text';
+  if (dedupable && agentLastLine && agentLastLine.text === text
+      && agentLastLine.el.isConnected) {
+    agentLastLine.count += 1;
+    flowUpdate(agentLastLine.el, '    ' + icon + ' ' + text + ' (' + agentLastLine.count + '×)', cls);
+    if (raw) agentLastLine.el.title = (agentLastLine.el.title ? agentLastLine.el.title + '\\n' : '') + raw;
+    return;
+  }
+  const el = flowLine('    ' + icon + ' ' + text, cls);
+  // Transparenz: Rohes im Hover - nur wenn es MEHR sagt als die Zeile selbst.
+  if (raw && ev.kind !== 'redirect' && !text.includes(raw)) el.title = raw;
+  agentLastLine = dedupable ? { el, text, count: 1 } : null;
 }
 
 // Live-Ablauf (UI-Zielbild 2026-07-10): jede Zeile ist eine ECHTE
@@ -759,6 +795,43 @@ const INTENT_LABELS = {
   delegate_analysis: 'Repo-Analyse',
   delegate_work: 'Schreib-Auftrag',
   project_continue: 'Weiterarbeit',
+  build_project: 'Projekt bauen',
+  stop_agent: 'Agenten stoppen',
+  verify_repo: 'Repo prüfen',
+  self_review: 'Selbstprüfung',
+  weekly_review: 'Wochenrückblick',
+  list_skills: 'Gebautes aufzählen',
+  show_help: 'Fähigkeiten vorstellen',
+  whats_new: 'Neuigkeiten erzählen',
+  get_briefing: 'Briefing zusammenstellen',
+  prepare_meeting: 'Meeting vorbereiten',
+  propose_ideas: 'Ideen sprudeln',
+  dismiss_proposal: 'Vorschlag verwerfen',
+  calendar_agenda: 'Kalender nachsehen',
+  calendar_add_event: 'Termin eintragen',
+  calendar_move_event: 'Termin verschieben',
+  calendar_cancel_event: 'Termin absagen',
+  add_to_list: 'Zur Liste hinzufügen',
+  remove_from_list: 'Von der Liste streichen',
+  show_list: 'Liste zeigen',
+  clear_list: 'Liste leeren',
+  restore_list: 'Liste wiederherstellen',
+  restore_fact: 'Fakt wiederherstellen',
+  restore_entry: 'Eintrag wiederherstellen',
+  update_entry: 'Eintrag ändern',
+  remember_person: 'Person merken',
+  who_is: 'Person nachschlagen',
+  set_owner_name: 'Anrede festlegen',
+  spotify_play: 'Musik abspielen',
+  spotify_pause: 'Musik pausieren',
+  spotify_next: 'Musik: nächster Titel',
+  spotify_previous: 'Musik: voriger Titel',
+  spotify_now_playing: 'Musik: was läuft?',
+  spotify_volume: 'Lautstärke ändern',
+  portfolio_review: 'Portfolio-Durchsicht',
+  task_status: 'Auftrags-Status',
+  task_resume: 'Auftrag fortsetzen',
+  task_cancel: 'Auftrag abbrechen',
 };
 function intentLabel(intent) { return INTENT_LABELS[intent] || intent; }
 // Die plan-Events liefern vorformatierte "intent (ziel)"-Strings - fuer die
@@ -871,7 +944,9 @@ function addFlow(ev) {
       activeDelegations = Math.max(0, activeDelegations - 1);
       renderOrb();
       if (agentLive) {
-        agentSessionLast = 'zuletzt: ' + flowName(ev) + ' · ' + (ev.ok ? '✓' : '✗')
+        // Bau-Bullauge: kein nacktes ✗ mehr - das Symbol bekommt sein Wort.
+        agentSessionLast = 'zuletzt: ' + flowName(ev) + ' · '
+          + (ev.ok ? '✓ fertig' : '✗ abgebrochen')
           + ' · ' + fmtDur(Date.now() - agentLive.startedMs) + ' (live beobachtet)';
         agentLive = null;
       }
@@ -904,6 +979,10 @@ async function sendText(text) {
 function send() {
   const text = $('msg').value.trim();
   $('msg').value = '';
+  // Eingabefeld ist jetzt in JEDER Ansicht da (Kundenreview 13.07.: 'ein
+  // stets erreichbares Eingabefeld') - Senden aus dem GEDÄCHTNIS springt
+  // zurueck ins Gespraech, wo die Antwort erscheint.
+  if (view !== 'today') setView('today');
   sendText(text);
 }
 $('send').onclick = send;
@@ -912,6 +991,35 @@ $('msg').addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
 // Planner entscheidet, der Button ist nur eine Abkuerzung fuers Tippen.
 document.querySelectorAll('.qc').forEach(b => {
   b.onclick = () => sendText(b.dataset.cmd);
+});
+// Musik-Kachel (ADR-058): read-only Poll von "laeuft gerade" + stille Media-
+// Controls. Die Knoepfe schicken eine ECHTE Aktion an den Runtime-Kanal
+// (/spotify/control) - kein Chat-Echo, keine TTS-Ansage. Panel nur sichtbar,
+// wenn Spotify eingerichtet ist und die Runtime lebt.
+async function refreshSpotify() {
+  if (!liveOnline) { $('spotify').style.display = 'none'; return; }
+  try {
+    const s = await (await fetch(API + '/spotify/now')).json();
+    if (!s.configured) { $('spotify').style.display = 'none'; return; }
+    $('spotify').style.display = '';
+    const toggle = $('sp-toggle');
+    toggle.textContent = s.playing ? '⏸' : '▶';
+    toggle.dataset.sp = s.playing ? 'pause' : 'play';
+    $('sp-eq').classList.toggle('playing', !!s.playing);   // Equalizer tanzt nur beim echten Abspielen
+    if (s.title) $('sp-now').textContent = s.title + (s.artist ? ' — ' + s.artist : '');
+    else $('sp-now').textContent = s.playing ? 'läuft …' : 'nichts aktiv';
+  } catch (e) { $('spotify').style.display = 'none'; }
+}
+document.querySelectorAll('.sp-btn').forEach(b => {
+  b.onclick = async () => {
+    try {
+      await fetch(API + '/spotify/control', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ action: b.dataset.sp })
+      });
+    } catch (e) { /* still - Panel-Poll zeigt den echten Zustand */ }
+    setTimeout(refreshSpotify, 500);  // Zustand nach der Aktion nachziehen
+  };
 });
 // Vollbild-Umschalter (PO-Wunsch 2026-07-10): Fullscreen-API mit Geste.
 $('fs').onclick = () => {
@@ -974,9 +1082,10 @@ function card(icon, title, detail, source, accent, delText, impulseKey, proposal
 // Listener). Drei Faelle:
 //  - Impuls-✕ (data-impulse, ADR-054): EIN Klick, still weg (harmlos,
 //    Nein-Liste faengt Wiederkehr). Keine Rueckfrage.
-//  - Erinnerungs-✕ (data-del): oeffnet eine Rueckfrage auf der Karte
-//    (PO-Reibung 2026-07-11: Loeschen ist irreversibel, kein Papierkorb).
-//  - Ja/Abbrechen in der Rueckfrage: loeschen bzw. zuruecknehmen.
+//  - Erinnerungs-✕ (data-del): EIN Klick, still weg - der Papierkorb
+//    (entries_trash.json, Bestaetigungs-Diaet 14.07.) faengt Versehen,
+//    «stell den Eintrag wieder her» holt zurueck. Keine Rueckfrage mehr.
+//  - Vorschlags-✕ (data-proposal): EIN Klick, verworfen.
 async function dismissImpulse(el, key) {
   el.style.opacity = '0.3'; el.style.pointerEvents = 'none';
   try {
@@ -991,19 +1100,7 @@ async function dismissImpulse(el, key) {
                   el.style.opacity = ''; el.style.pointerEvents = ''; }
   poll();
 }
-function askDeleteEntry(el, text) {
-  // Rueckfrage auf die Karte legen; poll() pausiert, bis entschieden ist.
-  pendingConfirm = true;
-  const q = document.createElement('div');
-  q.className = 'card-confirm';
-  q.innerHTML = `<div class="cc-q">Erinnerung löschen?</div>
-    <div class="cc-btns"><button class="cc-yes">Ja, löschen</button>
-    <button class="cc-no">Abbrechen</button></div>`;
-  q.dataset.text = text;
-  el.appendChild(q);
-}
 async function doDeleteEntry(el, text) {
-  pendingConfirm = false;
   el.style.opacity = '0.3'; el.style.pointerEvents = 'none';
   try {
     const r = await fetch(API + '/entry/delete', {
@@ -1019,22 +1116,12 @@ async function doDeleteEntry(el, text) {
 }
 $('cards').addEventListener('click', async e => {
   if (!liveOnline) return;
-  // Antwort auf eine offene Rueckfrage?
-  const yes = e.target.closest('.cc-yes');
-  const no = e.target.closest('.cc-no');
-  if (yes || no) {
-    const conf = e.target.closest('.card-confirm');
-    const el = e.target.closest('.card');
-    if (yes) { doDeleteEntry(el, conf.dataset.text); }
-    else { pendingConfirm = false; conf.remove(); poll(); }
-    return;
-  }
   const btn = e.target.closest('.card-x');
   if (!btn) return;
   const el = btn.closest('.card');
   if (btn.dataset.impulse != null) { dismissImpulse(el, btn.dataset.impulse); return; }
   if (btn.dataset.proposal != null) { dismissProposal(el, btn.dataset.proposal); return; }
-  askDeleteEntry(el, btn.dataset.del);  // Erinnerung: erst fragen, dann loeschen
+  doDeleteEntry(el, btn.dataset.del);  // Erinnerung: still weg, Papierkorb faengt Versehen
 });
 
 // Vorschlag verwerfen (PO-Reibung 2026-07-11): ein Klick setzt den Vorschlag
@@ -1186,21 +1273,25 @@ function renderHistory(items) {
 // --- Ansichten (Nachtplan Scheibe 4): HEUTE | GEDÄCHTNIS -------------------
 let view = 'today';
 let lastStatus = null;
-// Loesch-Rueckfrage offen (PO-Reibung 2026-07-11): solange die Frage
-// "Erinnerung loeschen?" auf einer Karte steht, darf der 10s-Poll die
-// Karten NICHT neu bauen - sonst verschwaende die Frage vor der Antwort.
-let pendingConfirm = false;
+// Leseposition je Ansicht (Kundenreview 13.07.: 'Der Wechsel zwischen
+// Ansichten zerstoert die aktuelle Leseposition') - beim Verlassen merken,
+// beim Zurueckkommen wiederherstellen.
+const viewScroll = { today: 0, memory: 0 };
 function setView(v) {
+  if (v === view) return;
+  viewScroll[view] = window.scrollY;
   view = v;
   document.querySelectorAll('.vn').forEach(b => b.classList.toggle('active', b.dataset.view === v));
   const today = v === 'today';
   // Karten + "Die Lage" wohnen jetzt in der linken Spalte (#leftbar) - im
   // GEDAECHTNIS-Modus die ganze Spalte ausblenden statt der Einzelbloecke.
+  // Das Eingabefeld bleibt in JEDER Ansicht sichtbar (Kundenreview 13.07.:
+  // Jarvis soll jederzeit ansprechbar sein).
   for (const id of ['leftbar', 'chat', 'quick']) $(id).style.display = today ? '' : 'none';
-  document.querySelector('.inputrow').style.display = today ? '' : 'none';
   $('view-memory').style.display = today ? 'none' : 'block';
   if (today) { $('news').style.display = 'none'; poll(); }
   else renderMemoryView();
+  window.scrollTo(0, viewScroll[v] || 0);
 }
 document.querySelectorAll('.vn').forEach(b => { b.onclick = () => setView(b.dataset.view); });
 
@@ -1265,10 +1356,6 @@ $('view-memory').addEventListener('click', async e => {
 
 function renderStatus(s) {
   lastStatus = s;
-  // Waehrend eine Loesch-Rueckfrage offen ist, den letzten Stand merken,
-  // aber NICHTS neu zeichnen - die Frage bleibt stehen, bis der Nutzer
-  // entscheidet (danach holt poll() ohnehin die Wahrheit vom Server).
-  if (pendingConfirm) return;
   renderHistory(s.history);
   if (view === 'memory') renderMemoryView();
   $('greet').textContent = greeting(s);
@@ -1365,7 +1452,7 @@ function renderStatus(s) {
   if (s.delegations && s.delegations.last) {
     const L = s.delegations.last;
     agentStatusLast = 'zuletzt: ' + (L.kind === 'arbeit' ? 'Arbeit in' : 'Analyse von') + " '"
-      + L.repo + "' · " + (L.ok ? '✓' : '✗') + ' · ' + Math.round(L.dauer) + 's · $'
+      + L.repo + "' · " + (L.ok ? '✓ fertig' : '✗ abgebrochen') + ' · ' + Math.round(L.dauer) + 's · $'
       + L.kosten.toFixed(2) + ' Gegenwert';
     renderAgent();
   }
@@ -1391,6 +1478,7 @@ function renderStatus(s) {
     $('llm-items').innerHTML = rows.map(r =>
       `<div class="llm-row"><span class="k">${r.k}</span><span class="v">${r.v}</span></div>`).join('');
     $('llm').style.display = 'block';
+    applyLlmState();   // Kundenmodus (Review Rang 8): eingeklappt, bis man fragt
   }
 
   if (s.news && s.news.items && s.news.items.length) {
@@ -1400,6 +1488,9 @@ function renderStatus(s) {
       .map(t => '<div>◆&nbsp; ' + t.replace(/</g, '&lt;') + '</div>').join('');
   }
 
+  // Kundenmodus (2. Kundenreview Rang 8, PO-Go): Alltag vorn, Technik
+  // (Token/CPU/RAM/$-Gegenwert) hinter dem ⚙ - dieselben ehrlichen Zahlen,
+  // nur nicht ungefragt. Zustand bleibt gemerkt (localStorage).
   const f = [];
   f.push(`<span style="color:${s.runtime.running ? '#5ce6a8' : '#8494a5'}">●</span> ${s.runtime.running ? 'IM DIENST' : 'AUSSER DIENST'}`);
   // Scheibe 7 (Nachtplan): Uptime, Sprach-Antwortzeit, KI-Verbrauch -
@@ -1409,18 +1500,43 @@ function renderStatus(s) {
     f.push(`Uptime ${h ? h + 'h ' : ''}${m}m`);
   }
   if (s.avg_voice_seconds != null) f.push(`Ø Antwort ${String(s.avg_voice_seconds).replace('.', ',')}s (Sprache)`);
-  if (s.usage && s.usage.calls > 0) {
-    const kt = Math.round((s.usage.tokens_in + s.usage.tokens_out) / 1000);
-    f.push(`KI heute: ${s.usage.calls} Aufrufe · ${kt}k Token`);
-  }
-  if (s.system) f.push(`CPU ${s.system.cpu} %`, `RAM ${s.system.ram} %`);
   if (s.memory) f.push(`${s.memory.facts} Fakten`);
   if (s.entries) f.push(`${s.entries.upcoming + s.entries.undated} Einträge offen`);
-  if (s.delegations && s.delegations.runs) f.push(`Delegationen ${s.delegations.ok}/${s.delegations.runs} · Ø $${s.delegations.avg_cost_usd.toFixed(2)}`);
   if (s.activity) f.push(`${s.activity.requests} Anfragen heute`);
-  $('foot').innerHTML = '<span>' + f.join('</span><span>') + '</span>'
+  const tech = [];
+  if (s.usage && s.usage.calls > 0) {
+    const kt = Math.round((s.usage.tokens_in + s.usage.tokens_out) / 1000);
+    tech.push(`KI heute: ${s.usage.calls} Aufrufe · ${kt}k Token`);
+  }
+  if (s.system) tech.push(`CPU ${s.system.cpu} %`, `RAM ${s.system.ram} %`);
+  if (s.delegations && s.delegations.runs) tech.push(`Delegationen ${s.delegations.ok}/${s.delegations.runs} · Ø $${s.delegations.avg_cost_usd.toFixed(2)}`);
+  let foot = '<span>' + f.join('</span><span>') + '</span>';
+  if (tech.length) {
+    foot += `<span id="foot-gear" style="cursor:pointer;" title="Technik-Details ein-/ausblenden">⚙</span>`;
+    if (footTech) foot += '<span>' + tech.join('</span><span>') + '</span>';
+  }
+  $('foot').innerHTML = foot
     + '<span class="right">jede Zahl aus realen Quellen · Stand ' + s.generated_at + '</span>';
+  const gear = document.getElementById('foot-gear');
+  if (gear) gear.onclick = () => {
+    footTech = !footTech;
+    localStorage.setItem('foot_tech', footTech ? '1' : '0');
+    if (lastStatus) renderStatus(lastStatus);
+  };
 }
+
+// Kundenmodus-Zustände (Review Rang 8): beide gemerkt, Default = Alltag.
+let footTech = localStorage.getItem('foot_tech') === '1';
+let llmOpen = localStorage.getItem('llm_open') === '1';
+function applyLlmState() {
+  $('llm-items').style.display = llmOpen ? '' : 'none';
+  $('llm-caret').textContent = llmOpen ? '▾ AUS CONFIG' : '▸ DETAILS';
+}
+$('llm-head').onclick = () => {
+  llmOpen = !llmOpen;
+  localStorage.setItem('llm_open', llmOpen ? '1' : '0');
+  applyLlmState();
+};
 
 async function poll() {
   try {
@@ -1442,6 +1558,7 @@ function tick() {
 }
 tick(); setInterval(tick, 1000);
 poll(); setInterval(poll, 10000);
+refreshSpotify(); setInterval(refreshSpotify, 8000);
 setOrb('aus');
 </script>
 </body>
@@ -1518,6 +1635,23 @@ def make_handler(config: Config):
     return DashboardHandler
 
 
+def _bind_server(config: Config, port: int, attempts: int = 6, pause: float = 0.5):
+    """Bindet den Dashboard-Server, riecht aber kurz an einem belegten Port:
+    beim Neustart kann ein eben beendeter Vorgaenger den Port noch im
+    Abbau (TIME_WAIT/Handoff) halten. Bis zu `attempts` Versuche im Abstand
+    `pause` ueberbruecken das Fenster; bleibt der Port belegt (echter
+    Doppelstart), wird None zurueckgegeben - der Aufrufer meldet das sichtbar
+    statt still abzustuerzen (Live-Bug 2026-07-11)."""
+    for remaining in range(attempts, 0, -1):
+        try:
+            return ThreadingHTTPServer((_BIND_HOST, port), make_handler(config))
+        except OSError:
+            if remaining <= 1:
+                return None
+            time.sleep(pause)
+    return None
+
+
 def main() -> None:
     config = Config.load()
     port = getattr(config, "dashboard_port", 8765)
@@ -1528,7 +1662,16 @@ def main() -> None:
             port = int(sys.argv[sys.argv.index("--port") + 1])
         except (ValueError, IndexError):
             print("--port braucht eine Zahl; nutze Config-Port.")
-    server = ThreadingHTTPServer((_BIND_HOST, port), make_handler(config))
+    server = _bind_server(config, port)
+    if server is None:
+        # Belegter Port heisst fast immer: ein alter dashboard.py-Zombie haelt
+        # ihn noch (Live-Bug 2026-07-11). Frueher starb der neue Prozess hier
+        # mit stillem Traceback ins Leere - der alte Code lief unbemerkt weiter.
+        # Jetzt ein sichtbares Signal statt eines Phantoms.
+        msg = f"Jarvis UI: Port {port} belegt - laeuft schon eine Instanz? Starte nicht doppelt."
+        logger.error(msg)
+        print(msg)
+        return
     url = f"http://{_BIND_HOST}:{port}/"
     print(f"Jarvis UI: {url}  (Beenden: Strg+C)")
     if "--no-browser" not in sys.argv:

@@ -18,6 +18,7 @@ robuste Parsing/Fallback bleibt in AIEngine.
 """
 from __future__ import annotations
 
+import json
 import logging
 import re
 from enum import Enum
@@ -31,7 +32,13 @@ logger = logging.getLogger("jarvis.providers")
 
 class LLMProvider(Protocol):
     """Rohschnittstelle: Nachrichten rein, Text raus. Prompt-Bau,
-    JSON-Parsing, confirmed-Strip und Fallbacks liegen in AIEngine."""
+    JSON-Parsing, confirmed-Strip und Fallbacks liegen in AIEngine.
+
+    Function-Calling (`choose_tool`, ADR-060 Scheibe 3a) ist eine OPTIONALE
+    Faehigkeit: der OpenAIProvider implementiert sie, der ClaudeProvider (noch)
+    nicht. AIEngine prueft deshalb per hasattr und faellt ohne diese Faehigkeit
+    fail-safe auf 'kein Werkzeug' (Gespraech) zurueck - so kann Claude spaeter
+    ohne weitere Aenderung andocken (nur die Methode ergaenzen)."""
 
     def chat(
         self,
@@ -124,6 +131,72 @@ class OpenAIProvider:
                 getattr(usage, "completion_tokens", "?"),
             )
         return response.choices[0].message.content.strip()
+
+    def choose_tool(
+        self,
+        system: str,
+        messages: list[Message],
+        tools: list[dict],
+        *,
+        model: Optional[str] = None,
+        max_tokens: Optional[int] = None,
+    ) -> "list[tuple[str, dict]]":
+        """Function-Calling (ADR-060): der Kern waehlt KEINS, EINS oder MEHRERE
+        Werkzeuge (Multi-Step, Phase 2). Rueckgabe: Liste [(werkzeugname,
+        argumente), ...] in der Reihenfolge des Modells; LEERE Liste = kein Tool
+        (Gespraech/chat). `argumente` ist das geparste arguments-Objekt je
+        tool_call ({target, parameters}, siehe core/tool_schemas) - NIE
+        ausgefuehrt, nur die WAHL. Executor + alle Sicherheits-Gates bleiben
+        unberuehrt (dieses Modul beschreibt keine Ausfuehrung).
+
+        tool_choice='auto': das Modell darf bewusst KEIN Werkzeug rufen
+        (Gespraech) oder fuer 'X und Y' zwei. Kaputte/fehlende arguments ->
+        leeres Objekt (fail-safe; reasoning.decide normalisiert weiter)."""
+        payload = [{"role": "system", "content": system}]
+        payload += [m.to_openai_format() for m in messages]
+        effective_model = model or self.model
+        budget = max_tokens or self.max_tokens
+        kwargs = {
+            "model": effective_model,
+            "messages": payload,
+            "tools": tools,
+            "tool_choice": "auto",
+        }
+        if uses_completion_token_style(effective_model):
+            kwargs["max_completion_tokens"] = budget
+        else:
+            kwargs["temperature"] = self.temperature
+            kwargs["max_tokens"] = budget
+        response = self.client.chat.completions.create(**kwargs)
+        # Verbrauchs-Logging (wie chat): NUR Zahlen, nie Inhalte.
+        usage = getattr(response, "usage", None)
+        if usage is not None:
+            logger.info(
+                "Verbrauch: provider=openai modell=%s tokens_in=%s tokens_out=%s",
+                effective_model,
+                getattr(usage, "prompt_tokens", "?"),
+                getattr(usage, "completion_tokens", "?"),
+            )
+        # Verbrauch zusaetzlich als Attribut (Eval-Artefakt, Truth Repair II):
+        # NUR Zahlen, je Aufruf ueberschrieben. Messinstrumente lesen es nach
+        # dem Call (via AIEngine.last_tool_usage); die Produktion ignoriert es.
+        self.last_usage = {
+            "model": effective_model,
+            "tokens_in": getattr(usage, "prompt_tokens", None) if usage else None,
+            "tokens_out": getattr(usage, "completion_tokens", None) if usage else None,
+        }
+        message = response.choices[0].message
+        tool_calls = getattr(message, "tool_calls", None) or []
+        result: list[tuple[str, dict]] = []
+        for call in tool_calls:
+            try:
+                args = json.loads(call.function.arguments or "{}")
+            except (ValueError, TypeError):
+                args = {}
+            if not isinstance(args, dict):
+                args = {}
+            result.append((call.function.name, args))
+        return result  # leere Liste = kein Werkzeug (Gespraech)
 
 
 class ClaudeProvider:

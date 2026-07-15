@@ -239,9 +239,11 @@ class PlanNextStepCommand:
         "Jarvis-Projekt (liest read-only PROJECT_STATE, Handbook, ADRs, CHANGELOG "
         "und logbook, empfiehlt EINEN Schritt mit Begründung, Risiken und "
         "ADR-Konfliktprüfung, legt einen Entwurf ab). Sicherheitsstufe 0. "
-        "Trigger z. B. 'plane den nächsten Schritt', 'bereite die nächste Scheibe "
-        "vor', 'was sollten wir als Nächstes umsetzen'. Setzt nichts um - Jarvis "
-        "schlägt nur vor."
+        "NUR bei AUSDRÜCKLICHER Planung/Vorschlags-Bitte: 'plane den nächsten "
+        "Schritt', 'bereite die nächste Scheibe vor', 'mach mir einen konkreten "
+        "Vorschlag', 'was sollten wir als Nächstes umsetzen'. NICHT für lockeres "
+        "Brainstormen/Überlegen/Diskutieren - das ist ein Gespräch (chat). Setzt "
+        "nichts um - Jarvis schlägt nur vor."
     )
     requires_confirmation = False  # Sicherheitsstufe 0 (nur lesen + Vorschlag ablegen)
     # Langlaufend: die Runtime führt den Schritt asynchron im Hintergrund aus und

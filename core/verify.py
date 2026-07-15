@@ -47,6 +47,8 @@ def _run_command(argv: list, cwd: Path, timeout: float) -> dict:
         proc = subprocess.run(
             argv, cwd=str(cwd), capture_output=True, text=True,
             encoding="utf-8", errors="replace", timeout=timeout, shell=False,
+            # Kein Konsolen-Aufblitzen unter pythonw (PO-Befund 13.07.).
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
         output = (proc.stdout or "") + (("\n" + proc.stderr) if proc.stderr else "")
         tail = output[-_OUTPUT_TAIL_CHARS:].strip()

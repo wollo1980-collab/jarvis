@@ -1,0 +1,7 @@
+# Entwicklungs-Stack (Truth Repair II: runtime/dev getrennt) - alles, was
+# Suite, Pre-Commit-Hook und Konsistenz-Gate brauchen, der BETRIEB aber nicht.
+# Einrichtung Entwicklungsumgebung:
+#   pip install -r requirements-dev.txt -c requirements.lock
+-r requirements-runtime.txt
+pytest>=8.0.0               # Vollsuite (Pre-Commit-Hook, CONTRIBUTING §8)
+ruff>=0.15.0                # Produktions-Lint (Konsistenz-Gate Check 6)

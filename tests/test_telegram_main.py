@@ -248,11 +248,14 @@ def test_bridge_handles_search_web(tmp_path: Path, monkeypatch):
             )
         ],
     )
+    # web v2 liest die Treffer-Seite - in Tests durch Platzhalter ersetzt (kein Netz).
+    monkeypatch.setattr(web_commands, "_page_fetcher", lambda url, timeout: "Gelesener Inhalt.")
 
     response = bridge.handle_message(chat_id="12345", user_input="suche im web nach ki")
 
-    assert "Quellen:" in response
-    assert "https://example.com/ki" in response
+    # A3: die Bridge nutzt den Befehl ohne Composer -> Fallback-Quellenzeile
+    assert "Quellen gelesen" in response
+    assert "example.com" in response   # kompakte Domain statt voller Link
 
 
 def test_bridge_rejects_forbidden_intent_without_executing(tmp_path: Path):

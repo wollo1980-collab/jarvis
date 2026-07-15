@@ -41,6 +41,7 @@ _timeout: float = 10.0
 _MAX_ENTRIES = 4
 _MAX_LISTS = 3
 _MAX_HEADLINES = 3
+_MAX_CALENDAR = 4
 
 _OPENERS = (
     "Dein Briefing, Sir:",
@@ -81,7 +82,7 @@ def _entries_section() -> Optional[str]:
     for e in today_or_next[:_MAX_ENTRIES]:
         rep = f" ({_REPEAT_LABELS[e.repeat]})" if e.repeat in _REPEAT_LABELS else ""
         star = "wichtig: " if e.important else ""
-        lines.append(f"{star}{e.text} um {format_when(e.when)}{rep}")
+        lines.append(f"{star}{e.text} {format_when(e.when)}{rep}")
     parts = []
     if lines:
         label = "Heute" if today_or_next and today_or_next[0].when[:10] == today else "Als Naechstes"
@@ -91,6 +92,32 @@ def _entries_section() -> Optional[str]:
     if not parts:
         parts.append("Keine Termine, nichts Dringendes - der Tag gehoert dir.")
     return " ".join(parts)
+
+
+def _calendar_section() -> Optional[str]:
+    """Heutige Termine aus dem ECHTEN (Outlook-)Kalender - bewusst getrennt von
+    Jarvis' eigenen Erinnerungen (_entries_section). Fail-safe: kein Kalender
+    konfiguriert oder Fehler -> Abschnitt entfaellt, das Briefing kommt trotzdem."""
+    try:
+        from commands.calendar import read_agenda
+        events = read_agenda(datetime.now())
+    except Exception:  # noqa: BLE001 - Briefing kommt auch ohne Kalender
+        logger.info("Briefing: Kalender nicht lesbar - Abschnitt entfaellt.")
+        return None
+    if not events:
+        return None
+    parts = []
+    for ev in events[:_MAX_CALENDAR]:
+        if ev.get("all_day"):
+            when = "ganztägig"
+        else:
+            try:
+                when = datetime.fromisoformat(str(ev["start"])[:19]).strftime("%H:%M")
+            except (ValueError, KeyError, TypeError):
+                when = "?"
+        loc = f" ({ev['location']})" if ev.get("location") else ""
+        parts.append(f"{when} {ev.get('subject') or 'Termin'}{loc}")
+    return "Im Kalender heute: " + "; ".join(parts) + "."
 
 
 def _weather_section() -> Optional[str]:
@@ -161,6 +188,7 @@ class GetBriefingCommand:
     def execute(self, plan: Plan) -> Result:
         sections = [
             _entries_section(),
+            _calendar_section(),
             _weather_section(),
             _lists_section(),
             _news_section(),
@@ -171,10 +199,20 @@ class GetBriefingCommand:
                 status=Status.SUCCESS,
                 message="Es gibt schlicht nichts zu berichten, Sir - ein seltener Luxus.",
             )
+        # A3 (ADR-065): die gesammelten Abschnitte als DATEN mitgeben - ist der
+        # Composer im Kern aktiv, webt er daraus EIN fluessiges, gesprochenes
+        # Morgen-Briefing (statt der Abschnitts-Aneinanderreihung). Die `message`
+        # bleibt das bewaehrte Template als Fallback (Composer aus/fehlgeschlagen).
+        compose_context = (
+            "Baue aus diesen Tages-Bausteinen EIN fluessiges, gesprochenes "
+            "Morgen-Briefing (kurz, warm, nicht die Abschnitts-Namen aufzaehlen). "
+            "Erwaehne dabei ALLE Termine und Aufgaben - lass keinen weg:\n"
+            + body
+        )
         return Result(
             status=Status.SUCCESS,
             message=f"{pick(*_OPENERS)}\n{body}",
-            data={"sections": sum(1 for s in sections if s)},
+            data={"sections": sum(1 for s in sections if s), "compose_context": compose_context},
         )
 
 

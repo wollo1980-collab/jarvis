@@ -15,7 +15,8 @@ from __future__ import annotations
 import json
 import logging
 import re
-from datetime import date, datetime
+from collections import Counter
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -90,13 +91,22 @@ def runtime_status(memory_dir: Path) -> dict:
     }
 
 
+# Abgelaufene Eintraege bleiben nach Faelligkeit noch so lange als Karte
+# stehen (PO-Reibung 2026-07-13: der 09:00-Termin stand um 19:36 noch da).
+# Lang genug, um eine gerade verpasste Erinnerung zu sehen; danach raeumt
+# die Karte sich selbst weg. Frueher weg: ✕-Klick; dauerhaft: GEDAECHTNIS.
+_DUE_CARD_GRACE = timedelta(hours=1)
+
+
 def entries_status(memory_dir: Path, now: Optional[datetime] = None) -> dict:
     """Offene Eintraege (A1) - der Tages-Fokus (PO-Reibung 2026-07-11: 'einen
     Termin am 18.07. muss ich nicht schon heute sehen; besser die taeglich
-    relevanten'). Als KARTEN erscheinen nur HEUTE relevante Eintraege:
+    relevanten'). Als KARTEN erscheinen nur JETZT relevante Eintraege:
       - `today`     : heute noch anstehend (Zeitpunkt spaeter heute),
-      - `due_today` : heute schon faellig gewesen ('war faellig', bleibt bis
-                      Tagesende sichtbar - Live-Befund 2026-07-10).
+      - `due_today` : gerade faellig gewesen ('war faellig'); verschwindet
+                      _DUE_CARD_GRACE nach Faelligkeit von selbst
+                      (PO-Reibung 2026-07-13, ersetzt 'bis Tagesende'
+                      vom Live-Befund 2026-07-10).
     Eintraege an kuenftigen Tagen erscheinen NICHT als Karte - sie stehen im
     Briefing und in der GEDAECHTNIS-Ansicht. `upcoming` (alle kuenftigen inkl.
     heute) traegt sie mit in die Fusszeile ('N Eintraege offen')."""
@@ -125,7 +135,7 @@ def entries_status(memory_dir: Path, now: Optional[datetime] = None) -> dict:
                 today_upcoming.append((due, str(e.get("text", ""))))
             else:
                 later.append((due, str(e.get("text", ""))))
-        elif due.date() == now.date():
+        elif now - due <= _DUE_CARD_GRACE:
             due_today.append((due, str(e.get("text", ""))))
     today_upcoming.sort(key=lambda pair: pair[0])
     due_today.sort(key=lambda pair: pair[0], reverse=True)  # juengste zuerst
@@ -227,7 +237,10 @@ def memory_view(memory_dir: Path) -> dict:
             entries.append(
                 {
                     "text": e.text,
-                    "when": format_when(e.when) if e.when else "",
+                    # mark_past (Kundenreview 13.07.): auch die Gedaechtnis-
+                    # Ansicht nennt Vergangenes 'war fällig ...' - dieselbe
+                    # Wahrheit wie Eintragsliste und Tageskarten.
+                    "when": format_when(e.when, mark_past=True) if e.when else "",
                     "important": e.important,
                     "repeat": e.repeat,
                 }
@@ -285,10 +298,90 @@ def delegation_stats(log_dir: Path) -> dict:
     }
 
 
+# Reasoning-Schatten-Zeilen (ADR-060 Scheibe 3c) aus core/planner.py:
+# "Reasoning-Schatten [DIFF]: router=chat kern=open_program (target='excel')"
+# router kann mehrteilig sein ("open_program+chat"), kern ist ein Intent,
+# target ist das repr() des Ziels (None oder 'text'). $ (MULTILINE) verankert
+# am Zeilenende, damit target auch ein ')' enthalten darf.
+_SHADOW_RE = re.compile(
+    r"Reasoning-Schatten \[(?P<verdict>MATCH|DIFF)\]: "
+    r"router=(?P<router>\S+) kern=(?P<kern>\S+) \(target=(?P<target>.*)\)$",
+    re.MULTILINE,
+)
+
+
+def shadow_stats(log_dir: Path) -> dict:
+    """Reasoning-Schatten-Bilanz (ADR-060 Scheibe 3c) aus den Runtime-Logs:
+    wie oft der denkende Kern mit dem Router uebereinstimmte (MATCH) und wo er
+    abwich (DIFF) - die Datengrundlage fuer den Umschalt-Entscheid, sobald
+    `reasoning_shadow` an ist. Read-only wie die uebrigen Kennzahlen. Bei
+    ausgeschaltetem Schatten (keine Zeilen) sind alle Zahlen 0/leer/None -
+    ehrlich statt geschaetzt. `top_diffs` nennt die haeufigsten Router->Kern-
+    Uneinigkeiten (Kandidaten zum genauen Hinschauen); `last` ist die juengste
+    Beobachtung (Log-Reihenfolge ueber nach Datum sortierte Dateien)."""
+    total = 0
+    matches = 0
+    diff_pairs: Counter = Counter()
+    last: Optional[dict] = None
+    for log_file in sorted(log_dir.glob("*-runtime.log")):
+        try:
+            content = log_file.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for m in _SHADOW_RE.finditer(content):
+            total += 1
+            if m.group("verdict") == "MATCH":
+                matches += 1
+            else:
+                diff_pairs[(m.group("router"), m.group("kern"))] += 1
+            last = {
+                "verdict": m.group("verdict"),
+                "router": m.group("router"),
+                "kern": m.group("kern"),
+                "target": m.group("target"),
+            }
+    return {
+        "total": total,
+        "match": matches,
+        "diff": total - matches,
+        "match_rate": round(matches / total, 3) if total else 0.0,
+        "top_diffs": [
+            {"router": router, "kern": kern, "count": count}
+            for (router, kern), count in diff_pairs.most_common(5)
+        ],
+        "last": last,
+    }
+
+
+def format_shadow_report(stats: dict) -> str:
+    """Menschenlesbarer Kurzbericht aus shadow_stats() - fuer das CLI
+    scripts/shadow_report.py (und spaeter ggf. eine Dashboard-Kachel)."""
+    total = stats.get("total", 0)
+    if not total:
+        return ("Reasoning-Schatten: noch keine Beobachtungen "
+                "(reasoning_shadow aus oder noch kein Log).")
+    lines = [
+        "Reasoning-Schatten (Router vs. denkender Kern):",
+        f"  Beobachtungen: {total}",
+        f"  MATCH: {stats['match']}  ·  DIFF: {stats['diff']}  ·  "
+        f"Uebereinstimmung: {stats['match_rate'] * 100:.1f}%",
+    ]
+    if stats.get("top_diffs"):
+        lines.append("  Haeufigste Abweichungen (router -> kern):")
+        for d in stats["top_diffs"]:
+            lines.append(f"    {d['count']}x  {d['router']} -> {d['kern']}")
+    return "\n".join(lines)
+
+
 # Scheibe 7 (Nachtplan 11.07.): Verbrauchs-/Latenz-/Startmarker-Zeilen.
 _USAGE_RE = re.compile(r"Verbrauch: provider=\S+ modell=\S+ tokens_in=(\d+) tokens_out=(\d+)")
 _LATENCY_RE = re.compile(r"Latenz: Transkription [\d.]+s · Verarbeitung ([\d.]+)s")
-_STARTUP_MARKER = "Erinnerungs-Scheduler gestartet"
+# Start-Marker fuer die Uptime: MUSS zur echten Scheduler-Start-Logzeile passen
+# (jarvis_runtime.start_scheduler: "Scheduler gestartet (Poll alle 30s ...)").
+# Der fruehere "Erinnerungs-Scheduler gestartet" driftete vom Log ab -> Uptime
+# fand heute keinen Marker und rechnete vom Vortag (falsche 31h). Stabiler
+# Teilstring "Scheduler gestartet" (matcht auch die alte Zeile, Test bleibt gruen).
+_STARTUP_MARKER = "Scheduler gestartet"
 
 
 def _read_log(log_dir: Path, day: date) -> str:
@@ -466,9 +559,16 @@ def open_impulses(memory_dir: Path) -> list:
     items = data.get("open", [])
     if not isinstance(items, list):
         return []
+    # Tageslage-Regel AUCH hier (Live-Befund 15.07.: die 14.07.-Regel sass
+    # nur in ImpulseStore.list_open - DIESER getrennte Lese-Prozess zeigte
+    # die Karten vom 13./14. weiter an). Read-only: nur filtern, nie
+    # schreiben; das Aufraeumen der Datei erledigt die Runtime beim Lesen.
+    today = datetime.now().date().isoformat()
     out = []
     for item in items:
         if not isinstance(item, dict) or not item.get("key"):
+            continue
+        if str(item.get("created", ""))[:10] != today:
             continue
         out.append({
             "id": str(item.get("id", "")),

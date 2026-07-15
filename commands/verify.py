@@ -109,7 +109,8 @@ class VerifyRepoCommand:
         if repo is None:
             return Result(
                 status=Status.FAILED,
-                message=f"Repo «{alias}» ist nicht freigegeben. Bekannt: {', '.join(sorted(_allowlist))}.",
+                message=(f"«{alias}» kann ich nicht pruefen, Sir - Zugriff habe ich auf: "
+                         f"{', '.join(sorted(_allowlist)) or 'derzeit nichts'}."),
             )
         report = run_verification(repo)
         return Result(

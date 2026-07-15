@@ -5,8 +5,10 @@ echter API-Key/Netzwerk nötig."""
 from __future__ import annotations
 
 import logging
+import sys
 import threading
 import time
+import types
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -15,7 +17,7 @@ import commands.web as web_commands
 import jarvis_runtime
 from core.agent_backend import AgentResult
 from core.config import Config
-from core.models import Plan
+from core.models import Message, Plan, Result, Status
 from core.web_search import SearchResult
 from jarvis_runtime import ConsoleDummyChannel, JarvisRuntime, _RuntimeSpeech
 
@@ -50,6 +52,218 @@ def _make_config(tmp_path: Path) -> Config:
 
 def _wait(event: threading.Event, timeout: float = 2.0) -> None:
     assert event.wait(timeout=timeout), "Timeout - Worker hat nicht rechtzeitig geantwortet"
+
+
+# --- Episodisches Gedaechtnis (Gedaechtnis-Kampagne Stufe 1) ------------
+
+def test_episodic_records_an_episode_when_enabled(tmp_path):
+    from datetime import date
+
+    from memory.episodic import EpisodicMemory
+
+    config = _make_config(tmp_path)
+    config.episodic_memory_enabled = True
+    runtime = JarvisRuntime(config, ai=FakeAI())
+
+    runtime._process_inner("hallo jarvis", lambda _msg: None)
+
+    eps = EpisodicMemory(config.memory_dir).for_day(date.today())
+    assert len(eps) == 1
+    assert eps[0]["user_input"] == "hallo jarvis"
+    assert eps[0]["intents"] == ["chat"]
+    assert eps[0]["response"].startswith("Antwort auf:")
+
+
+def test_episodic_off_by_default_writes_nothing(tmp_path):
+    config = _make_config(tmp_path)  # episodic_memory_enabled Default False
+    runtime = JarvisRuntime(config, ai=FakeAI())
+
+    runtime._process_inner("hallo", lambda _msg: None)
+
+    assert not (config.memory_dir / "episodes").exists()
+
+
+# --- Naechtliche Reflexion ('dreaming', Gedaechtnis Stufe 2) ------------
+
+def test_daily_reflection_writes_journal_when_enabled(tmp_path):
+    from datetime import date
+
+    from memory.reflection import ReflectionJournal
+
+    config = _make_config(tmp_path)
+    config.episodic_memory_enabled = True
+    config.reflection_enabled = True
+    runtime = JarvisRuntime(config, ai=FakeAI())
+
+    runtime._process_inner("erinnere mich an den zahnarzt", lambda _msg: None)  # eine Episode
+    runtime.run_daily_reflection(date.today())
+
+    journal = ReflectionJournal(config.memory_dir).read(date.today())
+    assert journal.startswith("# Reflexion")
+    # Die Episode floss in den Reflexions-Prompt (FakeAI.answer echot ihn):
+    assert "zahnarzt" in journal
+
+
+def test_daily_reflection_off_writes_nothing(tmp_path):
+    from datetime import date
+
+    config = _make_config(tmp_path)  # reflection_enabled Default False
+    runtime = JarvisRuntime(config, ai=FakeAI())
+
+    runtime.run_daily_reflection(date.today())
+
+    assert not (config.memory_dir / "reflections").exists()
+
+
+def _reflection_offer_runtime(tmp_path):
+    config = _make_config(tmp_path)
+    config.episodic_memory_enabled = True
+    config.reflection_enabled = True
+    config.memory_offers_enabled = True
+    config.reflection_offers_enabled = True
+    return JarvisRuntime(config, ai=FakeAI()), config
+
+
+def test_reflection_suggestion_surfaced_once_and_yes_stores(tmp_path):
+    """Stein 2b: eine schwebende Reflexions-Vermutung wird beim naechsten
+    Gespraech als ja/nein-Merk-Angebot vorgeschlagen; 'ja' speichert sie."""
+    from core.fileio import write_json_atomic
+
+    runtime, config = _reflection_offer_runtime(tmp_path)
+    write_json_atomic(config.memory_dir / "reflection_suggestion.json",
+                      {"suggestion": "hoert abends oft Musik"})
+
+    replies = []
+    runtime._process_inner("wie spaet ist es", replies.append)
+    assert "als Gewohnheit merken" in replies[0]
+    assert "hoert abends oft Musik" in replies[0]
+
+    # nur EINMAL - eine zweite Nachricht bietet es nicht erneut an:
+    replies2 = []
+    runtime._process_inner("ja", replies2.append)
+    assert any("Musik" in f.text for f in runtime.long_term.all_facts())
+
+    replies3 = []
+    runtime._process_inner("noch was", replies3.append)
+    assert "Gewohnheit merken" not in replies3[0]
+
+
+def test_reflection_offers_off_does_not_surface(tmp_path):
+    from core.fileio import write_json_atomic
+
+    config = _make_config(tmp_path)
+    config.episodic_memory_enabled = True
+    config.reflection_enabled = True
+    config.memory_offers_enabled = True
+    # reflection_offers_enabled bleibt Default False
+    runtime = JarvisRuntime(config, ai=FakeAI())
+    write_json_atomic(config.memory_dir / "reflection_suggestion.json",
+                      {"suggestion": "hoert abends oft Musik"})
+
+    replies = []
+    runtime._process_inner("hallo", replies.append)
+    assert "Gewohnheit merken" not in replies[0]
+
+
+# --- Proaktive Vorbereitung (ADR-063) ----------------------------------
+
+
+def _proactive_runtime(tmp_path):
+    config = _make_config(tmp_path)
+    config.proactive_prep_enabled = True
+    return JarvisRuntime(config, ai=FakeAI()), config
+
+
+_PREP = {
+    "subject": "Steuerberater", "event_time": "09:00",
+    "reminder_text": "Steuerberater um 09:00",
+    "reminder_when_iso": "2030-01-02T08:00:00", "reminder_time": "08:00",
+    "nudge": ("Kleiner Blick voraus, Sir: Morgen um 09:00 steht «Steuerberater» an. "
+              "Soll ich dich um 08:00 rechtzeitig daran erinnern? (ja/nein)"),
+    "generated_for": "2030-01-02", "done": False,
+}
+
+
+def test_proactive_offer_surfaced_once_and_yes_creates_reminder(tmp_path):
+    from core.fileio import write_json_atomic
+
+    runtime, config = _proactive_runtime(tmp_path)
+    write_json_atomic(config.memory_dir / "proactive_suggestion.json", dict(_PREP))
+
+    replies = []
+    runtime._process_inner("wie spaet ist es", replies.append)
+    assert "Steuerberater" in replies[0] and "(ja/nein)" in replies[0]
+    assert runtime._entry_store.list_open(keyword="Steuerberater") == []  # noch nichts angelegt
+
+    runtime._process_inner("ja", replies.append)
+    reminders = runtime._entry_store.list_open(keyword="Steuerberater")
+    assert len(reminders) == 1                      # 'ja' legt die Erinnerung an
+    assert reminders[0].when.startswith("2030-01-02T08:00")
+
+    # nur EINMAL - eine weitere Nachricht bietet nicht erneut an:
+    replies3 = []
+    runtime._process_inner("noch was", replies3.append)
+    assert "ja/nein" not in replies3[0]
+
+
+def test_proactive_offer_no_declines_without_reminder(tmp_path):
+    from core.fileio import write_json_atomic
+
+    runtime, config = _proactive_runtime(tmp_path)
+    write_json_atomic(config.memory_dir / "proactive_suggestion.json", dict(_PREP))
+
+    replies = []
+    runtime._process_inner("hallo", replies.append)
+    runtime._process_inner("nein", replies.append)
+
+    assert "erinnere ich nicht" in replies[1]
+    assert runtime._entry_store.list_open(keyword="Steuerberater") == []
+
+
+def test_proactive_off_does_not_surface(tmp_path):
+    from core.fileio import write_json_atomic
+
+    config = _make_config(tmp_path)   # proactive_prep_enabled Default False
+    runtime = JarvisRuntime(config, ai=FakeAI())
+    write_json_atomic(config.memory_dir / "proactive_suggestion.json", dict(_PREP))
+
+    replies = []
+    runtime._process_inner("hallo", replies.append)
+    assert "ja/nein" not in replies[0]
+
+
+def test_proactive_offer_is_channel_bound(tmp_path):
+    from core.fileio import write_json_atomic
+
+    runtime, config = _proactive_runtime(tmp_path)
+    write_json_atomic(config.memory_dir / "proactive_suggestion.json", dict(_PREP))
+
+    replies = []
+    runtime._process_inner("hallo", replies.append, source="browser")
+    assert "(ja/nein)" in replies[0]
+
+    runtime._process_inner("ja", replies.append, source="telegram")   # fremder Kanal
+    assert runtime._entry_store.list_open(keyword="Steuerberater") == []  # NICHT angelegt
+    assert replies[1].startswith("Antwort auf:")                          # normal verarbeitet
+
+
+def test_run_proactive_check_stores_from_calendar(tmp_path, monkeypatch):
+    from datetime import date, datetime
+
+    import commands.calendar as calendar_commands
+
+    runtime, config = _proactive_runtime(tmp_path)
+    monkeypatch.setattr(calendar_commands, "read_agenda", lambda day: [
+        {"subject": "Steuerberater", "start": "2030-01-02T09:00:00",
+         "end": "2030-01-02T10:00:00", "all_day": False},
+    ])
+
+    payload = runtime.run_proactive_check(date(2030, 1, 2), now=datetime(2030, 1, 1, 20, 0))
+
+    assert payload is not None and payload["subject"] == "Steuerberater"
+    pending = runtime._pending_proactive()
+    assert pending["reminder_time"] == "08:00"
+    assert "Steuerberater" in pending["nudge"]
 
 
 # --- Merk-Angebot (ADR-051) --------------------------------------------
@@ -201,7 +415,7 @@ def test_runtime_configures_mail(tmp_path, monkeypatch):
     # nicht ins Leere laeuft (Arbeitspaket B, ADR-031-Nachtrag).
     calls = []
     monkeypatch.setattr(
-        jarvis_runtime.mail_commands, "configure", lambda config: calls.append(config)
+        jarvis_runtime.mail_commands, "configure", lambda config, **kw: calls.append(config)
     )
     JarvisRuntime(_make_config(tmp_path), ai=FakeAI())
     assert len(calls) == 1
@@ -241,6 +455,8 @@ def test_runtime_handles_search_web(tmp_path, monkeypatch):
             )
         ],
     )
+    # web v2 liest die Treffer-Seite - in Tests durch Platzhalter ersetzt (kein Netz).
+    monkeypatch.setattr(web_commands, "_page_fetcher", lambda url, timeout: "Mild und trocken.")
     runtime.start()
     try:
         done = threading.Event()
@@ -253,8 +469,9 @@ def test_runtime_handles_search_web(tmp_path, monkeypatch):
         runtime.submit("suche im web nach wetter berlin", reply_callback)
         _wait(done)
 
-        assert "Quellen:" in replies[0]
-        assert "https://example.com/wetter-berlin" in replies[0]
+        # A3: ohne Composer (Default aus) zeigt search_web die Fallback-Quellenzeile
+        assert "Quellen gelesen" in replies[0]
+        assert "example.com" in replies[0]   # kompakte Domain statt voller Link
     finally:
         runtime.stop()
 
@@ -543,7 +760,7 @@ def test_format_due_message_late_and_star():
 
     late = Entry(text="Zahnarzt", when="2020-01-01T09:00")
     msg = jarvis_runtime._format_due_message(late)
-    assert "verspätet" in msg and "01.01.2020 09:00" in msg
+    assert "verspätet" in msg and "01.01.2020 um 09:00" in msg
 
     # Ganztaegig (reines Datum) gilt nie als verspaetet - Tages-Erinnerung.
     day = Entry(text="Audit", when="2020-01-01", important=True)
@@ -716,6 +933,71 @@ def test_request_restart_skips_dashboard_when_spawn_fails(tmp_path):
         runtime.stop()
 
 
+def test_terminate_running_dashboards_waits_then_kills(monkeypatch):
+    """Zombie-Bug 2026-07-11: der Abloeser muss auf den Tod der alten
+    dashboard.py-Prozesse WARTEN (wait_procs) und Nachzuegler hart killen,
+    BEVOR der neue startet - sonst haelt der Alte den Port und der neue stirbt
+    still am bind(). Nur dashboard.py-Prozesse, nicht die Runtime selbst."""
+    events = []
+
+    class NoSuchProcess(Exception):
+        pass
+
+    class AccessDenied(Exception):
+        pass
+
+    class FakeProc:
+        def __init__(self, cmdline):
+            self.info = {"cmdline": cmdline}
+            self.terminated = False
+            self.killed = False
+
+        def terminate(self):
+            self.terminated = True
+            events.append(("terminate", tuple(self.info["cmdline"])))
+
+        def kill(self):
+            self.killed = True
+            events.append(("kill", tuple(self.info["cmdline"])))
+
+    dash1 = FakeProc(["pythonw.exe", "dashboard.py", "--no-browser"])
+    dash2 = FakeProc(["python", "dashboard.py"])  # spielt den zaehen Nachzuegler
+    other = FakeProc(["python", "jarvis_runtime.py"])
+
+    def wait_procs(procs, timeout=None):
+        events.append(("wait", timeout))
+        alive = [p for p in procs if p is dash2 and not p.killed]
+        gone = [p for p in procs if p not in alive]
+        return gone, alive
+
+    fake_psutil = types.SimpleNamespace(
+        process_iter=lambda attrs=None: [dash1, dash2, other],
+        wait_procs=wait_procs,
+        NoSuchProcess=NoSuchProcess,
+        AccessDenied=AccessDenied,
+    )
+    monkeypatch.setitem(sys.modules, "psutil", fake_psutil)
+
+    jarvis_runtime._terminate_running_dashboards(timeout=0.01)
+
+    assert dash1.terminated is True and dash2.terminated is True
+    assert other.terminated is False  # nur dashboard.py-Prozesse angefasst
+    assert other.killed is False
+    assert dash2.killed is True  # Nachzuegler hart nachgesetzt
+    assert ("wait", 0.01) in events  # es wurde tatsaechlich gewartet
+    # terminate kam VOR dem finalen kill - genau das schliesst die Race
+    assert events.index(("terminate", ("python", "dashboard.py"))) < events.index(
+        ("kill", ("python", "dashboard.py"))
+    )
+
+
+def test_terminate_running_dashboards_survives_without_psutil(monkeypatch):
+    """Fail-safe: fehlt psutil (optional), wirft die Abloesung nicht -
+    der Runtime-Neustart hat Vorrang."""
+    monkeypatch.setitem(sys.modules, "psutil", None)  # import psutil -> ImportError
+    jarvis_runtime._terminate_running_dashboards()  # darf nicht werfen
+
+
 def test_request_restart_stays_alive_when_spawn_fails(tmp_path):
     # Scheitert der Nachfolger-Start, wird NICHT heruntergefahren -
     # lieber im Dienst bleiben als tot (und ehrlich False melden).
@@ -787,10 +1069,11 @@ def test_stufe2_commands_are_fail_closed(tmp_path):
         runtime.submit("mach etwas kritisches", reply_callback)
         _wait(done)
 
-        # shutdown_pc erfordert eine exakte Bestaetigungsphrase (Stufe 3)
-        # - _RuntimeSpeech.listen() liefert "" statt der Phrase, der
-        # Executor lehnt ab statt eine Bestaetigung zu erfinden.
-        assert "Abgebrochen" in replies[0]
+        # shutdown_pc erfordert eine Bestaetigung - ohne Bestaetigungsweg
+        # wird NICHT ausgefuehrt; die Antwort erklaert seit Spektakulaer #2
+        # den Weg (Chat/Handy) statt kryptisch abzubrechen.
+        assert "Bestätigung" in replies[0]
+        assert "Chat oder am Handy" in replies[0]
     finally:
         runtime.stop()
 
@@ -1204,10 +1487,14 @@ def test_stop_cancels_running_delegation(tmp_path):
     runtime.submit("analysiere jarvis: frage", lambda t: None, allow_async=True)
     assert backend.started.wait(timeout=5.0)
 
-    runtime.stop()  # setzt Kill-Switch -> Backend kehrt zurueck -> Thread endet
+    runtime.stop()  # setzt Kill-Switch -> Backend kehrt zurueck -> Adapter-Lauf endet
 
-    assert runtime._delegation_thread is not None
-    assert runtime._delegation_thread.is_alive() is False
+    # H3 (§9-Migration): die Delegation laeuft im TaskService-Worker, nicht
+    # mehr in einem eigenen Thread - nach stop() ist der Lauf beendet und
+    # der Worker mit begrenztem Join eingesammelt.
+    assert runtime._delegation_active is False
+    worker = runtime.task_service._worker
+    assert worker is not None and worker.is_alive() is False
 
 
 def test_delegation_without_allow_async_runs_synchronously(tmp_path):
@@ -1251,8 +1538,12 @@ def test_busy_flag_reset_after_background_exception(tmp_path):
 
         runtime.submit("analysiere jarvis: frage1", cb, allow_async=True)
         assert backend.started.wait(timeout=5.0)
-        # Erster Hintergrund-Thread (wirft) sauber abwarten.
-        runtime._delegation_thread.join(timeout=5.0)
+        # Ersten (werfenden) Adapter-Lauf sauber abwarten (H3: kein eigener
+        # Thread mehr - das Busy-Flag ist die Wahrheit).
+        deadline = time.time() + 5.0
+        while runtime._delegation_active and time.time() < deadline:
+            time.sleep(0.02)
+        assert runtime._delegation_active is False
 
         backend.started.clear()
         runtime.submit("analysiere jarvis: frage2", cb, allow_async=True)
@@ -1508,7 +1799,10 @@ def test_async_dispatch_asks_stufe2_confirmation_before_run(tmp_path, monkeypatc
         runtime.stop()
 
     say_text = runtime._speech.say.call_args.args[0]
-    assert "fake_long (jkc)" in say_text  # Rueckfrage nennt die Aktion
+    # Rueckfrage nennt die Aktion (unbekannter Fake-Intent ehrlich roh) + das
+    # Ziel und sagt, was Ja/Nein bewirken (Live-Reibung 13.07. spät).
+    assert "fake_long «jkc»" in say_text
+    assert "dann passiert nichts" in say_text
     assert any("kümmere" in r for r in replies)  # Quittung kam NACH dem Ja
 
 
@@ -1529,4 +1823,1071 @@ def test_async_dispatch_aborts_without_confirmation(tmp_path, monkeypatch):
         runtime.stop()
 
     assert not cmd.ran.is_set()  # kein Lauf ohne Bestaetigung
-    assert any("Abgebrochen" in r for r in replies)
+    # Kundendeutsch statt Alttext (Chatlog-Review 14.07.): ehrlich + folgenlos.
+    assert any("ich lasse es" in r for r in replies)
+    assert not any("Abgebrochen" in r for r in replies)
+
+
+# --- Antwort-Composer im Schatten (ADR-065 Saeule A, Phase A1) ----------
+
+
+class _ComposeAI(FakeAI):
+    """FakeAI mit generate() - fuer den Composer-Schatten."""
+
+    def __init__(self):
+        self.generate_calls = []
+        self.models = []
+
+    def generate(self, system, user_text, *, json_mode=False, max_tokens=None, model=None):
+        self.generate_calls.append((system, user_text))
+        self.models.append(model)
+        return "KOMPONIERTE ANTWORT"
+
+
+def test_compose_shadow_off_by_default_does_not_call_generate(tmp_path):
+    ai = _ComposeAI()
+    runtime = JarvisRuntime(_make_config(tmp_path), ai=ai)
+
+    runtime._process_inner("hallo", lambda _m: None)
+
+    assert ai.generate_calls == []   # Schatten aus -> kein Composer-Call
+
+
+def test_compose_shadow_on_runs_but_still_shows_template(tmp_path):
+    config = _make_config(tmp_path)
+    config.response_compose_shadow = True
+    ai = _ComposeAI()
+    runtime = JarvisRuntime(config, ai=ai)
+    replies = []
+
+    runtime._process_inner("hallo", replies.append)
+
+    assert ai.generate_calls                          # Composer lief (Schatten)
+    assert "KOMPONIERTE ANTWORT" not in replies[0]    # aber NICHT gezeigt
+    assert replies[0].startswith("Antwort auf:")      # gezeigt bleibt die Schablone
+
+
+def test_compose_shadow_failure_never_breaks_live_path(tmp_path):
+    config = _make_config(tmp_path)
+    config.response_compose_shadow = True
+
+    class _BoomAI(FakeAI):
+        def generate(self, system, user_text, *, json_mode=False, max_tokens=None, model=None):
+            raise RuntimeError("compose down")
+
+    runtime = JarvisRuntime(config, ai=_BoomAI())
+    replies = []
+
+    runtime._process_inner("hallo", replies.append)   # darf NICHT werfen
+
+    assert replies[0].startswith("Antwort auf:")
+
+
+# --- Antwort-Composer ZEIGEN (ADR-065 Saeule A, Phase A2) ---------------
+
+
+class _TwoStepPlanner:
+    """Erzwingt einen Multi-Step-Plan (zwei chat-Schritte) fuer die A2-Tests."""
+
+    def plan(self, text, history):
+        return [Plan(intent="chat", raw_input=text), Plan(intent="chat", raw_input=text)]
+
+
+def test_multistep_shows_composed_reply(tmp_path):
+    config = _make_config(tmp_path)
+    config.response_compose_multistep = True
+    ai = _ComposeAI()
+    runtime = JarvisRuntime(config, ai=ai)
+    runtime.planner = _TwoStepPlanner()
+    replies = []
+
+    runtime._process_inner("mach zwei dinge", replies.append)
+
+    assert ai.generate_calls                       # Composer lief
+    assert replies[0] == "KOMPONIERTE ANTWORT"     # komponierte Antwort GEZEIGT (statt "✓ | ✓")
+    assert ai.models == ["gpt-4o-mini"]            # Composer auf dem guenstigen Modell (ADR-065)
+
+
+def test_singlestep_keeps_template_and_skips_composer(tmp_path):
+    config = _make_config(tmp_path)
+    config.response_compose_multistep = True       # nur Multi-Step betroffen
+    ai = _ComposeAI()
+    runtime = JarvisRuntime(config, ai=ai)
+    replies = []
+
+    runtime._process_inner("hallo", replies.append)   # ein chat-Schritt
+
+    assert replies[0].startswith("Antwort auf:")   # Schablone bleibt
+    assert ai.generate_calls == []                 # Composer gar nicht aufgerufen
+
+
+def test_multistep_failsafe_keeps_template_on_composer_error(tmp_path):
+    config = _make_config(tmp_path)
+    config.response_compose_multistep = True
+
+    class _BoomAI(FakeAI):
+        def generate(self, system, user_text, *, json_mode=False, max_tokens=None, model=None):
+            raise RuntimeError("compose down")
+
+    runtime = JarvisRuntime(config, ai=_BoomAI())
+    runtime.planner = _TwoStepPlanner()
+    replies = []
+
+    runtime._process_inner("mach zwei dinge", replies.append)   # darf NICHT werfen
+
+    assert "Antwort auf:" in replies[0]            # Composer-Fehler -> Schablone
+
+
+def test_should_compose_show_multistep_only_on_success(tmp_path):
+    config = _make_config(tmp_path)
+    config.response_compose_multistep = True
+    rt = JarvisRuntime(config, ai=_ComposeAI())
+    steps = [Plan(intent="add_to_list"), Plan(intent="add_entry")]
+    ok = [Result(status=Status.SUCCESS, message="a"), Result(status=Status.SUCCESS, message="b")]
+
+    assert rt._should_compose_show(steps, ok) is True
+    assert rt._should_compose_show(steps[:1], ok[:1]) is False      # Einzelschritt -> Schablone
+    failed = [Result(status=Status.SUCCESS, message="a"), Result(status=Status.FAILED, message="x")]
+    assert rt._should_compose_show(steps, failed) is False          # Fehler -> klare Schablone
+
+
+def test_should_compose_show_intent_whitelist(tmp_path):
+    config = _make_config(tmp_path)
+    config.response_compose_intents = ["propose_ideas"]
+    rt = JarvisRuntime(config, ai=_ComposeAI())
+    ok = [Result(status=Status.SUCCESS, message="ideen")]
+
+    assert rt._should_compose_show([Plan(intent="propose_ideas")], ok) is True
+    assert rt._should_compose_show([Plan(intent="get_news")], ok) is False
+
+
+# --- Sitzungs-Zusammenfassung (ADR-065 Saeule B1) -----------------------
+
+
+class _SummarizeAI(FakeAI):
+    """FakeAI mit generate() - fuer die Sitzungs-Zusammenfassung."""
+
+    def __init__(self):
+        self.gen = []
+
+    def generate(self, system, user_text, *, json_mode=False, max_tokens=None, model=None):
+        self.gen.append((system, user_text, model))
+        return "ZUSAMMENFASSUNG"
+
+
+def test_session_summary_folds_old_history_when_enabled(tmp_path):
+    config = _make_config(tmp_path)
+    config.session_summary_enabled = True
+    config.max_history_entries = 200          # genug Puffer fuer Ueberlauf (real: 200)
+    ai = _SummarizeAI()
+    runtime = JarvisRuntime(config, ai=ai)
+    for i in range(30):
+        runtime.memory.append_history(
+            Message(role="user" if i % 2 == 0 else "assistant", content=f"m{i}"))
+
+    runtime._process_inner("neue frage", lambda _m: None)
+
+    assert runtime._session_summary.summary() == "ZUSAMMENFASSUNG"
+    assert ai.gen and ai.gen[0][2] == "gpt-4o-mini"   # guenstiges Modell
+
+
+def test_session_summary_off_by_default(tmp_path):
+    ai = _SummarizeAI()
+    runtime = JarvisRuntime(_make_config(tmp_path), ai=ai)
+    for i in range(30):
+        runtime.memory.append_history(Message(role="user", content=f"m{i}"))
+
+    runtime._process_inner("x", lambda _m: None)
+
+    assert runtime._session_summary.summary() == ""
+    assert ai.gen == []
+
+
+# --- Semantischer Abruf (ADR-065 Saeule B2) -----------------------------
+
+from memory.semantic import SemanticIndex   # noqa: E402
+
+_SEM_VOCAB = ["kaffee", "schwarz", "montag", "report", "python", "backup", "mutter"]
+
+
+def _sem_fake_embed(texts):
+    return [[1.0 if w in t.lower() else 0.0 for w in _SEM_VOCAB] for t in texts]
+
+
+def test_semantic_sync_indexes_facts_when_enabled(tmp_path):
+    config = _make_config(tmp_path)
+    config.semantic_recall_enabled = True
+    runtime = JarvisRuntime(config, ai=FakeAI())
+    runtime._semantic = SemanticIndex(tmp_path / "sem.json", _sem_fake_embed)
+    runtime.long_term.remember("Ich trinke meinen Kaffee schwarz")
+
+    n = runtime.run_semantic_sync()
+
+    assert n >= 1
+    hits = runtime._semantic.search("Wie trinke ich meinen Kaffee?", k=1)
+    assert hits and "Kaffee schwarz" in hits[0]["text"]
+
+
+def test_semantic_sync_off_by_default_does_nothing(tmp_path):
+    runtime = JarvisRuntime(_make_config(tmp_path), ai=FakeAI())
+    runtime.long_term.remember("Ich trinke meinen Kaffee schwarz")
+
+    assert runtime.run_semantic_sync() == 0
+
+
+# --- Proaktiver Bau-Vorschlag (ADR-067, Koenigsdisziplin) ---------------
+
+class _BuildAI(FakeAI):
+    """FakeAI mit generate() - liefert einen gueltigen Bau-Vorschlag."""
+
+    def generate(self, system, user_text, *, json_mode=False, max_tokens=None, model=None):
+        return ("Mir ist aufgefallen: du prüfst oft das Wetter. Ich koennte dir "
+                "«wetter-cli» bauen, das dir das Wetter im Terminal zeigt. Sag "
+                "«Bau mir wetter-cli», dann lege ich los.")
+
+
+def test_run_build_suggestion_stores_when_enabled(tmp_path):
+    import json
+
+    config = _make_config(tmp_path)
+    config.build_offers_enabled = True
+    config.episodic_memory_enabled = True
+    runtime = JarvisRuntime(config, ai=_BuildAI())
+
+    text = runtime.run_build_suggestion()
+
+    assert "Bau mir wetter-cli" in text
+    data = json.loads((config.memory_dir / "build_suggestion.json").read_text(encoding="utf-8"))
+    assert data["done"] is False
+    assert "wetter-cli" in data["text"]
+
+
+def test_run_build_suggestion_off_by_default_returns_empty(tmp_path):
+    runtime = JarvisRuntime(_make_config(tmp_path), ai=_BuildAI())  # build_offers_enabled Default False
+
+    assert runtime.run_build_suggestion() == ""
+    assert not (runtime._build_suggestion_path).exists()
+
+
+def test_build_suggestion_surfaced_exactly_once(tmp_path):
+    from core.fileio import write_json_atomic
+
+    config = _make_config(tmp_path)
+    config.build_offers_enabled = True
+    runtime = JarvisRuntime(config, ai=FakeAI())
+    write_json_atomic(runtime._build_suggestion_path,
+                      {"text": "Ich koennte dir «x» bauen. Sag «Bau mir x».",
+                       "done": False, "generated": "2030-01-01"})
+
+    first = []
+    runtime._process_inner("hallo", first.append)
+    assert any("Bau mir x" in m for m in first)
+
+    second = []
+    runtime._process_inner("noch was", second.append)
+    assert not any("Bau mir x" in m for m in second)   # nur EINMAL
+
+
+def test_build_suggestion_not_surfaced_when_disabled(tmp_path):
+    from core.fileio import write_json_atomic
+
+    runtime = JarvisRuntime(_make_config(tmp_path), ai=FakeAI())  # Default AUS
+    write_json_atomic(runtime._build_suggestion_path,
+                      {"text": "Sag «Bau mir x».", "done": False})
+
+    out = []
+    runtime._process_inner("hallo", out.append)
+    assert not any("Bau mir x" in m for m in out)
+
+
+# --- "Antworten + gleich tun" (ADR-068) ---------------------------------
+
+class _RememberAI(FakeAI):
+    """Routet jede Eingabe auf remember_fact und kann komponieren (generate)."""
+
+    def __init__(self):
+        self.last_system = ""
+
+    def get_plan(self, user_input, history):
+        return Plan(intent="remember_fact", target="mag mehr Kontext",
+                    raw_input=user_input, confidence=1.0)
+
+    def generate(self, system, user_text, *, json_mode=False, max_tokens=None, model=None):
+        self.last_system = system
+        return "COMPOSED: Ja, das ist sinnvoll — gemerkt, Sir."
+
+
+def test_answer_and_act_composes_on_question(tmp_path):
+    config = _make_config(tmp_path)
+    config.answer_and_act_enabled = True
+    ai = _RememberAI()
+    runtime = JarvisRuntime(config, ai=ai)
+
+    replies = []
+    runtime._process_inner("ist das nicht sinnvoll?", replies.append)
+
+    assert any("COMPOSED" in m for m in replies)                  # Frage beantwortet + Tat
+    assert "rueckgaengig" in ai.last_system.lower()               # Undo-Weisung kam an
+
+
+def test_answer_and_act_off_keeps_bare_template(tmp_path):
+    config = _make_config(tmp_path)  # answer_and_act_enabled Default AUS
+    ai = _RememberAI()
+    runtime = JarvisRuntime(config, ai=ai)
+
+    replies = []
+    runtime._process_inner("ist das nicht sinnvoll?", replies.append)
+
+    assert not any("COMPOSED" in m for m in replies)
+    assert any("Gemerkt" in m for m in replies)                   # nackte Schablone
+
+
+def test_answer_and_act_without_question_keeps_template(tmp_path):
+    config = _make_config(tmp_path)
+    config.answer_and_act_enabled = True
+    ai = _RememberAI()
+    runtime = JarvisRuntime(config, ai=ai)
+
+    replies = []
+    runtime._process_inner("merk dir das", replies.append)        # kein '?'
+
+    assert not any("COMPOSED" in m for m in replies)
+    assert any("Gemerkt" in m for m in replies)
+
+
+def test_prepare_meeting_bundles_person_and_related_tasks(tmp_path, monkeypatch):
+    """Plan C4: die Meeting-Prep buendelt Termin + bekannte Person + verwandte
+    offene Aufgaben zu einer Karte (deterministisch, read-only)."""
+    import commands.calendar as calendar_commands
+
+    runtime = JarvisRuntime(_make_config(tmp_path), ai=FakeAI())
+    runtime._people.remember("Anna", "deine Steuerberaterin")
+    runtime._entry_store.add(text="Steuerunterlagen sortieren", when="")
+    monkeypatch.setattr(calendar_commands, "read_agenda",
+                        lambda when: [{"subject": "Steuerberater", "start": "2026-07-14T09:00:00"}])
+
+    out = runtime.prepare_meeting("mit Anna")
+
+    assert "Steuerberater" in out
+    assert "Anna" in out                                   # Person gezogen
+    assert "Steuerunterlagen sortieren" in out             # verwandte Aufgabe
+
+
+def test_prepare_meeting_no_events(tmp_path, monkeypatch):
+    import commands.calendar as calendar_commands
+    runtime = JarvisRuntime(_make_config(tmp_path), ai=FakeAI())
+    monkeypatch.setattr(calendar_commands, "read_agenda", lambda when: [])
+    assert "keinen Termin" in runtime.prepare_meeting("")
+
+
+def test_impulse_push_when_enabled_and_notifier(tmp_path):
+    """Plan F: bei eingeschaltetem Push + gesetztem Notifier geht ein neuer
+    Impuls (geschwaerzt) an den Besitzer."""
+    config = _make_config(tmp_path)
+    config.impulse_push_enabled = True
+    runtime = JarvisRuntime(config, ai=FakeAI())
+    sent = []
+    runtime.set_notifier(sent.append)
+
+    runtime._push_impulse({"title": "Unwetter", "detail": "Hagel ab 16 Uhr"})
+
+    assert sent == ["Unwetter\nHagel ab 16 Uhr"]
+
+
+def test_impulse_push_off_by_default(tmp_path):
+    runtime = JarvisRuntime(_make_config(tmp_path), ai=FakeAI())  # Default AUS
+    sent = []
+    runtime.set_notifier(sent.append)
+
+    runtime._push_impulse({"title": "Unwetter", "detail": "Hagel"})
+
+    assert sent == []
+
+
+def test_impulse_push_noop_without_notifier(tmp_path):
+    config = _make_config(tmp_path)
+    config.impulse_push_enabled = True
+    runtime = JarvisRuntime(config, ai=FakeAI())  # kein Notifier gesetzt
+    runtime._push_impulse({"title": "Unwetter", "detail": "Hagel"})  # darf nicht werfen
+
+
+def test_reversible_answer_directive_guards(tmp_path):
+    from core.models import Result, Status
+
+    config = _make_config(tmp_path)
+    config.answer_and_act_enabled = True
+    runtime = JarvisRuntime(config, ai=_RememberAI())
+    ok = [Result(status=Status.SUCCESS, message="Gemerkt")]
+    rem = [Plan(intent="remember_fact", target="x")]
+
+    assert runtime._reversible_answer_directive("ist das sinnvoll?", rem, ok)      # greift
+    assert not runtime._reversible_answer_directive("merk dir das", rem, ok)       # keine Frage
+    # nicht-umkehrbarer Intent -> nie automatisch handeln+antworten
+    assert not runtime._reversible_answer_directive(
+        "loeschen?", [Plan(intent="shutdown_pc", target=None)], ok)
+    # fehlgeschlagene Aktion -> keine Erfolgs-Erzaehlung
+    assert not runtime._reversible_answer_directive(
+        "sinnvoll?", rem, [Result(status=Status.FAILED, message="nix")])
+
+
+def test_semantic_recall_injects_relevant_memory_into_context(tmp_path, monkeypatch):
+    config = _make_config(tmp_path)
+    config.semantic_recall_enabled = True
+    runtime = JarvisRuntime(config, ai=FakeAI())
+    runtime._semantic = SemanticIndex(tmp_path / "sem.json", _sem_fake_embed)
+    runtime._semantic.add_texts([("Ich trinke meinen Kaffee schwarz", "fakt")])
+
+    captured = {}
+    real_run = runtime.executor.run
+
+    def spy(steps, history, long_term_summary, on_step=None):
+        captured["lts"] = long_term_summary
+        return real_run(steps, history, long_term_summary, on_step=on_step)
+
+    monkeypatch.setattr(runtime.executor, "run", spy)
+    runtime._process_inner("Wie trinke ich eigentlich meinen Kaffee?", lambda _m: None)
+
+    assert "Relevante Erinnerungen" in captured["lts"]
+    assert "Kaffee schwarz" in captured["lts"]
+
+
+def test_semantic_recall_skips_trivial_input(tmp_path, monkeypatch):
+    config = _make_config(tmp_path)
+    config.semantic_recall_enabled = True
+    runtime = JarvisRuntime(config, ai=FakeAI())
+    called = {"n": 0}
+    runtime._semantic = SemanticIndex(tmp_path / "sem.json",
+                                      lambda texts: called.__setitem__("n", called["n"] + 1) or _sem_fake_embed(texts))
+    runtime._semantic.add_texts([("Kaffee schwarz", "fakt")])
+    before = called["n"]
+
+    runtime._process_inner("ja", lambda _m: None)   # 2 Woerter -> kein Abruf
+
+    assert called["n"] == before   # kein zusaetzlicher Embed-Aufruf fuer triviale Eingabe
+
+
+# --- Personen-Gedaechtnis (ADR-066 Stein 1) -----------------------------
+
+
+def test_people_context_is_injected_when_name_mentioned(tmp_path, monkeypatch):
+    runtime = JarvisRuntime(_make_config(tmp_path), ai=FakeAI())
+    runtime._people.remember("Anna", "meine Steuerberaterin")
+
+    captured = {}
+    real_run = runtime.executor.run
+
+    def spy(steps, history, long_term_summary, on_step=None):
+        captured["lts"] = long_term_summary
+        return real_run(steps, history, long_term_summary, on_step=on_step)
+
+    monkeypatch.setattr(runtime.executor, "run", spy)
+    runtime._process_inner("Habe ich morgen ein Meeting mit Anna?", lambda _m: None)
+
+    assert "Personen im Kontext" in captured["lts"]
+    assert "Steuerberaterin" in captured["lts"]
+
+
+def test_people_context_absent_when_no_known_name(tmp_path, monkeypatch):
+    runtime = JarvisRuntime(_make_config(tmp_path), ai=FakeAI())
+    runtime._people.remember("Anna", "meine Steuerberaterin")
+
+    captured = {}
+    real_run = runtime.executor.run
+
+    def spy(steps, history, long_term_summary, on_step=None):
+        captured["lts"] = long_term_summary
+        return real_run(steps, history, long_term_summary, on_step=on_step)
+
+    monkeypatch.setattr(runtime.executor, "run", spy)
+    runtime._process_inner("Wie ist das Wetter?", lambda _m: None)
+
+    assert "Personen im Kontext" not in captured["lts"]
+
+
+# --- Uebergreifende proaktive Vorbereitung (ADR-066 Stein 2) -------------
+
+
+def test_run_proactive_check_enriches_with_people_and_tasks(tmp_path, monkeypatch):
+    from datetime import date, datetime
+
+    import commands.calendar as calendar_commands
+
+    runtime, _ = _proactive_runtime(tmp_path)
+    runtime._people.remember("Anna", "meine Steuerberaterin")
+    runtime._entry_store.add("Steuerunterlagen sortieren", when="2030-01-02T08:00")
+    monkeypatch.setattr(calendar_commands, "read_agenda", lambda day: [
+        {"subject": "Termin mit Anna vom Steuerberater",
+         "start": "2030-01-02T09:00:00", "end": "2030-01-02T10:00:00", "all_day": False},
+    ])
+
+    payload = runtime.run_proactive_check(date(2030, 1, 2), now=datetime(2030, 1, 1, 20, 0))
+
+    assert payload is not None
+    assert "Anna" in payload["nudge"]                       # Person verknuepft
+    assert "Steuerunterlagen sortieren" in payload["nudge"]  # verwandte Aufgabe verknuepft
+
+
+# --- Selbst-Verbesserung (ADR-066 Stein 3) ------------------------------
+
+
+def test_run_self_review_writes_journal_when_enabled(tmp_path):
+    from datetime import date
+
+    config = _make_config(tmp_path)
+    config.episodic_memory_enabled = True
+    config.self_review_enabled = True
+    runtime = JarvisRuntime(config, ai=_SummarizeAI())   # generate() -> "ZUSAMMENFASSUNG"
+    runtime._episodic.record(user_input="trag mir was ein", intents=["add_entry"],
+                             response="✗ Dazu habe ich keinen Eintrag gefunden", source="test")
+
+    text = runtime.run_self_review(date.today())
+
+    assert text
+    assert runtime._self_review.latest()
+
+
+def test_run_self_review_off_by_default(tmp_path):
+    config = _make_config(tmp_path)
+    config.episodic_memory_enabled = True     # aber self_review_enabled bleibt False
+    runtime = JarvisRuntime(config, ai=_SummarizeAI())
+    runtime._episodic.record(user_input="x", intents=["chat"], response="✗", source="test")
+
+    assert runtime.run_self_review() == ""
+
+
+# --- Telegram-Ausbau (a): Briefing-Push + Meeting-Prep-Push ---------------
+
+def _fake_dispatch(results: dict):
+    """dispatch-Attrappe: intent -> Result."""
+    from core.models import Result as R, Status as S
+
+    def fake(plan):
+        r = results.get(plan.intent)
+        if r is None:
+            return R(status=S.FAILED, message="nicht konfiguriert")
+        return r
+    return fake
+
+
+def test_briefing_push_composes_briefing_and_mail(tmp_path, monkeypatch):
+    """Scheibe (a): der Morgen-Push buendelt get_briefing + check_mail (read-only)
+    und schickt sie ueber den Notifier."""
+    from core.models import Result as R, Status as S
+
+    config = _make_config(tmp_path)
+    config.briefing_push_enabled = True
+    runtime = JarvisRuntime(config, ai=FakeAI())
+    sent = []
+    runtime.set_notifier(sent.append)
+    monkeypatch.setattr(jarvis_runtime, "dispatch", _fake_dispatch({
+        "get_briefing": R(status=S.SUCCESS, message="Termine: Zahnarzt 9 Uhr."),
+        "check_mail": R(status=S.SUCCESS, message="2 neue Mails, eine dringend."),
+    }))
+
+    out = runtime.run_briefing_push()
+
+    assert sent and "Zahnarzt" in sent[0] and "dringend" in sent[0]
+    assert out.startswith("Guten Morgen")
+
+
+def test_briefing_push_skips_failed_mail_part(tmp_path, monkeypatch):
+    """Kein Mail-Konto (NEEDS_CLARIFICATION) -> der Mail-Teil bleibt still weg."""
+    from core.models import Result as R, Status as S
+
+    config = _make_config(tmp_path)
+    config.briefing_push_enabled = True
+    runtime = JarvisRuntime(config, ai=FakeAI())
+    sent = []
+    runtime.set_notifier(sent.append)
+    monkeypatch.setattr(jarvis_runtime, "dispatch", _fake_dispatch({
+        "get_briefing": R(status=S.SUCCESS, message="Termine: keine."),
+        "check_mail": R(status=S.NEEDS_CLARIFICATION, message="Kein Mail-Konto eingerichtet."),
+    }))
+
+    runtime.run_briefing_push()
+
+    assert sent and "Mail-Konto" not in sent[0]
+
+
+def test_briefing_push_off_by_default(tmp_path, monkeypatch):
+    runtime = JarvisRuntime(_make_config(tmp_path), ai=FakeAI())
+    sent = []
+    runtime.set_notifier(sent.append)
+
+    assert runtime.run_briefing_push() == ""
+    assert sent == []
+
+
+def test_maybe_briefing_push_time_gate_and_once_per_day(tmp_path, monkeypatch):
+    """Vor der Uhrzeit kein Push; danach GENAU EINER pro Tag - auch ueber einen
+    Neustart hinweg (Zustand persistiert)."""
+    from datetime import datetime as dt
+
+    from core.models import Result as R, Status as S
+
+    config = _make_config(tmp_path)
+    config.briefing_push_enabled = True
+    config.briefing_push_time = "07:30"
+    runtime = JarvisRuntime(config, ai=FakeAI())
+    sent = []
+    runtime.set_notifier(sent.append)
+    monkeypatch.setattr(jarvis_runtime, "dispatch", _fake_dispatch({
+        "get_briefing": R(status=S.SUCCESS, message="Guten Tag."),
+    }))
+
+    runtime._maybe_run_briefing_push(now=dt(2026, 7, 13, 6, 0))
+    assert sent == []                                     # zu frueh
+
+    runtime._maybe_run_briefing_push(now=dt(2026, 7, 13, 8, 0))
+    assert len(sent) == 1                                 # gepusht
+
+    runtime._maybe_run_briefing_push(now=dt(2026, 7, 13, 9, 0))
+    assert len(sent) == 1                                 # nicht doppelt
+
+    # "Neustart" am selben Tag: neue Runtime, gleicher memory_dir -> kein Doppel.
+    runtime2 = JarvisRuntime(config, ai=FakeAI())
+    sent2 = []
+    runtime2.set_notifier(sent2.append)
+    monkeypatch.setattr(jarvis_runtime, "dispatch", _fake_dispatch({
+        "get_briefing": R(status=S.SUCCESS, message="Guten Tag."),
+    }))
+    runtime2._maybe_run_briefing_push(now=dt(2026, 7, 13, 10, 0))
+    assert sent2 == []
+
+
+def test_meeting_prep_push_within_lead_window_once(tmp_path, monkeypatch):
+    """Ein Termin in 20 Minuten -> genau EIN Prep-Push (Dedupe persistiert);
+    ein zweiter Lauf pusht nicht erneut."""
+    from datetime import datetime as dt
+
+    import commands.calendar as calendar_commands
+
+    config = _make_config(tmp_path)
+    config.meeting_prep_push_enabled = True
+    runtime = JarvisRuntime(config, ai=FakeAI())
+    runtime._people.remember("Anna", "deine Steuerberaterin")
+    sent = []
+    runtime.set_notifier(sent.append)
+    now = dt(2026, 7, 13, 8, 40)
+    monkeypatch.setattr(calendar_commands, "read_agenda", lambda when: [
+        {"subject": "Steuerberater Anna", "start": "2026-07-13T09:00:00"},
+    ])
+
+    assert runtime.run_meeting_prep_push(now=now) == 1
+    assert sent and "Vorbereitung" in sent[0] and "Anna" in sent[0]
+
+    assert runtime.run_meeting_prep_push(now=now) == 0     # Dedupe
+    assert len(sent) == 1
+
+
+def test_meeting_prep_push_ignores_far_past_and_allday(tmp_path, monkeypatch):
+    from datetime import datetime as dt
+
+    import commands.calendar as calendar_commands
+
+    config = _make_config(tmp_path)
+    config.meeting_prep_push_enabled = True
+    runtime = JarvisRuntime(config, ai=FakeAI())
+    sent = []
+    runtime.set_notifier(sent.append)
+    now = dt(2026, 7, 13, 8, 0)
+    monkeypatch.setattr(calendar_commands, "read_agenda", lambda when: [
+        {"subject": "Spaeter", "start": "2026-07-13T12:00:00"},              # zu weit weg
+        {"subject": "Vorbei", "start": "2026-07-13T07:00:00"},               # vorbei
+        {"subject": "Ganztags", "start": "2026-07-13T00:00:00", "all_day": True},
+    ])
+
+    assert runtime.run_meeting_prep_push(now=now) == 0
+    assert sent == []
+
+
+def test_meeting_prep_push_off_by_default(tmp_path, monkeypatch):
+    import commands.calendar as calendar_commands
+
+    runtime = JarvisRuntime(_make_config(tmp_path), ai=FakeAI())
+    sent = []
+    runtime.set_notifier(sent.append)
+    monkeypatch.setattr(calendar_commands, "read_agenda", lambda when: [
+        {"subject": "Gleich", "start": "2026-07-13T09:00:00"},
+    ])
+
+    assert runtime.run_meeting_prep_push() == 0
+    assert sent == []
+
+
+def test_runtime_wires_stop_agent_to_cancel_delegation(tmp_path):
+    """c1: die Runtime injiziert cancel_delegation als stop_agent-Hook - ohne
+    laufende Delegation antwortet der Befehl ehrlich 'kein Agent'."""
+    from commands import dispatch as real_dispatch
+
+    JarvisRuntime(_make_config(tmp_path), ai=FakeAI())  # configure() laeuft im Konstruktor
+    result = real_dispatch(Plan(intent="stop_agent", raw_input="stopp den agenten"))
+
+    assert result.ok
+    assert "kein Agent" in result.message
+
+
+# --- Erlaubnis-Haken (S4b Scheibe 2, ADR-071) -----------------------------
+
+def _hook_runtime(tmp_path):
+    config = _make_config(tmp_path)
+    config.agent_permission_hook_enabled = True
+    runtime = JarvisRuntime(config, ai=FakeAI())
+    sent = []
+    runtime.set_notifier(sent.append)
+    return runtime, sent
+
+
+def test_hook_settings_written_when_enabled(tmp_path):
+    import json
+
+    runtime, _ = _hook_runtime(tmp_path)
+    path = tmp_path / "memory_data" / "hook_settings.json"
+    assert path.exists()
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data["hooks"]["PreToolUse"][0]["matcher"] == "Bash"
+    assert "agent_permission_hook.py" in data["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+
+
+def test_hook_settings_absent_by_default(tmp_path):
+    JarvisRuntime(_make_config(tmp_path), ai=FakeAI())
+    assert not (tmp_path / "memory_data" / "hook_settings.json").exists()
+
+
+def test_permission_yes_writes_allow_to_mailbox(tmp_path):
+    """Die armierte Erlaubnis-Frage: 'ja' aus dem Frage-Kanal schreibt allow=True
+    in die Mailbox und quittiert - die Nachricht geht NICHT durch den Planner."""
+    import json
+
+    runtime, _ = _hook_runtime(tmp_path)
+    runtime._permission_offer = ("telegram", "abc123", time.monotonic() + 60)
+
+    replies = []
+    runtime._process_inner("ja", replies.append, source="telegram")
+
+    answer = json.loads((runtime._hook_mailbox.dir / "a_abc123.json").read_text(encoding="utf-8"))
+    assert answer["allow"] is True
+    assert replies and "Erlaubt" in replies[0]
+    assert runtime._permission_offer is None
+
+
+def test_permission_no_writes_deny(tmp_path):
+    import json
+
+    runtime, _ = _hook_runtime(tmp_path)
+    runtime._permission_offer = ("telegram", "abc124", time.monotonic() + 60)
+
+    replies = []
+    runtime._process_inner("nein", replies.append, source="telegram")
+
+    answer = json.loads((runtime._hook_mailbox.dir / "a_abc124.json").read_text(encoding="utf-8"))
+    assert answer["allow"] is False
+    assert replies and "Abgelehnt" in replies[0]
+
+
+def test_permission_expired_yes_is_deny(tmp_path):
+    """Ein 'ja' NACH Ablauf des Fensters wird sicherheitshalber zum Nein."""
+    import json
+
+    runtime, _ = _hook_runtime(tmp_path)
+    runtime._permission_offer = ("telegram", "abc125", time.monotonic() - 1)
+
+    replies = []
+    runtime._process_inner("ja", replies.append, source="telegram")
+
+    answer = json.loads((runtime._hook_mailbox.dir / "a_abc125.json").read_text(encoding="utf-8"))
+    assert answer["allow"] is False
+    assert replies and "abgelaufen" in replies[0]
+
+
+def test_permission_yes_from_other_channel_answers(tmp_path):
+    """PO-Live-Befund 13.07. (er antwortete zuerst am Desktop): ein ja/nein
+    zaehlt aus JEDEM Kanal des Besitzers - wer die Frage sieht, darf antworten."""
+    import json
+
+    runtime, _ = _hook_runtime(tmp_path)
+    runtime._permission_offer = ("telegram", "abc126", time.monotonic() + 60)
+
+    replies = []
+    runtime._process_inner("nein", replies.append, source="browser")
+
+    answer = json.loads((runtime._hook_mailbox.dir / "a_abc126.json").read_text(encoding="utf-8"))
+    assert answer["allow"] is False
+    assert runtime._permission_offer is None
+    assert replies and "stopp den Agenten" in replies[0]      # Stopp-Hinweis dabei
+
+
+def test_permission_other_text_from_foreign_channel_keeps_armed(tmp_path):
+    """Anderes Thema aus einem FREMDEN Kanal laesst die Frage armiert (nur der
+    Frage-Kanal laesst sie durch anderes Thema verfallen)."""
+    runtime, _ = _hook_runtime(tmp_path)
+    runtime._permission_offer = ("telegram", "abc128", time.monotonic() + 60)
+
+    replies = []
+    runtime._process_inner("wie ist das wetter?", replies.append, source="browser")
+
+    assert runtime._permission_offer is not None              # bleibt offen
+    assert replies                                            # normale Antwort kam
+
+
+def test_permission_other_text_lapses_question(tmp_path):
+    """Anderes Thema aus dem Frage-Kanal: Frage verfaellt (Hook-Timeout = NEIN),
+    die Nachricht wird normal beantwortet."""
+    runtime, _ = _hook_runtime(tmp_path)
+    runtime._permission_offer = ("telegram", "abc127", time.monotonic() + 60)
+
+    replies = []
+    runtime._process_inner("wie ist das wetter?", replies.append, source="telegram")
+
+    assert runtime._permission_offer is None
+    assert not (runtime._hook_mailbox.dir / "a_abc127.json").exists()
+    assert replies
+
+
+def test_hook_watcher_pushes_question_and_arms_offer(tmp_path):
+    """Der Watcher sieht eine offene Hook-Anfrage, pusht die Frage (geschwaerzt)
+    und armiert GENAU EIN Angebot."""
+    runtime, sent = _hook_runtime(tmp_path)
+    runtime._hook_mailbox.dir.mkdir(parents=True, exist_ok=True)
+    (runtime._hook_mailbox.dir / "q_req1.json").write_text(
+        '{"id": "req1", "tool": "Bash", "command": "git push origin main"}',
+        encoding="utf-8")
+    with runtime._state_lock:
+        runtime._delegation_active = True
+    cancel = threading.Event()
+    try:
+        t = threading.Thread(target=runtime._watch_hook_requests, args=(cancel,), daemon=True)
+        t.start()
+        for _ in range(40):
+            if sent:
+                break
+            time.sleep(0.1)
+    finally:
+        with runtime._state_lock:
+            runtime._delegation_active = False
+        t.join(timeout=5)
+
+    assert sent and "git push origin main" in sent[0] and "Erlauben?" in sent[0]
+    assert runtime._permission_offer is not None
+    assert runtime._permission_offer[0] == "telegram"
+    assert runtime._permission_offer[1] == "req1"
+
+
+def test_permission_question_is_verstaendlich(tmp_path):
+    """PO-Live-Befund 13.07. ('Kauderwelsch'): die Frage traegt Klartext-Satz
+    (LLM, injiziert), Risiko-Einordnung und den rohen Befehl als 'Technisch:'."""
+    config = _make_config(tmp_path)
+    config.agent_permission_hook_enabled = True
+    runtime = JarvisRuntime(config, ai=_SummarizeAI())   # generate() -> "ZUSAMMENFASSUNG"
+
+    q = runtime._permission_question('ls -la && git log --oneline -5')
+
+    assert "Was er tun will: ZUSAMMENFASSUNG" in q       # Klartext-Satz (LLM)
+    assert "Einordnung:" in q and "Nur-Lese" in q        # deterministische Einordnung
+    assert "Technisch: «ls -la && git log --oneline -5»" in q
+    assert "Erlauben?" in q
+
+
+def test_permission_question_without_llm_still_informative(tmp_path):
+    """Ohne generate() (FakeAI) bleibt die deterministische Einordnung."""
+    config = _make_config(tmp_path)
+    config.agent_permission_hook_enabled = True
+    runtime = JarvisRuntime(config, ai=FakeAI())
+
+    q = runtime._permission_question("git push origin main")
+
+    assert "Einordnung:" in q and "⚠️" in q              # riskant erkannt
+    assert "Was er tun will" not in q                    # kein LLM-Satz erfunden
+
+
+# --- Aktions-Zustand im Antwort-Kontext (UX-S4) ---------------------------
+
+def test_action_state_mentions_fresh_start(tmp_path):
+    """Frisch gestartet: der Kontext sagt es KLAR - eine zugesagte Aktion (z. B.
+    Neustart) IST passiert; nie mehr ein erfundenes 'kein Neustart'."""
+    runtime = JarvisRuntime(_make_config(tmp_path), ai=FakeAI())
+    block = runtime._action_state_block()
+    assert "neu) gestartet" in block
+    assert "NIE" in block                                  # die Ehrlichkeits-Regel
+
+
+def test_action_state_records_executed_intents(tmp_path):
+    runtime = JarvisRuntime(_make_config(tmp_path), ai=FakeAI())
+    runtime._started_monotonic -= 600                      # kein 'frisch gestartet'
+
+    class _WebAI(FakeAI):
+        def get_plan(self, user_input, history):
+            return Plan(intent="search_web", target="Wetter", raw_input=user_input, confidence=1.0)
+
+    runtime.ai = _WebAI()
+    runtime.planner = jarvis_runtime.Planner(runtime.ai) if hasattr(jarvis_runtime, "Planner") else runtime.planner
+    runtime._process_inner("such was im web", lambda _m: None)
+
+    block = runtime._action_state_block()
+    assert "search_web" in block
+
+
+def test_action_state_flags_running_delegation(tmp_path):
+    runtime = JarvisRuntime(_make_config(tmp_path), ai=FakeAI())
+    with runtime._state_lock:
+        runtime._delegation_active = True
+    try:
+        block = runtime._action_state_block()
+    finally:
+        with runtime._state_lock:
+            runtime._delegation_active = False
+    assert "LAEUFT" in block and "stopp den Agenten" in block
+
+
+def test_action_state_flows_into_answer_context(tmp_path):
+    """Der Zustand reitet auf long_term_summary -> erreicht Chat UND Composer."""
+    captured = {}
+
+    class _CaptureAI(FakeAI):
+        def answer(self, user_input, history, long_term_summary=""):
+            captured["summary"] = long_term_summary
+            return "ok"
+
+    runtime = JarvisRuntime(_make_config(tmp_path), ai=_CaptureAI())
+    runtime._process_inner("hallo", lambda _m: None)
+
+    assert "AKTIONS-ZUSTAND" in captured.get("summary", "")
+
+
+# --- "Neu bei mir"-Hinweis (Spektakulaer #1) -------------------------------
+
+def _whats_new_runtime(tmp_path, changelog_text):
+    import commands.help as help_commands
+
+    changelog = tmp_path / "CHANGELOG.md"
+    changelog.write_text(changelog_text, encoding="utf-8")
+    help_commands.configure(changelog)
+    config = _make_config(tmp_path)
+    config.whats_new_hint_enabled = True
+    runtime = JarvisRuntime(config, ai=FakeAI())
+    help_commands.configure(changelog)     # Runtime-__init__ ueberschreibt den Pfad
+    return runtime
+
+
+def test_whats_new_hint_surfaces_once(tmp_path):
+    runtime = _whats_new_runtime(
+        tmp_path, "# Changelog\n\n## 2026-07-13 - Jarvis lernt Fliegen\n\n- x\n")
+
+    first = []
+    runtime._process_inner("hallo", first.append)
+    assert any("Neues gelernt: Jarvis lernt Fliegen" in m for m in first)
+
+    second = []
+    runtime._process_inner("noch was", second.append)
+    assert not any("Neues gelernt" in m for m in second)      # nur EINMAL
+
+
+def test_whats_new_hint_off_by_default(tmp_path):
+    import commands.help as help_commands
+
+    changelog = tmp_path / "CHANGELOG.md"
+    changelog.write_text("# Changelog\n\n## 2026-07-13 - Titel\n\n- x\n", encoding="utf-8")
+    runtime = JarvisRuntime(_make_config(tmp_path), ai=FakeAI())
+    help_commands.configure(changelog)
+
+    out = []
+    runtime._process_inner("hallo", out.append)
+    assert not any("Neues gelernt" in m for m in out)
+
+
+# --- Neue-Version-Hinweis (Spektakulaer #5-light) --------------------------
+
+def test_version_hint_armed_on_head_change_and_surfaces_once(tmp_path, monkeypatch):
+    config = _make_config(tmp_path)
+    config.version_hint_enabled = True
+    monkeypatch.setattr(jarvis_runtime, "_git_head", lambda repo: "AAAA")
+    runtime = JarvisRuntime(config, ai=FakeAI())
+
+    # Platte hat jetzt einen neueren Stand:
+    monkeypatch.setattr(jarvis_runtime, "_git_head", lambda repo: "BBBB")
+    runtime._maybe_check_new_version()
+    assert runtime._version_hint_pending is True
+
+    first = []
+    runtime._process_inner("hallo", first.append)
+    assert any("starte neu" in m for m in first)
+
+    second = []
+    runtime._process_inner("weiter", second.append)
+    assert not any("starte neu" in m for m in second)      # nur EINMAL
+
+    # Derselbe Stand armiert nicht erneut (Drossel umgangen):
+    runtime._last_version_check_monotonic = 0.0
+    runtime._maybe_check_new_version()
+    assert runtime._version_hint_pending is False
+
+
+def test_version_hint_off_by_default(tmp_path, monkeypatch):
+    monkeypatch.setattr(jarvis_runtime, "_git_head", lambda repo: "AAAA")
+    runtime = JarvisRuntime(_make_config(tmp_path), ai=FakeAI())
+    monkeypatch.setattr(jarvis_runtime, "_git_head", lambda repo: "BBBB")
+    runtime._maybe_check_new_version()
+    assert runtime._version_hint_pending is False
+
+
+# --- Gesprochene Erinnerungen + Stimme-ohne-Bestaetigungsweg ---------------
+
+def test_due_reminder_is_spoken_when_enabled(tmp_path):
+    """PO-Reibung 13.07. («Mit Sprache»): eine faellige Erinnerung wird
+    zusaetzlich ueber den injizierten Sprech-Weg gesprochen."""
+    config = _make_config(tmp_path)
+    config.reminder_speech_enabled = True
+    runtime = JarvisRuntime(config, ai=FakeAI())
+    pushed, spoken = [], []
+    runtime.set_notifier(pushed.append)
+    runtime.set_voice_notifier(spoken.append)
+    e = runtime._entry_store.add(text="Pizza aus dem Ofen holen", when="2099-01-01T00:00")
+    with runtime._entry_store._lock:
+        data = runtime._entry_store._read()
+        for d in data:
+            if d["id"] == e.id:
+                d["when"] = "2020-01-01T00:00"
+        runtime._entry_store._write(data)
+
+    runtime._push_due_entries()
+
+    assert pushed and "Pizza" in pushed[0]
+    assert spoken and "Pizza aus dem Ofen holen" in spoken[0]
+
+
+def test_due_reminder_not_spoken_by_default(tmp_path):
+    runtime = JarvisRuntime(_make_config(tmp_path), ai=FakeAI())
+    pushed, spoken = [], []
+    runtime.set_notifier(pushed.append)
+    runtime.set_voice_notifier(spoken.append)
+    e = runtime._entry_store.add(text="Pizza", when="2099-01-01T00:00")
+    with runtime._entry_store._lock:
+        data = runtime._entry_store._read()
+        for d in data:
+            if d["id"] == e.id:
+                d["when"] = "2020-01-01T00:00"
+        runtime._entry_store._write(data)
+
+    runtime._push_due_entries()
+
+    assert pushed and spoken == []                        # Text ja, Stimme nein
+
+
+def test_voice_stage2_explains_way_instead_of_cryptic_abort(tmp_path):
+    """PO-Reibung 13.07.: «loesch den Termin» per Stimme endete in 'Abgebrochen
+    - keine Bestaetigung erhalten', OHNE dass je gefragt wurde. Jetzt erklaert
+    die Antwort den Weg (Chat/Handy) in Kundendeutsch."""
+    class _CancelAI(FakeAI):
+        def get_plan(self, user_input, history):
+            return Plan(intent="shutdown_pc", raw_input=user_input, confidence=1.0)
+
+    runtime = JarvisRuntime(_make_config(tmp_path), ai=_CancelAI())
+
+    replies = []
+    # Kein confirmer gesetzt = Sprach-/PTT-Weg (fail-closed).
+    runtime._process_inner("fahr den pc runter", replies.append, source="voice")
+
+    assert replies
+    assert "Bestätigung" in replies[0]
+    assert "Chat oder am Handy" in replies[0]              # der gezeigte Weg
+    assert "Abgebrochen - keine Bestätigung erhalten" not in replies[0]

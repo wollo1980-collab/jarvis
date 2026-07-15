@@ -57,6 +57,18 @@ RUNTIME_ALLOWED_INTENTS = ALLOWED_INTENTS | {
     "add_entry",
     "list_entries",
     "delete_entry",
+    # Papierkorb-Rueckwege (Bestaetigungs-Diaet 14.07.): das Undo zu
+    # delete_entry/forget_fact gehoert auf DENSELBEN Kanal wie das Loeschen -
+    # sonst nennt die Antwort unterwegs einen Rueckweg, der dort nicht geht.
+    "restore_entry",
+    "restore_fact",
+    # Auftrags-Loop (Phase B.1, ADR-074): read-only Portfolio-Review starten,
+    # Status abfragen, abbrechen - gerade UNTERWEGS der Kernnutzen (Quittung
+    # sofort, Ergebnis kommt als Push aus der Task-Outbox).
+    "portfolio_review",
+    "task_status",
+    "task_resume",
+    "task_cancel",
     # Benannte Listen (2026-07-10): derselbe harmlose Datenlayer - die
     # Einkaufsliste soll gerade UNTERWEGS erreichbar sein; clear_list ist
     # dank Papierkorb+restore_list gefahrlos (Undo statt Rueckfrage).
@@ -84,6 +96,35 @@ RUNTIME_ALLOWED_INTENTS = ALLOWED_INTENTS | {
     "disable_autostart_entry",
     "enable_jarvis_autostart",
     "disable_jarvis_autostart",
+    # Telegram-Ausbau (b), 13.07.2026 - "COO in der Hosentasche": kuratierte
+    # Erweiterung um die Alltags-Intents, die unterwegs am meisten fehlen.
+    # Kalender: lesen ist Stufe 0; add/move/cancel tragen requires_confirmation
+    # und laufen ueber das bestehende ConfirmationGate (ja/nein im Chat).
+    "calendar_agenda",
+    "calendar_add_event",
+    "calendar_move_event",
+    "calendar_cancel_event",
+    # Meeting-Prep (Plan C4): read-only Buendelung, das mobile Gegenstueck
+    # zum Prep-Push.
+    "prepare_meeting",
+    # Personen-Gedaechtnis (ADR-066): reiner Datenlayer wie remember_fact.
+    "who_is",
+    "remember_person",
+    # Eintraege aendern: gleicher harmloser Datenlayer wie add/delete_entry.
+    "update_entry",
+    # Selbstbewertung (ADR-066 Stein 3): read-only.
+    "self_review",
+    # Agenten-Stopp (c1): der Kill-Switch als Befehl - die harte Kontrolle
+    # gehoert GERADE aufs Handy (Stufe-0-Kontrollaktion, stoppt nur).
+    "stop_agent",
+    # Bau-Arm mobil (c2, PO-Go 13.07. "Ja mach mit A weiter"): "Bau mir X"
+    # auch von unterwegs. Voraussetzungen erfuellt: Bestaetigung VOR dem Lauf
+    # (ConfirmationGate ADR-045 + preview zeigt den konkreten Bau), Not-Stopp
+    # jederzeit (stop_agent, c1), Ergebnis-Push nach Abschluss (ADR-035-Async).
+    # Kaefig unveraendert (sandboxed, nie Jarvis' eigenes Repo, ADR-056/059).
+    "build_project",
+    "delegate_work",
+    "project_continue",
 }
 
 __all__ = [

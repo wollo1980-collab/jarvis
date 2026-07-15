@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import subprocess
 import time
-import xml.etree.ElementTree as ET
 from unittest.mock import MagicMock, patch
 
 import commands.monitor as monitor_commands

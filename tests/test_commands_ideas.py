@@ -7,7 +7,7 @@ from pathlib import Path
 
 import commands.ideas as ideas
 from commands import REGISTRY
-from core.models import Plan, Status
+from core.models import Message, Plan, Status
 from memory.entries import EntryStore
 from memory.habits import HabitStats
 from memory.lists import ListStore
@@ -65,6 +65,77 @@ def test_ideas_context_is_grounded_in_real_sources(tmp_path):
     # Live-Befund 11.07. nachts: rohe Intent-Namen als Ausloese-Satz liessen
     # "recherchier Idee 2" direkt den Befehl ausfuehren statt zu recherchieren.
     assert "NIEMALS der technische Befehlsname" in ai.calls[0]["system"]
+
+
+def test_build_mode_proposes_new_projects(tmp_path):
+    """Reibung 11.07.: 'was koennten wir cooles BAUEN?' liefert NEUE Bau-Ideen
+    (Bau-Modus) statt vorhandener Faehigkeiten - anderer Prompt, anderer
+    Rahmen, aber dieselbe Erdung gegen Luftschloesser."""
+    ai, *_ = _configure(tmp_path)
+
+    result = ideas.ProposeIdeasCommand().execute(
+        Plan(intent="propose_ideas", raw_input="was koennten wir cooles bauen?"))
+
+    assert result.status == Status.SUCCESS
+    assert result.data["mode"] == "build"
+    assert "Bau-Ideen" in result.message              # anderer Opener
+    assert "recherchier Idee" not in result.message   # nicht der Nutz-Schluss
+    system = ai.calls[0]["system"]
+    assert "BAUEN" in system and "Luftschloesser" in system
+    assert "WAS JARVIS BAUEN KANN" in ai.calls[0]["user"]
+
+
+def test_use_mode_stays_default_without_build_signal(tmp_path):
+    """Ohne Bau-Signal bleibt es beim bisherigen 'was TUN'-Modus."""
+    ai, *_ = _configure(tmp_path)
+
+    result = ideas.ProposeIdeasCommand().execute(
+        Plan(intent="propose_ideas", raw_input="was koennten wir machen?"))
+
+    assert result.data["mode"] == "use"
+    assert "Ein paar Gedanken, Sir:" in result.message
+    assert "recherchier Idee" in result.message
+
+
+def _configure_with_history(tmp_path, history, ai=None):
+    ai = ai or FakeAI()
+    ideas.configure(ai, HabitStats(tmp_path), EntryStore(tmp_path), ListStore(tmp_path),
+                    history_provider=lambda: history)
+    return ai
+
+
+def test_ideas_include_current_question_and_recent_conversation(tmp_path):
+    """Reibung 12.07.: der Ideen-Prompt sah die eigentliche Frage GAR NICHT und
+    ignorierte den Verlauf -> generische Liste. Jetzt fliessen aktuelle Frage +
+    juengstes Gespraech in den Kontext."""
+    history = [
+        Message(role="user", content="Was waere ein cooles Tool das wir entwickeln koennten?"),
+        Message(role="assistant", content="Ein paar Bau-Ideen: focus-nudge, termin-reminder ..."),
+    ]
+    ai = _configure_with_history(tmp_path, history)
+
+    ideas.ProposeIdeasCommand().execute(
+        Plan(intent="propose_ideas", raw_input="Eher etwas was dich ergaenzen koennte"))
+
+    context = ai.calls[0]["user"]
+    assert "Eher etwas was dich ergaenzen koennte" in context   # die AKTUELLE Frage
+    assert "focus-nudge" in context                              # der Gespraechs-Verlauf
+
+
+def test_build_mode_persists_across_refinement(tmp_path):
+    """Reibung 12.07.: die Verfeinerung 'eher etwas was dich ergaenzt' verlor die
+    Bau-Signale und kippte auf die Faehigkeiten-Liste. Mit Gespraechs-Kontext
+    bleibt der Bau-Modus erhalten."""
+    history = [
+        Message(role="user", content="Was koennten wir entwickeln?"),
+        Message(role="assistant", content="Ein paar Bau-Ideen: focus-nudge ..."),
+    ]
+    ai = _configure_with_history(tmp_path, history)
+
+    result = ideas.ProposeIdeasCommand().execute(
+        Plan(intent="propose_ideas", raw_input="Eher etwas was dich ergaenzt"))
+
+    assert result.data["mode"] == "build"   # dank Verlauf im Bau-Modus geblieben
 
 
 def test_ideas_fail_safe_on_api_error(tmp_path):

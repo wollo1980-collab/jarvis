@@ -74,6 +74,92 @@ def test_openai_chat_json_mode_sets_response_format():
     assert kwargs["response_format"] == {"type": "json_object"}
 
 
+# --- OpenAIProvider.choose_tool (Function-Calling, ADR-060 Scheibe 3a) ----
+
+def _openai_tool_response(*calls: "tuple[str, str]") -> MagicMock:
+    """Response mit 0..n tool_calls; jeder call = (name, arguments-json).
+    Ohne Argumente -> keine tool_calls (Gespraech)."""
+    response = MagicMock()
+    tool_calls = [
+        SimpleNamespace(function=SimpleNamespace(name=name, arguments=args))
+        for name, args in calls
+    ] or None
+    response.choices = [MagicMock(message=MagicMock(tool_calls=tool_calls))]
+    response.usage = None
+    return response
+
+
+_TOOLS = [{"type": "function", "function": {"name": "weather", "parameters": {}}}]
+
+
+def test_choose_tool_returns_list_with_name_and_parsed_arguments():
+    provider, client = _openai_provider_with_mock_client()
+    client.chat.completions.create.return_value = _openai_tool_response(
+        ("weather", '{"target": "Berlin", "parameters": {"day": "morgen"}}')
+    )
+
+    result = provider.choose_tool("SYS", [Message(role="user", content="wetter morgen in Berlin")], _TOOLS)
+
+    assert result == [("weather", {"target": "Berlin", "parameters": {"day": "morgen"}})]
+    kwargs = client.chat.completions.create.call_args.kwargs
+    assert kwargs["tools"] is _TOOLS
+    assert kwargs["tool_choice"] == "auto"
+    # kein Werkzeug-Aufruf-Zwang: response_format bleibt aussen vor
+    assert "response_format" not in kwargs
+
+
+def test_choose_tool_returns_all_calls_for_multistep():
+    """Mehrere tool_calls ('X und Y') -> Liste in Reihenfolge (Multi-Step)."""
+    provider, client = _openai_provider_with_mock_client()
+    client.chat.completions.create.return_value = _openai_tool_response(
+        ("spotify_play", "{}"), ("spotify_volume", '{"parameters": {"level": 60}}')
+    )
+
+    result = provider.choose_tool("SYS", [Message(role="user", content="musik an und lauter")], _TOOLS)
+
+    assert [name for name, _ in result] == ["spotify_play", "spotify_volume"]
+    assert result[1][1] == {"parameters": {"level": 60}}
+
+
+def test_choose_tool_no_tool_call_returns_empty_list():
+    """Kein tool_calls -> leere Liste (der Kern fuehrt dann ein Gespraech)."""
+    provider, client = _openai_provider_with_mock_client()
+    client.chat.completions.create.return_value = _openai_tool_response()
+
+    result = provider.choose_tool("SYS", [Message(role="user", content="wie gehts?")], _TOOLS)
+
+    assert result == []
+
+
+def test_choose_tool_broken_arguments_fall_back_to_empty_dict():
+    """Kaputtes arguments-JSON -> leeres Argument-Objekt (fail-safe),
+    Werkzeugname bleibt erhalten - reasoning.decide normalisiert weiter."""
+    provider, client = _openai_provider_with_mock_client()
+    client.chat.completions.create.return_value = _openai_tool_response(("weather", "{kaputt"))
+
+    result = provider.choose_tool("SYS", [Message(role="user", content="x")], _TOOLS)
+
+    assert result == [("weather", {})]
+
+
+def test_choose_tool_records_last_usage_for_eval_artifact():
+    """Eval-Artefakt (Truth Repair II): der Provider legt den Verbrauch des
+    letzten Calls als Attribut ab (NUR Zahlen) - ohne usage ehrlich None."""
+    provider, client = _openai_provider_with_mock_client()
+    response = _openai_tool_response(("weather", "{}"))
+    response.usage = SimpleNamespace(prompt_tokens=1200, completion_tokens=30)
+    client.chat.completions.create.return_value = response
+
+    provider.choose_tool("SYS", [Message(role="user", content="wetter")], _TOOLS)
+    assert provider.last_usage["tokens_in"] == 1200
+    assert provider.last_usage["tokens_out"] == 30
+    assert provider.last_usage["model"]          # aufgeloestes Modell steht drin
+
+    client.chat.completions.create.return_value = _openai_tool_response()  # usage=None
+    provider.choose_tool("SYS", [Message(role="user", content="x")], _TOOLS)
+    assert provider.last_usage["tokens_in"] is None
+
+
 # --- GPT-5-/o-Serien-Parameter-Stil (Scheibe 2026-07-10) ------------------
 
 @pytest.mark.parametrize("name", [

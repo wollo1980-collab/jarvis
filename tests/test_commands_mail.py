@@ -9,7 +9,7 @@ import pytest
 
 import commands.mail as mail
 from core.config import Config
-from core.mail_reader import MailAccount, MailHeader
+from core.mail_reader import MailHeader
 from core.models import Plan, Status
 from memory.mail_rules import MailRules
 
@@ -116,6 +116,40 @@ def test_check_mail_briefs_and_hides_ads(tmp_path, monkeypatch):
     assert result.status == Status.SUCCESS
     assert "Chef: Bitte anrufen" in result.message
     assert "1 Werbe-/Newsletter-Mail(s) ausgeblendet" in result.message
+
+
+def test_check_mail_triage_prioritizes_when_enabled(tmp_path, monkeypatch):
+    """Plan C1: bei >=2 relevanten Mails + eingeschalteter Triage ersetzt die
+    LLM-Priorisierung die flache Liste."""
+    inbox = [_hdr("Anna", "Steuerunterlagen 2025"), _hdr("Tom", "Frage zum Projekt")]
+    config = _config(tmp_path, monkeypatch)
+    config.mail_triage_enabled = True
+    mail.configure(config, reader=lambda a: list(inbox),
+                   generate_fn=lambda s, u: "PRIORITAET: Anna zuerst (Frist), dann Tom.")
+
+    result = mail.CheckMailCommand().execute(Plan(intent="check_mail"))
+    assert "PRIORITAET: Anna zuerst" in result.message
+    assert "wichtig wirken" not in result.message          # nicht die flache Liste
+
+
+def test_check_mail_triage_falls_back_to_list_on_empty(tmp_path, monkeypatch):
+    inbox = [_hdr("Anna", "A"), _hdr("Tom", "B")]
+    config = _config(tmp_path, monkeypatch)
+    config.mail_triage_enabled = True
+    mail.configure(config, reader=lambda a: list(inbox), generate_fn=lambda s, u: "")  # leer
+
+    result = mail.CheckMailCommand().execute(Plan(intent="check_mail"))
+    assert "wichtig wirken" in result.message              # Rueckfall auf die Liste
+
+
+def test_check_mail_triage_off_by_default_keeps_list(tmp_path, monkeypatch):
+    inbox = [_hdr("Anna", "A"), _hdr("Tom", "B")]
+    mail.configure(_config(tmp_path, monkeypatch), reader=lambda a: list(inbox),
+                   generate_fn=lambda s, u: "sollte-nicht-erscheinen")
+
+    result = mail.CheckMailCommand().execute(Plan(intent="check_mail"))
+    assert "sollte-nicht-erscheinen" not in result.message
+    assert "wichtig wirken" in result.message
 
 
 def test_check_mail_without_account_asks_to_configure(tmp_path, monkeypatch):

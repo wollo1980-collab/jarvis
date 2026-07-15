@@ -16,14 +16,39 @@ from core.dashboard_data import (
     collect_status,
     delegation_stats,
     entries_status,
+    format_shadow_report,
     memory_status,
     project_version,
     runtime_status,
+    shadow_stats,
 )
 
 
 def _write(path: Path, data) -> None:
     path.write_text(json.dumps(data), encoding="utf-8")
+
+
+def test_intent_labels_cover_every_registered_command():
+    """Drift-Waechter (PO-Screenshot 13.07.: 'whats_new' und
+    'calendar_cancel_event' standen roh im LIVE-ABLAUF): jeder registrierte
+    Intent braucht eine deutsche Beschriftung in dashboard.py INTENT_LABELS
+    ('Klartext statt Maschinen-Namen', PO-Reibung 2026-07-10). Der Test
+    liest die JS-Tabelle per Regex - ohne ihn erodiert sie bei jedem neuen
+    Command stillschweigend (13.07. fehlten bereits 31 von 60)."""
+    import re
+
+    import commands
+
+    src = (Path(__file__).resolve().parent.parent / "dashboard.py").read_text(encoding="utf-8")
+    block = re.search(r"const INTENT_LABELS = \{(.*?)\};", src, re.S)
+    assert block, "INTENT_LABELS-Tabelle nicht in dashboard.py gefunden"
+    labeled = set(re.findall(r"^\s*(\w+):", block.group(1), re.M))
+
+    missing = sorted(set(commands.REGISTRY) - labeled)
+    assert not missing, (
+        "Intents ohne Klartext-Label im LIVE-ABLAUF (dashboard.py "
+        f"INTENT_LABELS ergaenzen): {missing}"
+    )
 
 
 def test_runtime_status_off_without_lock(tmp_path):
@@ -32,7 +57,6 @@ def test_runtime_status_off_without_lock(tmp_path):
 
 def test_runtime_status_off_when_lock_pid_dead(tmp_path, monkeypatch):
     _write(tmp_path / "jarvis.lock", {"pid": 999999, "timestamp": "2026-07-10T10:00:00"})
-    import core.dashboard_data as dd
 
     monkeypatch.setattr("psutil.pid_exists", lambda pid: False)
     assert runtime_status(tmp_path)["running"] is False
@@ -89,9 +113,38 @@ def test_entries_status_counts_upcoming_undated_important(tmp_path):
     assert status["today"] == []
     assert "next" not in status
     assert "later_count" not in status  # totes Feld entfernt (Audit-Fund 5)
-    # Live-Befund 2026-07-10: heute Faelliges verschwindet nicht stumm -
-    # es bleibt bis Tagesende als "war faellig" sichtbar (gestern nicht).
-    assert status["due_today"] == [{"when": "09:00", "text": "Muellsaecke"}]
+    # PO-Reibung 2026-07-13: Abgelaufenes raeumt sich nach _DUE_CARD_GRACE
+    # selbst weg - um 12:00 ist die 09:00-Karte laengst verschwunden
+    # (ersetzt "bleibt bis Tagesende" vom Live-Befund 2026-07-10).
+    assert status["due_today"] == []
+
+
+def test_entries_status_due_card_hides_after_grace_window(tmp_path):
+    """PO-Reibung 2026-07-13 ('die abgelaufenen Sachen koennten doch nach
+    einer Weile verschwinden'): eine gerade verpasste Erinnerung bleibt
+    _DUE_CARD_GRACE (1 h) als 'war faellig' stehen, danach raeumt sie sich
+    selbst weg. Auch ueber Mitternacht: was vor 45 min faellig war, zaehlt."""
+    _write(
+        tmp_path / "entries.json",
+        [{"text": "Pizza aus dem Ofen holen", "when": "2026-07-13T19:12", "important": False}],
+    )
+
+    # 24 min nach Faelligkeit: Karte steht (der Screenshot-Fall vom 13.07.).
+    fresh = entries_status(tmp_path, now=datetime(2026, 7, 13, 19, 36))
+    assert fresh["due_today"] == [{"when": "19:12", "text": "Pizza aus dem Ofen holen"}]
+
+    # Gut eine Stunde spaeter: von selbst verschwunden.
+    stale = entries_status(tmp_path, now=datetime(2026, 7, 13, 20, 13))
+    assert stale["due_today"] == []
+
+    # Mitternachts-Kante: gestern 23:30 ist um 00:15 erst 45 min her -
+    # die Karte gehoert noch hin (frueher fiel sie mit dem Datum weg).
+    _write(
+        tmp_path / "entries.json",
+        [{"text": "Fenster zu", "when": "2026-07-13T23:30", "important": False}],
+    )
+    midnight = entries_status(tmp_path, now=datetime(2026, 7, 14, 0, 15))
+    assert midnight["due_today"] == [{"when": "23:30", "text": "Fenster zu"}]
 
 
 def test_entries_status_shows_only_today_upcoming_as_cards(tmp_path):
@@ -111,6 +164,28 @@ def test_entries_status_shows_only_today_upcoming_as_cards(tmp_path):
 
     assert status["today"] == [{"when": "12:30", "text": "Mittagessen"}]
     assert status["upcoming"] == 2                 # Fusszeile zaehlt beide (heute + 18.07.)
+
+
+def test_memory_view_marks_past_entries_as_was_due(tmp_path):
+    """Kundenreview 13.07.: im Gedaechtnis stand der 09:00-Termin abends
+    weiter als 'heute um 09:00' - jetzt traegt auch diese Ansicht den
+    'war fällig'-Marker (dieselbe Wahrheit wie Liste und Tageskarten)."""
+    from datetime import timedelta
+
+    from core.dashboard_data import memory_view
+
+    vorbei = (datetime.now() - timedelta(hours=3)).strftime("%Y-%m-%dT%H:%M")
+    bald = (datetime.now() + timedelta(hours=3)).strftime("%Y-%m-%dT%H:%M")
+    _write(tmp_path / "entries.json", [
+        {"text": "Termin beim Chef", "when": vorbei, "important": True},
+        {"text": "Pizza holen", "when": bald, "important": False},
+    ])
+
+    entries = memory_view(tmp_path)["entries"]
+    by_text = {e["text"]: e["when"] for e in entries}
+
+    assert by_text["Termin beim Chef"].startswith("war fällig ")
+    assert not by_text["Pizza holen"].startswith("war fällig")
 
 
 def test_lists_status_reads_named_lists(tmp_path):
@@ -242,6 +317,92 @@ def test_delegation_stats_includes_work_runs_in_log_order(tmp_path):
     assert stats["last"]["kosten"] == 0.95
 
 
+def test_shadow_stats_counts_match_and_diff_with_top_pairs(tmp_path):
+    """ADR-060 Scheibe 3c: MATCH/DIFF-Bilanz aus echten Schatten-Logzeilen,
+    haeufigste Router->Kern-Abweichungen zuerst, 'last' = juengste Zeile
+    (Log-Reihenfolge ueber nach Datum sortierte Dateien)."""
+    (tmp_path / "2026-07-12-runtime.log").write_text(
+        "2026-07-12 08:00:00,100 INFO jarvis.planner: Reasoning-Schatten [MATCH]: "
+        "router=chat kern=chat (target=None)\n"
+        "2026-07-12 08:01:00,100 INFO jarvis.planner: Reasoning-Schatten [DIFF]: "
+        "router=chat kern=open_program (target='excel')\n"
+        "2026-07-12 08:02:00,100 INFO jarvis.planner: Reasoning-Schatten [DIFF]: "
+        "router=chat kern=open_program (target='word')\n"
+        "2026-07-12 08:03:00,100 INFO jarvis.planner: Reasoning-Schatten [DIFF]: "
+        "router=get_weather kern=chat (target=None)\n",
+        encoding="utf-8",
+    )
+
+    stats = shadow_stats(tmp_path)
+
+    assert stats["total"] == 4
+    assert stats["match"] == 1
+    assert stats["diff"] == 3
+    assert stats["match_rate"] == 0.25
+    # haeufigste Abweichung zuerst: chat->open_program (2x) vor weather->chat (1x)
+    assert stats["top_diffs"][0] == {"router": "chat", "kern": "open_program", "count": 2}
+    assert {"router": "get_weather", "kern": "chat", "count": 1} in stats["top_diffs"]
+    assert stats["last"] == {
+        "verdict": "DIFF", "router": "get_weather", "kern": "chat", "target": "None",
+    }
+
+
+def test_shadow_stats_empty_when_shadow_off(tmp_path):
+    """Kein Schatten-Log (Flag aus, Default) -> ehrliche Nullen, kein Absturz."""
+    (tmp_path / "2026-07-12-runtime.log").write_text(
+        "2026-07-12 08:00:00,100 INFO jarvis.runtime: irgendwas anderes\n",
+        encoding="utf-8",
+    )
+
+    stats = shadow_stats(tmp_path)
+
+    assert stats == {"total": 0, "match": 0, "diff": 0, "match_rate": 0.0,
+                     "top_diffs": [], "last": None}
+    assert "noch keine Beobachtungen" in format_shadow_report(stats)
+
+
+def test_shadow_stats_merges_multiple_days_in_order(tmp_path):
+    """'last' ist die juengste Beobachtung ueber mehrere Log-Tage hinweg."""
+    (tmp_path / "2026-07-11-runtime.log").write_text(
+        "2026-07-11 09:00:00,100 INFO jarvis.planner: Reasoning-Schatten [MATCH]: "
+        "router=chat kern=chat (target=None)\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "2026-07-12-runtime.log").write_text(
+        "2026-07-12 09:00:00,100 INFO jarvis.planner: Reasoning-Schatten [DIFF]: "
+        "router=chat kern=get_weather (target='Berlin')\n",
+        encoding="utf-8",
+    )
+
+    stats = shadow_stats(tmp_path)
+
+    assert stats["total"] == 2
+    assert stats["last"]["kern"] == "get_weather"
+    assert stats["last"]["target"] == "'Berlin'"
+    report = format_shadow_report(stats)
+    assert "Uebereinstimmung: 50.0%" in report
+    assert "chat -> get_weather" in report
+
+
+def test_uptime_uses_latest_current_scheduler_marker(tmp_path):
+    """Uptime = Abstand zum LETZTEN echten Start-Marker. Regression gegen den
+    Marker-Drift (12.07.): die Logzeile heisst 'Scheduler gestartet (Poll ...)',
+    nicht mehr 'Erinnerungs-Scheduler gestartet' - sonst findet die Uptime heute
+    keinen Marker und rechnet vom Vortag (falsche 31h)."""
+    from datetime import datetime as dt_cls
+
+    from core.dashboard_data import uptime_seconds
+
+    (tmp_path / "2026-07-12-runtime.log").write_text(
+        "2026-07-12 09:00:00,100 INFO jarvis.runtime: Scheduler gestartet (Poll alle 30s, Impuls-Kreislauf aktiv).\n"
+        "2026-07-12 12:00:00,100 INFO jarvis.runtime: Scheduler gestartet (Poll alle 30s, Impuls-Kreislauf aktiv).\n",
+        encoding="utf-8",
+    )
+
+    up = uptime_seconds(tmp_path, now=dt_cls(2026, 7, 12, 12, 30, 0))
+    assert up == 30 * 60   # 30 min seit dem LETZTEN Start (12:00), nicht seit 09:00
+
+
 def test_usage_uptime_and_voice_latency_from_logs(tmp_path):
     """Scheibe 7 (Nachtplan): KI-Verbrauch, Uptime und Sprach-Antwortzeit
     aus echten Log-Zeilen - fehlende Daten liefern ehrlich None/0."""
@@ -334,26 +495,33 @@ def test_collect_status_has_all_sections(tmp_path):
     assert "briefing" not in status
 
 
-def test_open_impulses_reads_and_orders(tmp_path):
-    """Impuls-Karten (ADR-054): der Dashboard-Prozess liest impulses.json
-    (die Runtime legt die Impulse; die Datei ist die Bruecke)."""
+def test_open_impulses_reads_orders_and_hides_stale_days(tmp_path):
+    """Impuls-Karten (ADR-054): der Dashboard-Prozess liest impulses.json.
+    Tageslage-Regel AUCH in diesem getrennten Leser (Live-Befund 15.07.:
+    die 14.07.-Regel sass nur im Store - das Dashboard zeigte 'Hitze heute'
+    vom 13./14. weiter an): Karten frueherer Tage erscheinen NIE."""
     import json
+    from datetime import datetime
     from core.dashboard_data import open_impulses
 
+    today = datetime.now().date().isoformat()
     (tmp_path / "impulses.json").write_text(json.dumps({
         "open": [
-            {"id": "a", "key": "weather-heat-2026-07-11", "kind": "weather",
-             "title": "Hitze", "detail": "bis 34°", "created": "2026-07-11T08:00:00"},
-            {"id": "b", "key": "weather-storm-2026-07-11", "kind": "weather",
-             "title": "Unwetter", "detail": "Gewitter", "created": "2026-07-11T09:00:00"},
+            {"id": "a", "key": f"weather-heat-{today}", "kind": "weather",
+             "title": "Hitze", "detail": "bis 34°", "created": f"{today}T08:00:00"},
+            {"id": "b", "key": f"weather-storm-{today}", "kind": "weather",
+             "title": "Unwetter", "detail": "Gewitter", "created": f"{today}T09:00:00"},
+            {"id": "alt", "key": "weather-heat-2026-07-13", "kind": "weather",
+             "title": "Hitze (alt)", "detail": "gestern", "created": "2026-07-13T06:01:04"},
         ],
         "dismissed": {},
     }), encoding="utf-8")
 
     result = open_impulses(tmp_path)
 
-    assert [i["key"] for i in result] == ["weather-storm-2026-07-11", "weather-heat-2026-07-11"]
+    assert [i["key"] for i in result] == [f"weather-storm-{today}", f"weather-heat-{today}"]
     assert result[0]["title"] == "Unwetter"
+    assert all("alt" not in i["id"] for i in result)      # Vergangenes erscheint nie
 
 
 def test_open_impulses_empty_without_file(tmp_path):
@@ -380,6 +548,37 @@ def test_dashboard_has_agent_stop_button():
     assert "agent-stop" in page
     assert "/agent/stop" in page
     assert "addAgentStep" in page          # Durchsicht (Scheibe 1) im UI
+
+
+def test_dashboard_has_spotify_tile():
+    """Musik-Kachel (ADR-058): klickbare Media-Controls, die auf
+    /spotify/control feuern, + read-only Poll von /spotify/now."""
+    import dashboard
+
+    page = dashboard._PAGE
+    assert 'id="spotify"' in page            # das Panel
+    assert "sp-btn" in page                   # die Steuer-Knoepfe
+    assert "/spotify/control" in page         # echte Aktion (kein Attrappen)
+    assert "/spotify/now" in page             # read-only Zustand
+    assert "refreshSpotify" in page
+    assert "sp-eq" in page                     # Equalizer-Visualizer (PO 11.07.)
+    assert "@keyframes sp-eq" in page          # animiert
+    assert "prefers-reduced-motion" in page    # Barrierefreiheit
+
+
+def test_dashboard_hides_telemetry_behind_gear_and_collapses_llm():
+    """Kundenmodus (2. Kundenreview Rang 8, PO-Go 13.07. nachts): Technik-
+    Zahlen (Token/CPU/RAM/$) hinter dem ⚙-Klick, BESETZUNG standardmaessig
+    eingeklappt - beide Zustaende gemerkt. Browser-verifiziert 13.07.;
+    dieser Wachter haelt die Marker im Template."""
+    import dashboard
+
+    page = dashboard._PAGE
+    assert 'id="llm-head"' in page and 'id="llm-caret"' in page
+    assert "foot-gear" in page
+    assert "foot_tech" in page and "llm_open" in page      # localStorage-Schluessel
+    assert "tech.push(`CPU" in page                        # CPU/RAM in der Technik-Gruppe
+    assert "f.push(`CPU" not in page                       # ... nicht mehr im Alltag
 
 
 def test_dashboard_has_agent_redirect_input():
@@ -491,17 +690,20 @@ def test_dashboard_layout_is_symmetric_without_counterweight():
     assert "@media (max-width:1780px)" in page      # Stapel-Breakpoint
 
 
-def test_dashboard_entry_delete_asks_before_deleting():
-    """PO-Reibung 2026-07-11: Erinnerung loeschen ist irreversibel (kein
-    Papierkorb) - das ✕ oeffnet erst eine Rueckfrage, statt still zu
-    loeschen. Impuls-✕ bleibt bewusst Ein-Klick."""
+def test_dashboard_entry_delete_is_one_click_with_trash():
+    """Bestaetigungs-Diaet 14.07.: seit dem Eintraege-Papierkorb loescht das
+    Erinnerungs-✕ mit EINEM Klick (Undo statt Rueckfrage, ADR-068) - die
+    fruehere Karten-Rueckfrage ist komplett raus. Der Panel-Kopf nennt den
+    Papierkorb fuer ALLES (Fakten, Listen UND Eintraege)."""
     import dashboard
 
     page = dashboard._PAGE
-    assert "Erinnerung löschen?" in page          # die Rueckfrage
-    assert "askDeleteEntry" in page               # Erinnerungs-✕ -> fragen
-    assert "pendingConfirm" in page               # Poll pausiert waehrend der Frage
-    assert "dismissImpulse" in page               # Impuls-✕ -> direkt (kein Confirm)
+    assert "doDeleteEntry(el, btn.dataset.del)" in page   # ✕ -> direkt loeschen
+    assert "askDeleteEntry" not in page                   # Rueckfrage raus
+    assert "Erinnerung löschen?" not in page
+    assert "pendingConfirm" not in page                   # Poll pausiert nie mehr
+    assert "dismissImpulse" in page                       # Impuls-✕ unveraendert
+    assert "ALLES LANDET IM PAPIERKORB" in page           # Panel-Kopf sagt es
 
 
 def _write_proposal_file(memory_dir, name, status_line, title):
@@ -774,3 +976,53 @@ def test_config_reads_dashboard_port(tmp_path):
 
     assert Config.load(config_file).dashboard_port == 9999
     assert Config().dashboard_port == 8765
+
+
+def test_bind_server_gives_up_cleanly_on_occupied_port(monkeypatch):
+    """Zombie-Bug 2026-07-11: bleibt der Port belegt (echter Doppelstart),
+    liefert _bind_server nach begrenzten Versuchen None statt eines stillen
+    Absturzes - der Aufrufer meldet das sichtbar. Zwischen den Versuchen wird
+    kurz pausiert (Handoff-Fenster), nie endlos."""
+    import dashboard
+    from core.config import Config
+
+    attempts = {"n": 0}
+    sleeps = []
+
+    def always_busy(addr, handler):
+        attempts["n"] += 1
+        raise OSError("Address already in use")
+
+    monkeypatch.setattr(dashboard, "ThreadingHTTPServer", always_busy)
+    monkeypatch.setattr(dashboard.time, "sleep", lambda s: sleeps.append(s), raising=False)
+
+    result = dashboard._bind_server(Config(), 8765, attempts=4, pause=0.01)
+
+    assert result is None  # sauberes Aufgeben statt Traceback ins Leere
+    assert attempts["n"] == 4  # genau so oft versucht, nicht endlos
+    assert len(sleeps) == 3  # zwischen je zwei Versuchen eine Pause, nach dem letzten nicht
+
+
+def test_bind_server_succeeds_after_transient_conflict(monkeypatch):
+    """Der eben beendete Vorgaenger haelt den Port nur einen Moment
+    (TIME_WAIT/Handoff): ein spaeterer Versuch greift, der Server startet -
+    kein Zombie noetig."""
+    import dashboard
+    from core.config import Config
+
+    calls = {"n": 0}
+    sentinel = object()
+
+    def busy_then_ok(addr, handler):
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise OSError("noch belegt")
+        return sentinel
+
+    monkeypatch.setattr(dashboard, "ThreadingHTTPServer", busy_then_ok)
+    monkeypatch.setattr(dashboard.time, "sleep", lambda s: None, raising=False)
+
+    result = dashboard._bind_server(Config(), 8765, attempts=6, pause=0.01)
+
+    assert result is sentinel
+    assert calls["n"] == 3

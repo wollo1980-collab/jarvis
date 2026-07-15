@@ -50,9 +50,14 @@ class ImpulseEngine:
         self._store = store
         self._checkers = list(checkers)
 
-    def run(self, now: Optional[datetime] = None) -> int:
+    def run(self, now: Optional[datetime] = None,
+            on_new: "Optional[Callable[[dict], None]]" = None) -> int:
         """Ein Durchlauf: alle Pruefer, dann neue Impulse ablegen (bis zum
-        Deckel). Liefert die Zahl neu gelegter Impulse. Fail-safe - wirft nie."""
+        Deckel). Liefert die Zahl neu gelegter Impulse. Fail-safe - wirft nie.
+
+        `on_new` (Plan F, optional): Rueckruf je WIRKLICH neuem Impuls (das
+        Kandidaten-Dict) - die Runtime pusht ihn so aktiv (z. B. Telegram),
+        statt nur die Dashboard-Karte zu legen. Genau EINMAL (dedupe im Store)."""
         now = now or datetime.now()
         if _QUIET_FROM_HOUR <= now.hour or now.hour < _QUIET_TO_HOUR:
             return 0  # Ruhefenster: kein Zupfen
@@ -73,6 +78,11 @@ class ImpulseEngine:
                     cand.get("title", ""), cand.get("detail", ""),
                 ):
                     added += 1
+                    if on_new is not None:
+                        try:
+                            on_new(cand)
+                        except Exception:  # noqa: BLE001 - ein Push-Fehler stoppt nie den Kreislauf
+                            logger.warning("Impuls-Push fehlgeschlagen (ignoriert).", exc_info=True)
         if added:
             logger.info("Impuls-Kreislauf: %d neue(r) Impuls(e).", added)
         return added

@@ -247,6 +247,7 @@ class HotkeyChannel:
         recorder: Optional[Callable[[], bytes]] = None,
         wake_word: bool = False,
         wake_acks: Optional[list] = None,
+        followup_seconds: float = _FOLLOWUP_WINDOW_SECONDS,
     ):
         self.runtime = runtime
         self.transcriber = transcriber
@@ -270,6 +271,10 @@ class HotkeyChannel:
         # beim Start synthetisiert, pro Zuruf zufaellig gewaehlt
         # (Lebendigkeit, PO-Befund 2026-07-10). Leer -> Piepton.
         self._wake_acks: list = list(wake_acks or [])
+        # Anschluss-Fenster nach der Antwort (konfigurierbar, PO-Reibung
+        # 2026-07-11 "viel zu lange im Lausch-Modus"). >0 erzwungen: ein
+        # 0/negativer Wert wuerde das Fenster sofort schliessen.
+        self._followup_seconds: float = max(float(followup_seconds), 0.5)
         self._wake_listener: Optional["WakeWordListener"] = None
 
     def speak(self, text: str) -> None:
@@ -612,7 +617,7 @@ class WakeWordListener:
             self._drain_stream(stream)
             self.channel._notify_state("hoert")
             audio = self._record_until_silence(
-                stream, threshold, leadin=_FOLLOWUP_WINDOW_SECONDS
+                stream, threshold, leadin=self.channel._followup_seconds
             )
             if not audio:
                 _beep(start=False)  # Fenster zu - ab jetzt wieder "Hey Jarvis"

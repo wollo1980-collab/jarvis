@@ -34,6 +34,20 @@ def _channel(transcriber=None, recorder=None, runtime=None):
     )
 
 
+def test_followup_window_is_configurable_and_clamped():
+    """PO-Reibung 2026-07-11 'viel zu lange im Lausch-Modus': das Anschluss-
+    Fenster ist konfigurierbar; ein zu kleiner Wert wird auf einen sinnvollen
+    Boden geklemmt (nie sofort schliessen)."""
+    from hotkey_channel import _FOLLOWUP_WINDOW_SECONDS
+
+    assert _channel()._followup_seconds == _FOLLOWUP_WINDOW_SECONDS   # Default
+    assert HotkeyChannel(runtime=MagicMock(), transcriber=FakeTranscriber(),
+                         speak=MagicMock(), followup_seconds=2.0)._followup_seconds == 2.0
+    # 0/negativ -> Boden 0.5 (sonst wuerde das Fenster sofort zuschnappen)
+    assert HotkeyChannel(runtime=MagicMock(), transcriber=FakeTranscriber(),
+                         speak=MagicMock(), followup_seconds=0.0)._followup_seconds == 0.5
+
+
 def _run_toggle_cycle(channel):
     """Erster Hotkey-Druck startet den Worker; auf Abschluss warten."""
     channel._on_hotkey()

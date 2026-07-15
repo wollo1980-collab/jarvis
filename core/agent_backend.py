@@ -1,32 +1,37 @@
 """
 Agenten-Backend-Kontrakt + erste Implementierung (Claude Code CLI).
-Erster Baustein des Agenten-Arms (ADR-033 Delegationsprozess, ADR-034
-read-only Repo-Analyse, Umsetzungs-Scheibe 1: lokal & synchron).
+Der Motor des Agenten-Arms (ADR-033 Delegationsprozess): LESEND fuer die
+Repo-Analyse (ADR-034, `analyze()`) UND SCHREIBEND im Kaefig (ADR-050,
+`work()`/Bau-Laeufe); die Runtime faehrt beides asynchron (ADR-035:
+Quittung -> Hintergrund-Worker -> Ergebnis-Push, Kill-Switch inklusive).
 
 Aufbau bewusst analog core/providers.py (LLMProvider): das Protokoll
 `AgentBackend` und seine erste Implementierung `ClaudeCodeBackend` liegen
 in einer Datei. Ein Agent ist eine neue Tool-Klasse, kein Parallelsystem
-(ADR-033) - deshalb ist der Kontrakt klein und austauschbar: Codex/GPT
-folgen spaeter hinter demselben `analyze()`-Vertrag, ohne dass der
-Command-Layer (commands/delegate.py) sich aendert.
+(ADR-033) - der Kontrakt bleibt klein und austauschbar: Codex/GPT folgen
+hinter demselben Vertrag, ohne dass der Command-Layer sich aendert.
 
-Sicherheit (ADR-034 Guardrails):
-- Read-only ist im Print-Modus (`claude -p`) nicht verhandelbar: nur
-  `Read`/`Grep`/`Glob` werden erlaubt (`--allowedTools`). Ohne Bash/Edit/
-  Write ist keinerlei git-Operation moeglich (kein Branch/Commit/Push).
+Sicherheit (Werkzeug-Kaefig ueber `--allowedTools` - der Prompt erklaert,
+die Technik erzwingt):
+- Analyse (`analyze()`): NUR `Read`/`Grep`/`Glob` - read-only garantiert.
+- Schreibende Laeufe (ADR-050): `Edit`/`Write` PFADGEBUNDEN aufs Ziel-Repo
+  im Kaefig (nie Jarvis' eigenes Repo, ADR-056/059) plus kuratierter
+  Dev-Bash (CURATED_BASH, Single Source); alles Nicht-Kuratierte fragt
+  live ueber den 🔐-PreToolUse-Erlaubnis-Haken nach (ADR-071, fail-closed).
 - Der harte Guardrail ist der Wall-Clock-Timeout: laeuft der Subprozess
   laenger als `AgentLimits.timeout_seconds`, wird er hart gekillt
-  (Kill-Switch). Ein CLI-`--max-turns`-Flag existiert in der genutzten
-  `claude`-Version (2.1.201) NICHT - Turn-/Kostendeckel werden deshalb
-  nicht vorab erzwungen, sondern aus dem JSON-Ergebnis (`num_turns`,
-  `total_cost_usd`) nur protokolliert (Observability).
+  (Kill-Switch, cancel_event). Turn-/Kostendeckel werden nicht vorab
+  erzwungen, sondern aus dem JSON-Ergebnis (`num_turns`, `total_cost_usd`)
+  protokolliert (Observability).
 - Keine stillen Fehler: Timeout, Exit != 0, is_error und nicht parsebares
   JSON fuehren alle zu ok=False mit klarem `detail`.
 
 Auth (ADR-034 §6): Der Subprozess erbt den vorhandenen Account-Login
-(~/.claude). Dieses Backend liest selbst KEIN Secret und setzt keinen
-API-Key - der spaetere dedizierte ANTHROPIC_API_KEY (Env, ADR-018) ist die
-dokumentierte Robustheits-Aufwertung fuer den unbeaufsichtigten Betrieb.
+(~/.claude); laeuft der Login ab, uebersetzt _agent_auth_hint den Fehler
+handlungsweisend (Re-Login ist interaktiv, nicht automatisierbar). Dieses
+Backend liest selbst KEIN Secret und setzt keinen API-Key - ein dedizierter
+ANTHROPIC_API_KEY bleibt die dokumentierte, bewusst aufgeschobene
+Robustheits-Aufwertung fuer den unbeaufsichtigten Betrieb.
 """
 from __future__ import annotations
 
@@ -39,6 +44,8 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional, Protocol
+
+from core.hook_gate import CURATED_BASH
 
 logger = logging.getLogger("jarvis.agent_backend")
 
@@ -60,6 +67,29 @@ def write_tools(repo: Path) -> tuple[str, ...]:
     return ("Read", "Grep", "Glob", f"Edit({scope}/**)", f"Write({scope}/**)")
 
 
+# Kuratierter DEV-Bash (ADR-056 Scheibe 4b / Wochenend-Bauplan, PO-Wahl A
+# "kuratiert weit"): NUR sichere Dev-Befehle - Tests/Gate ausfuehren und git
+# LESEN, damit der Agent seine Arbeit SELBST verifiziert und iteriert (wie eine
+# Dev-Sitzung). BEWUSST NICHT dabei: git commit/push, loeschen/verschieben,
+# freie Shell. Der Commit bleibt beim Ampel-Layer (ADR-056 S4a); das
+# Folgenreiche laeuft ueber den Telegram-Erlaubnis-Haken (S4b Scheibe 2,
+# ADR-071). Muster-Syntax wie in `claude --help` ("Bash(git *)"); die CLI
+# prueft Teil-Befehle einer Verkettung einzeln (`&& rm` faellt durch).
+# SINGLE SOURCE ist core/hook_gate.CURATED_BASH - Allowlist und Hook lesen
+# dieselben Muster (keine Drift).
+_DEV_BASH = CURATED_BASH
+
+
+def dev_tools(repo: Path) -> tuple[str, ...]:
+    """Erweiterter, aber KURATIERTER Werkzeugkasten: write_tools + die sicheren
+    Dev-Bash-Befehle (_DEV_BASH). Der Agent kann damit testen/das Gate laufen
+    lassen/git lesen und so wie in einer Dev-Sitzung selbst verifizieren - ohne
+    freie Shell, ohne commit/push/loeschen. NUR fuer Spielplatz-Repos; der
+    Aufrufer (delegate) stellt sicher, dass Jarvis' eigener Kern das nie
+    bekommt (Selbst-Repo-Waechter)."""
+    return write_tools(repo) + _DEV_BASH
+
+
 def _tool_input_summary(inp) -> str:
     """Kurzer, sprechender Anriss eines Werkzeug-Aufrufs fuer die Durchsicht
     (ADR-056): das aussagekraeftigste Feld (Datei/Muster/Befehl) statt des
@@ -70,6 +100,20 @@ def _tool_input_summary(inp) -> str:
         if inp.get(key):
             return str(inp[key])[:120]
     return ", ".join(f"{k}={str(v)[:40]}" for k, v in list(inp.items())[:2])
+
+
+def _agent_auth_hint(text: str) -> Optional[str]:
+    """Uebersetzt den 'nicht angemeldet'-Fehler der CLI in eine handlungs-
+    weisende Jarvis-Meldung (Live-Reibung 2026-07-11: der rohe 'Not logged in
+    · Please run /login' erreichte den Nutzer). None, wenn kein Login-Fehler."""
+    low = (text or "").lower()
+    if "not logged in" in low or "/login" in low or ("please run" in low and "login" in low):
+        return (
+            "Der Agenten-Arm ist gerade nicht angemeldet, Sir. Bitte einmal im "
+            "Terminal 'claude' starten und mit /login anmelden - danach kann ich "
+            "wieder analysieren und bauen."
+        )
+    return None
 
 # Poll-Intervall der Warteschleife (Sekunden): so oft werden cancel_event und
 # das Gesamt-Timeout geprueft, waehrend der claude-Prozess laeuft. Klein genug
@@ -90,6 +134,31 @@ _WORK_PROMPT = (
     "die Gate-Ableitung kam ohne logbook-Eintrag). Fasse am Ende kurz "
     "zusammen, welche Dateien du angelegt oder geaendert hast und "
     "warum.\n\nAuftrag:\n{task}"
+)
+
+# Auftrags-Rahmen fuer den ERWEITERTEN Dev-Modus (Wochenend-Bauplan Scheibe 1):
+# der Agent DARF testen/das Gate laufen lassen/git lesen und soll damit selbst
+# verifizieren und iterieren. Die Grenzen sind zusaetzlich technisch erzwungen
+# (--allowedTools) - der Prompt erklaert, die Technik setzt durch.
+_DEV_WORK_PROMPT = (
+    "Du arbeitest als Umsetzungs-Agent in genau einem Projektverzeichnis: "
+    "{repo}\n"
+    "Du hast einen ERWEITERTEN Werkzeugkasten wie in einer Dev-Sitzung: Du "
+    "DARFST die Tests laufen lassen (pytest), das Konsistenz-Gate ausfuehren "
+    "und git LESEN (status/diff/log). Nutze das aktiv, um deine Arbeit SELBST "
+    "zu verifizieren und zu iterieren (schreiben -> testen -> nachbessern), bis "
+    "Gate und Tests gruen sind.\n"
+    "Grenzen (zusaetzlich technisch erzwungen): KEIN git commit/push, KEIN "
+    "Loeschen/Verschieben, KEINE freie Shell - solche Aktionen sind gesperrt. "
+    "Arbeite AUSSCHLIESSLICH in diesem Verzeichnis; aendere nur, was der Auftrag "
+    "verlangt (keine ungefragten Umbauten). WICHTIG: Das SYSTEM-Temp-Verzeichnis "
+    "ist in dieser Umgebung GESPERRT - pytest-Fixtures wie tmp_path brauchen "
+    "deshalb ein projekt-lokales basetemp (pytest.ini des Projekts setzt bereits "
+    "--basetemp=.pytest_tmp; falls nicht, starte pytest mit "
+    "--basetemp=.pytest_tmp). Kaempfe NICHT gegen diese Sperre an. Beachte die "
+    "Dokumentationspflichten des Ziel-Repos (CONTRIBUTING/logbook/PROJECT_STATE). "
+    "Fasse am Ende kurz zusammen, welche Dateien du angelegt/geaendert hast und "
+    "ob Tests + Gate gruen sind.\n\nAuftrag:\n{task}"
 )
 
 
@@ -191,6 +260,7 @@ class AgentBackend(Protocol):
         cancel_event: "Optional[threading.Event]" = None,
         on_event: "Optional[Callable[[dict], None]]" = None,
         redirect: "Optional[RedirectChannel]" = None,
+        wide_tools: bool = False,
     ) -> AgentResult:
         """Schreibender Lauf im Kaefig (ADR-050): Edit/Write NUR im Ziel-Repo,
         kein Bash (keine git-Operation, keine Ausfuehrung). Das Ergebnis ist
@@ -203,7 +273,13 @@ class AgentBackend(Protocol):
         redirect (optional, ADR-056 Scheibe 3): bidirektionaler Draht - liegt
         eine Kurskorrektur an, schiebt der Adapter sie dem Agenten mitten im
         Lauf unter. Nur wirksam zusammen mit on_event (interaktiv setzt
-        Durchsicht voraus)."""
+        Durchsicht voraus).
+
+        wide_tools (optional, ADR-056 Scheibe 4b / Wochenend-Bauplan): der
+        kuratierte Dev-Werkzeugkasten (dev_tools) - der Agent darf zusaetzlich
+        Tests/Gate laufen lassen und git lesen, um selbst zu verifizieren. KEINE
+        freie Shell, kein commit/push. Der Aufrufer schaltet das nur fuer
+        Spielplatz-Repos frei, nie fuer Jarvis' eigenen Kern."""
         ...
 
 
@@ -226,6 +302,7 @@ class ClaudeCodeBackend:
     def _build_argv(
         self, repo: Path, prompt: str, tools: tuple[str, ...],
         stream: bool = False, interactive: bool = False,
+        hook_settings: Optional[Path] = None,
     ) -> list[str]:
         """Baut die Kommandozeile. Werkzeug-Kaefig ueber --allowedTools
         (read-only bzw. pfadgebunden schreibend, ADR-050); das Ziel-Repo wird
@@ -239,16 +316,22 @@ class ClaudeCodeBackend:
         stream-json macht stdin zum realtime-Eingabekanal - der Auftrag UND
         spaetere Kurskorrekturen kommen als JSON-Zeilen ueber stdin (nicht als
         Positions-Argument). --replay-user-messages spiegelt injizierte
-        Nachrichten zur Quittung zurueck. Setzt Stream voraus."""
+        Nachrichten zur Quittung zurueck. Setzt Stream voraus.
+
+        hook_settings (S4b Scheibe 2, ADR-071): --settings laedt den
+        PreToolUse-Erlaubnis-Haken - Folgenreiches fragt den PO per Telegram,
+        fail-closed. Die Allowlist bleibt unveraendert eng; der Hook kann nur
+        mit PO-Ja ERWEITERN."""
+        hook = ["--settings", str(hook_settings)] if hook_settings else []
         if interactive:
             return [
-                self._binary, "-p", "--allowedTools", *tools,
+                self._binary, "-p", "--allowedTools", *tools, *hook,
                 "--output-format", "stream-json", "--verbose",
                 "--input-format", "stream-json", "--replay-user-messages",
                 "--add-dir", str(repo),
             ]
         fmt = ["--output-format", "stream-json", "--verbose"] if stream else ["--output-format", "json"]
-        return [self._binary, "-p", prompt, "--allowedTools", *tools, *fmt, "--add-dir", str(repo)]
+        return [self._binary, "-p", prompt, "--allowedTools", *tools, *hook, *fmt, "--add-dir", str(repo)]
 
     def analyze(
         self,
@@ -274,6 +357,8 @@ class ClaudeCodeBackend:
         cancel_event: Optional[threading.Event] = None,
         on_event: Optional[Callable[[dict], None]] = None,
         redirect: Optional[RedirectChannel] = None,
+        wide_tools: bool = False,
+        hook_settings: Optional[Path] = None,
     ) -> AgentResult:
         """Schreibender Lauf im Kaefig (ADR-050): Edit/Write pfadgebunden auf
         das Ziel-Repo, kein Bash. Der Auftrags-Rahmen nennt dem Agenten seine
@@ -285,11 +370,21 @@ class ClaudeCodeBackend:
         (rueckwaertskompatibel).
 
         redirect (Scheibe 3): mit on_event zusammen laeuft der Agent INTERAKTIV
-        (stdin-Eingabekanal) - der Nutzer kann ihn mitten im Lauf umlenken."""
-        prompt = _WORK_PROMPT.format(repo=repo, task=task)
+        (stdin-Eingabekanal) - der Nutzer kann ihn mitten im Lauf umlenken.
+
+        wide_tools (Scheibe 4b): kuratierter Dev-Werkzeugkasten statt des engen
+        Schreib-Kaefigs - Tests/Gate/git-lesen zusaetzlich, kein commit/push,
+        keine freie Shell. Passender Auftrags-Rahmen (_DEV_WORK_PROMPT).
+
+        hook_settings (S4b Scheibe 2, ADR-071): nur zusammen mit wide_tools
+        sinnvoll - laedt den PreToolUse-Erlaubnis-Haken (Folgenreiches fragt
+        den PO, fail-closed)."""
+        prompt = (_DEV_WORK_PROMPT if wide_tools else _WORK_PROMPT).format(repo=repo, task=task)
+        tools = dev_tools(repo) if wide_tools else write_tools(repo)
         interactive = redirect is not None and on_event is not None
         argv = self._build_argv(
-            repo, prompt, write_tools(repo), stream=on_event is not None, interactive=interactive
+            repo, prompt, tools, stream=on_event is not None, interactive=interactive,
+            hook_settings=hook_settings if wide_tools else None,
         )
         return self._run(argv, repo, limits, cancel_event, on_event,
                          redirect=redirect, initial_message=prompt if interactive else None)
@@ -584,7 +679,7 @@ class ClaudeCodeBackend:
                     text=stdout,
                     ok=False,
                     duration_seconds=duration,
-                    detail=f"Agentenlauf fehlgeschlagen: {detail}",
+                    detail=_agent_auth_hint(detail) or f"Agentenlauf fehlgeschlagen: {detail}",
                 )
             return AgentResult(
                 text=stdout,
@@ -724,6 +819,9 @@ class ClaudeCodeBackend:
         gesprochene Meldung mitsamt dem Reset-Hinweis aus `result`; sonst wird
         die menschenlesbare `result`-Meldung bevorzugt, erst zuletzt der
         (oft wenig sagende) `subtype`."""
+        auth_hint = _agent_auth_hint(text) or _agent_auth_hint(str(data.get("subtype", "")))
+        if auth_hint:
+            return auth_hint
         is_session_limit = (
             data.get("api_error_status") == 429 or "session limit" in text.lower()
         )

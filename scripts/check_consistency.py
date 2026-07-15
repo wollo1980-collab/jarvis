@@ -6,7 +6,8 @@ Prueft mechanisch, dass der maschinenlesbare Kopf von docs/PROJECT_STATE.md mit
 der Repository-Realitaet uebereinstimmt - damit Dokumentation und tatsaechlicher
 Stand nicht mehr stillschweigend auseinanderlaufen.
 
-Nur stdlib + git. Aufruf:  python scripts/check_consistency.py
+Nur stdlib + git (Ruff optional: vorhanden -> geprueft, sonst ehrlicher SKIP).
+Aufruf:  python scripts/check_consistency.py
 Exit 0 = PASS (ggf. mit WARN), Exit 1 = FAIL. FAIL -> STOP (nicht bauen/committen).
 
 Checks:
@@ -16,6 +17,9 @@ Checks:
   4. Stand-Frische     - Abstand Kopf 'stand' <-> HEAD-Commit-Datum (WARN >2d, FAIL >7d)
   5. Handbook-Reinheit - Handbook enthaelt keine Status-Tokens (temporaer SKIP,
                          solange kein HANDBOOK.md existiert -> nach Markdown-Migration aktiv)
+  6. Produktions-Ruff  - 'ruff check' ohne tests/ ist clean (Truth Repair II
+                         14.07.2026: Lint-Drift stoppt das Gate, nicht erst das
+                         naechste Review; ehrlicher SKIP, wo ruff fehlt)
 """
 from __future__ import annotations
 
@@ -134,6 +138,31 @@ def check_handbook_purity(handbook_path):
     return OK, "Handbook-Reinheit: keine Status-Tokens im Handbook"
 
 
+def check_production_ruff(root: Path):
+    """Produktions-Code bleibt Ruff-clean (Default-Regeln; tests/ ausgenommen,
+    dort sind Semikolon-Ketten & Co. bewusste Kompaktheit). Ruff ist eine
+    DEV-Abhaengigkeit: fehlt sie (frische Runtime-Installation), wird ehrlich
+    uebersprungen statt falsch zu blocken - der Pre-Commit-Lauf in der
+    Dev-Umgebung prueft immer."""
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-m", "ruff", "check", ".", "--exclude", "tests",
+             "--output-format", "concise"],
+            cwd=root, capture_output=True, text=True, timeout=120,
+        )
+    except Exception:  # noqa: BLE001 - Gate bleibt ohne ruff lauffaehig
+        return SKIP, "Produktions-Ruff: uebersprungen (ruff nicht ausfuehrbar)"
+    if "No module named" in (proc.stderr or ""):
+        return SKIP, "Produktions-Ruff: uebersprungen (ruff nicht installiert - Dev-Abhaengigkeit)"
+    if proc.returncode == 0:
+        return OK, "Produktions-Ruff: clean (Default-Regeln, ohne tests/)"
+    findings = [ln for ln in (proc.stdout or "").splitlines()
+                if ln.strip() and not ln.startswith("Found ")]
+    sample = f" - z. B. {findings[0]}" if findings else ""
+    return FAIL, (f"Produktions-Ruff: {len(findings)} Befund(e){sample} "
+                  f"(ruff check . --exclude tests)")
+
+
 def git_head_date(root: Path):
     try:
         out = subprocess.run(
@@ -159,6 +188,7 @@ def main() -> int:
     results.append((SKIP, "Stand-Frische: uebersprungen - kein Git-Commit-Datum ermittelbar")
                    if head is None else check_stand_freshness(fm.get("stand", ""), head))
     results.append(check_handbook_purity(find_handbook_md(ROOT)))
+    results.append(check_production_ruff(ROOT))
     return _report(results)
 
 

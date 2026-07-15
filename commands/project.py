@@ -41,9 +41,10 @@ class StartProjectCommand:
         "Legt das Geruest eines neuen Software-Projekts nach dem AI Project "
         "Framework an (z. B. 'starte Projekt jkc', 'lege ein neues Projekt "
         "namens foo an'): eigenes Git-Repo, Governance-Dokumente, erster "
-        "Commit. Sicherheitsstufe 2 - Bestaetigung erforderlich."
+        "Commit. Umkehrbar (Ordner loeschen) - fragt nicht nach (ADR-068, "
+        "PO 14.07.: der eigentliche BAU fragt ohnehin mit Vorschau)."
     )
-    requires_confirmation = True
+    requires_confirmation = False
 
     def execute(self, plan: Plan) -> Result:
         name = str(plan.parameters.get("name") or plan.target or "").strip()

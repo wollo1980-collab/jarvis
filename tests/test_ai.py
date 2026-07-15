@@ -59,6 +59,75 @@ def test_system_prompt_guards_against_musings_and_paraphrasing():
     assert "Bier kaufen" in prompt  # das Live-Beispiel als Anti-Pattern
 
 
+def test_chat_prompt_persona_form_sie_overrides_du():
+    """PO-Entscheidung Nachtmodus 13.07.: Anrede einstellbar. Default bleibt
+    das Du der Stilregeln; persona_form='sie' dreht durchgehend um."""
+    from core.ai import build_chat_system_prompt
+
+    sie = build_chat_system_prompt("", "Martin", persona_form="sie")
+    assert "Du SIEZT" in sie
+
+    du = build_chat_system_prompt("", "Martin")
+    assert "Du SIEZT" not in du
+
+
+def test_chat_prompt_names_memory_origin_when_facts_exist():
+    """Kundenreview 13.07.: persoenliche Fakten nur MIT Herkunfts-Halbsatz
+    verwenden ('aus unserem Gedächtnis weiß ich ...') - Wissen ohne Herkunft
+    wirkt unheimlich. Regel haengt am Gedaechtnis-Block (ohne Fakten unnoetig)."""
+    from core.ai import build_chat_system_prompt
+
+    with_facts = build_chat_system_prompt("arbeitet bei der Post", "Martin")
+    assert "aus unserem Gedächtnis weiß ich" in with_facts
+    assert "unheimlich" in with_facts
+
+    without_facts = build_chat_system_prompt("", "Martin")
+    assert "aus unserem Gedächtnis" not in without_facts
+
+
+def test_system_prompt_routes_termine_to_calendar_and_lage_to_news():
+    """Live-Reibungen 14.07. (Chatlog-Review): 'Ich habe um 16 Uhr einen
+    Termin beim Rewe' wurde Erinnerung statt Kalender; 'Wie ist die Lage?'
+    nach einem Bau wurde Repo-Analyse. Beide Regeln muessen im Router-Prompt
+    stehen (Echt-Probe 14.07.: 4/4 inkl. Gegenproben)."""
+    prompt = build_system_prompt()
+
+    assert "WICHTIG zu Terminen vs. Erinnerungen" in prompt
+    assert "Termin beim Rewe" in prompt
+    assert "auch wenn" in prompt and "Ich-Aussage formuliert" in prompt
+    assert 'WICHTIG zu "Wie ist die Lage?"' in prompt
+    assert "NIEMALS delegate_analysis" in prompt
+
+
+def test_system_prompt_treats_ich_aussagen_as_information():
+    """Live-Reibung 14.07.: 'Ich baue dich für Martin' wurde als
+    Projektstart gedeutet (und start_project fragt seit der Bestätigungs-
+    Diät nicht mehr nach!). Ich-Aussagen über eigenes Tun sind Information
+    (chat, ggf. memory_suggestion) - Projekt-Intents nur bei Aufforderung
+    AN Jarvis."""
+    prompt = build_system_prompt()
+
+    assert "WICHTIG zu Ich-Aussagen" in prompt
+    assert "Ich baue dich für" in prompt            # das Live-Beispiel
+    assert "NIEMALS ein Projektauftrag" in prompt
+    assert "Aufforderung AN DICH" in prompt
+
+
+def test_system_prompt_keeps_thread_for_short_followups():
+    """Spektakulaer #3 (Faden-Probe 13.07.: 'und bei dir?' nach News ->
+    whats_new statt chat): der Router-Prompt braucht die Faden-Regel -
+    Gegenfragen sind chat, aber Anschluss-Fragen mit NEUEN Daten ('und
+    morgen?' nach dem Wetter) behalten ihr Werkzeug (das Gegenbeispiel,
+    das jeden Kurz-Eingabe-Klassifikator widerlegt)."""
+    prompt = build_system_prompt()
+
+    assert "WICHTIG zum Gesprächsverlauf" in prompt
+    assert "und bei dir?" in prompt
+    assert "whats_new" in prompt          # der live gemessene Fehlgriff
+    assert "und morgen?" in prompt        # Gegenbeispiel bleibt Werkzeug
+    assert "fortgeschriebenen Parametern" in prompt
+
+
 def test_prompts_route_project_start_and_forbid_fake_refusals():
     """Nutzungslauf-Befund 2026-07-10 (JKC-Start): 'Du sollst das Projekt
     starten' landete im Chat, und der Chat behauptete, er 'duerfe hier keine
@@ -508,6 +577,69 @@ def test_confirmed_strip_survives_fallback_provider_independent():
         plan = ai.get_plan("fahr runter", [])
 
     assert "confirmed" not in plan.parameters
+
+
+# --- choose_tool: Werkzeug-Wahl fuer den Reasoning-Kern (ADR-060 Scheibe 3a) --
+
+def test_choose_tool_delegates_to_provider_with_reasoning_prompt():
+    """AIEngine.choose_tool reicht den Reasoning-System-Prompt + die um die
+    Nutzereingabe ergaenzten Messages + die Tools an den Provider und gibt
+    dessen Liste 1:1 zurueck."""
+    from core.ai import build_reasoning_system_prompt
+
+    ai = _make_ai()
+    tools = [{"type": "function", "function": {"name": "weather", "parameters": {}}}]
+    with patch.object(ai.provider, "choose_tool",
+                      return_value=[("weather", {"target": "Berlin"})]) as choose:
+        result = ai.choose_tool("wetter in Berlin", [], tools)
+
+    assert result == [("weather", {"target": "Berlin"})]
+    args = choose.call_args.args
+    assert args[0] == build_reasoning_system_prompt()  # System-Prompt
+    assert args[1][-1].content == "wetter in Berlin"    # letzte Message = Eingabe
+    assert args[2] is tools
+
+
+def test_choose_tool_returns_empty_list_when_provider_lacks_function_calling():
+    """Provider ohne choose_tool (z. B. Claude in Phase 1) -> leere Liste, damit
+    der Kern fail-safe auf chat faellt. Kein Handeln, kein Fehler."""
+    from types import SimpleNamespace
+
+    ai = _make_ai()
+    ai.provider = SimpleNamespace()  # kein choose_tool-Attribut
+    ai._providers = {ai._default_name: ai.provider}
+
+    assert ai.choose_tool("hallo", [], []) == []
+
+
+def test_choose_tool_uses_routed_planning_provider():
+    """Ist PLANNING auf einen anderen Provider beregelt, wird DESSEN choose_tool
+    benutzt (dieselbe Router-Aufgabe wie get_plan)."""
+    ai = _make_ai(planning_provider="claude")
+    routed = MagicMock()
+    routed.choose_tool.return_value = [("open_program", {"target": "excel"})]
+    with patch("core.ai.build_named_provider", return_value=routed):
+        result = ai.choose_tool("oeffne excel", [], [])
+
+    assert result == [("open_program", {"target": "excel"})]
+    routed.choose_tool.assert_called_once()
+
+
+def test_choose_tool_feeds_reasoning_decide_end_to_end():
+    """Vertrag: ai.choose_tool ist ein gueltiger ToolCaller fuer
+    reasoning.decide - Werkzeug-Wahl wird zu Plaenen in Router-Form."""
+    from core import reasoning
+
+    ai = _make_ai()
+    # Ein real registriertes Werkzeug waehlen, damit tool_names() es kennt.
+    with patch.object(ai.provider, "choose_tool",
+                      return_value=[("open_program", {"target": "excel",
+                                                      "parameters": {}})]):
+        plans = reasoning.decide("oeffne excel", [], ai.choose_tool)
+
+    assert len(plans) == 1
+    assert plans[0].intent == "open_program"
+    assert plans[0].target == "excel"
 
 
 def test_router_logging_contains_no_prompt_or_answer(caplog):

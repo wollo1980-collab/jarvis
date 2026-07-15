@@ -198,6 +198,25 @@ def test_session_limit_429_gives_friendly_detail(tmp_path: Path):
     assert "success" != result.detail          # nicht der irrefuehrende subtype
 
 
+def test_not_logged_in_gives_actionable_hint(tmp_path: Path):
+    """Live-Reibung 11.07.: der rohe CLI-Fehler 'Not logged in · Please run
+    /login' erreichte den Nutzer. Jetzt eine handlungsweisende Jarvis-Meldung
+    (einmal 'claude' + /login) - egal ob als stderr oder als Fehler-JSON."""
+    # Weg A: stderr, kein JSON.
+    backend = _backend_returning(
+        FakePopen(output=("", "Not logged in · Please run /login"), returncode=1)
+    )
+    detail = backend.analyze(tmp_path, "frage", AgentLimits()).detail
+    assert "angemeldet" in detail.lower() and "/login" in detail
+
+    # Weg B: als Fehler-JSON (result-Feld).
+    payload = {"type": "result", "is_error": True,
+               "result": "Not logged in · Please run /login"}
+    backend2 = _backend_returning(FakePopen(output=(json.dumps(payload), ""), returncode=1))
+    detail2 = backend2.analyze(tmp_path, "frage", AgentLimits()).detail
+    assert "angemeldet" in detail2.lower()
+
+
 def test_nonzero_exit_with_json_error_surfaces_result(tmp_path: Path):
     # Exit != 0, aber verstehbares Fehler-JSON: die result-Meldung wird
     # herausgezogen, statt das rohe JSON durchzureichen.
@@ -238,6 +257,34 @@ def test_work_argv_scopes_writes_to_repo_and_forbids_bash(tmp_path: Path):
     assert "AUSSCHLIESSLICH" in prompt
     assert "Dokumentationspflichten" in prompt  # Befund 10.07.: Gate kam ohne logbook
     assert captured["kwargs"]["cwd"] == str(tmp_path)
+
+
+def test_work_wide_tools_adds_curated_dev_bash_but_no_push(tmp_path: Path):
+    """ADR-056 Scheibe 4b (Wochenend-Bauplan, PO-Wahl A): wide_tools gibt den
+    kuratierten Dev-Werkzeugkasten - Tests/Gate/git-lesen zusaetzlich, aber
+    KEIN commit/push, keine freie Shell. Edit/Write bleiben pfadgebunden."""
+    captured = {}
+    popen = FakePopen(output=(json.dumps({"is_error": False, "result": "ok"}), ""))
+    backend = _backend_returning(popen, captured)
+
+    backend.work(tmp_path, "baue AP5", AgentLimits(timeout_seconds=42.0), wide_tools=True)
+
+    argv = captured["argv"]
+    scope = str(tmp_path).replace("\\", "/")
+    # Token-genau auf der --allowedTools-Liste pruefen (nicht im ganzen argv -
+    # der Prompt erwaehnt "git commit/push" als GRENZE, das ist kein Tool):
+    tools = argv[argv.index("--allowedTools") + 1: argv.index("--output-format")]
+    assert f"Edit({scope}/**)" in tools          # Schreiben bleibt gebunden
+    assert "Bash(pytest*)" in tools              # Tests erlaubt
+    assert "Bash(git status*)" in tools          # git LESEN erlaubt
+    assert "Bash(git diff*)" in tools
+    # Das Folgenreiche ist NICHT dabei (kommt in Scheibe 2 hinter den Haken):
+    assert not any("commit" in t or "push" in t or "rm" in t for t in tools)
+    assert "Bash" not in tools                   # nie die freie, ungebundene Shell
+    # Passender Dev-Auftragsrahmen (erklaert die neuen Rechte + Grenzen):
+    prompt = argv[argv.index("-p") + 1]
+    assert "ERWEITERTEN Werkzeugkasten" in prompt
+    assert "KEIN git commit/push" in prompt
 
 
 # --- Durchsicht / Streaming (ADR-056 Scheibe 1) ----------------------------
@@ -496,3 +543,46 @@ def test_interactive_finishes_cleanly_when_redirect_merged_into_one_turn(tmp_pat
     assert result.text == "beides in einem Zug erledigt"
     assert len(popen.stdin.writes) == 2            # Auftrag + Korrektur gingen raus
     assert popen.stdin.closed
+
+
+def test_work_wide_with_hook_settings_adds_settings_flag(tmp_path: Path):
+    """S4b Scheibe 2 (ADR-071): im Dev-Modus mit Haken haengt --settings an -
+    die Allowlist bleibt unveraendert (der Hook kann nur mit PO-Ja erweitern)."""
+    import json as json_module
+
+    captured = {}
+    popen = FakePopen(output=(json_module.dumps({"is_error": False, "result": "ok"}), ""))
+    backend = _backend_returning(popen, captured)
+    settings = tmp_path / "hook_settings.json"
+
+    backend.work(tmp_path, "bau X", AgentLimits(timeout_seconds=42.0),
+                 wide_tools=True, hook_settings=settings)
+
+    argv = captured["argv"]
+    assert "--settings" in argv
+    assert str(settings) in argv
+    assert "--allowedTools" in argv
+    assert any(a.startswith("Bash(pytest") for a in argv)      # Kur bleibt
+
+
+def test_work_narrow_ignores_hook_settings(tmp_path: Path):
+    """Ohne Dev-Modus (enger Kaefig) wird der Haken NICHT angehaengt."""
+    import json as json_module
+
+    captured = {}
+    popen = FakePopen(output=(json_module.dumps({"is_error": False, "result": "ok"}), ""))
+    backend = _backend_returning(popen, captured)
+
+    backend.work(tmp_path, "bau X", AgentLimits(timeout_seconds=42.0),
+                 wide_tools=False, hook_settings=tmp_path / "hook_settings.json")
+
+    assert "--settings" not in captured["argv"]
+
+
+def test_dev_prompt_warns_about_blocked_system_temp(tmp_path: Path):
+    """UX-S1: der Dev-Auftrags-Rahmen erklaert die Temp-Sperre + den Ausweg."""
+    from core.agent_backend import _DEV_WORK_PROMPT
+
+    prompt = _DEV_WORK_PROMPT.format(repo=tmp_path, task="x")
+    assert "SYSTEM-Temp" in prompt
+    assert "--basetemp=.pytest_tmp" in prompt

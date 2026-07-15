@@ -175,7 +175,13 @@ def _require_ai_engine() -> "AIEngine":
 
 class SystemStatusCommand:
     name = "system_status"
-    description = "Zeigt aktuelle CPU- und RAM-Auslastung an (nur lesen, Sicherheitsstufe 0)."
+    description = (
+        "Zeigt die MOMENTANE Live-Auslastung an - CPU und RAM GERADE JETZT als "
+        "Schnappschuss (z. B. 'wie ausgelastet ist der Rechner gerade?', 'CPU-"
+        "Auslastung', 'Systemstatus'). Nur lesen, Sicherheitsstufe 0. Abgrenzung: "
+        "der ausfuehrliche Gesundheits-Report (Platte, Autostart, Prozesse) ist "
+        "analyze_pc."
+    )
     # Reine Leseaktion (Sicherheitsstufe 0) - keine Bestaetigung noetig.
     requires_confirmation = False
 
@@ -336,10 +342,12 @@ def _format_report_data(data: dict) -> str:
 class AnalyzePcCommand:
     name = "analyze_pc"
     description = (
-        "Erstellt einen PC-Gesundheitsbericht (Festplattenbelegung, Top-"
-        "Prozesse nach CPU/RAM, mehrfach laufende Prozesse, Autostart-"
-        "Programme) - nur Lesen, Sicherheitsstufe 0. Kein target/parameters "
-        "nötig."
+        "Erstellt einen AUSFUEHRLICHEN PC-Gesundheitsbericht (Festplatten-"
+        "belegung, Top-Prozesse nach CPU/RAM, mehrfach laufende Prozesse, "
+        "Autostart-Programme; z. B. 'analysier meinen PC', 'PC-Gesundheits"
+        "check', 'wie steht es um meinen Rechner?'). Nur Lesen, Sicherheits"
+        "stufe 0. Kein target/parameters nötig. Abgrenzung: die reine "
+        "MOMENTANE CPU/RAM-Anzeige (Schnappschuss jetzt) ist system_status."
     )
     # Reine Leseaktion (Sicherheitsstufe 0) - keine Bestaetigung noetig,
     # kein Schreibzugriff irgendeiner Art.
@@ -390,6 +398,8 @@ def _query_event_log(log_name: str) -> str:
         ],
         capture_output=True,
         text=True,
+        # Kein Konsolen-Aufblitzen unter pythonw (PO-Befund 13.07.).
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         timeout=_EVENT_QUERY_TIMEOUT,
         check=True,
     )

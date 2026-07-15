@@ -91,6 +91,8 @@ class InstallProgramCommand:
                 capture_output=True,
                 text=True,
                 timeout=_INSTALL_TIMEOUT_SECONDS,
+                # Kein Konsolen-Aufblitzen unter pythonw (PO-Befund 13.07.).
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
         except subprocess.TimeoutExpired:
             return Result(

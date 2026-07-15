@@ -20,6 +20,7 @@ import os
 from typing import Callable, Optional
 
 from core.mail_reader import MailAccount, MailHeader, fetch_unseen_headers, is_advertising
+from core.mail_triage import triage as _triage
 from core.models import Plan, Result, Status
 from memory.mail_rules import MailRules
 
@@ -28,17 +29,26 @@ logger = logging.getLogger("jarvis.commands.mail")
 _accounts: list[MailAccount] = []
 _rules: Optional[MailRules] = None
 _reader: Callable[[MailAccount], list[MailHeader]] = fetch_unseen_headers
+# Plan C1 (Mail-Triage): injizierter LLM + Schalter; ohne beides bleibt die Liste.
+_triage_fn: Optional[Callable[[str, str], str]] = None
+_triage_enabled: bool = False
 
 
-def configure(config, reader: Optional[Callable[[MailAccount], list[MailHeader]]] = None) -> None:
+def configure(config, reader: Optional[Callable[[MailAccount], list[MailHeader]]] = None,
+              generate_fn: "Optional[Callable[[str, str], str]]" = None) -> None:
     """Von main.py einmal beim Start aufgerufen. Baut die Konten aus
     config.mail_accounts + Env-Passwoertern und den Regel-Speicher im
-    memory_dir. Tests rufen dies mit tmp_path-Config und einem Fake-Reader auf."""
-    global _accounts, _rules, _reader
+    memory_dir. Tests rufen dies mit tmp_path-Config und einem Fake-Reader auf.
+
+    `generate_fn` (Plan C1, optional): LLM fuer die Mail-Triage; nur genutzt, wenn
+    config.mail_triage_enabled. Fehlt er, bleibt die schlichte Liste."""
+    global _accounts, _rules, _reader, _triage_fn, _triage_enabled
     _accounts = _build_accounts(config)
     _rules = MailRules(config.memory_dir)
     if reader is not None:
         _reader = reader
+    _triage_fn = generate_fn
+    _triage_enabled = bool(getattr(config, "mail_triage_enabled", False))
 
 
 def _build_accounts(config) -> list[MailAccount]:
@@ -146,10 +156,15 @@ def _briefing(relevant: list[MailHeader], ads: list[MailHeader], errors: list[st
 
 class CheckMailCommand:
     name = "check_mail"
+    # Beispiel-Vorsicht (Fassaden-Messung 14.07.): das alte Beispiel
+    # 'was liegt an' war ein Koeder - fast wortgleich mit 'was steht an?'
+    # (Termine!) und zog Agenda-Fragen ins Postfach. Beschreibungs-Beispiele
+    # sind ROUTING-SIGNALE (Router-Prompt UND Fassaden-Zeilen) - eindeutig halten.
     description = (
-        "Gibt einen Ueberblick ueber neue/ungelesene private Mails "
-        "(z. B. 'was liegt an', 'neue Mails', 'was ist im Postfach') - "
-        "Werbung wird ausgeblendet, Wichtiges vorgetragen."
+        "Gibt einen Ueberblick ueber neue/ungelesene private E-Mails "
+        "(z. B. 'hab ich neue Mails?', 'was liegt im Postfach?') - "
+        "Werbung wird ausgeblendet, Wichtiges vorgetragen. NICHT fuer "
+        "Termine oder Aufgaben."
     )
     requires_confirmation = False  # Sicherheitsstufe 0 (reines Lesen)
 
@@ -159,12 +174,22 @@ class CheckMailCommand:
             return Result(
                 status=Status.NEEDS_CLARIFICATION,
                 message=(
-                    "Es ist noch kein Mail-Konto eingerichtet. Bitte in config.json unter "
-                    "'mail_accounts' hinterlegen und das App-Passwort als Umgebungsvariable "
-                    "setzen (siehe README)."
+                    "Es ist noch kein Mail-Konto eingerichtet, Sir - das richten wir "
+                    "einmal kurz am Rechner ein (config.json, 'mail_accounts' plus "
+                    "App-Passwort, Anleitung im README). Danach sichte ich deine Post "
+                    "und sage dir, was zuerst wichtig ist."
                 ),
             )
         relevant, ads, errors = _collect()
+        # Plan C1: bei mehreren relevanten Mails priorisiert der LLM sie ("was
+        # zuerst?") - nur aus Kopfzeilen. Fail-safe: leere Triage -> schlichte Liste.
+        if _triage_enabled and _triage_fn is not None and len(relevant) >= 2:
+            lines = [f"- {h.sender_display}: {h.subject or '(kein Betreff)'} ({h.date})"
+                     for h in relevant]
+            summary = _triage(lines, _triage_fn)
+            if summary:
+                tail = ("\n\nHinweis: " + "; ".join(errors) + ".") if errors else ""
+                return Result(status=Status.SUCCESS, message=summary + tail)
         return Result(status=Status.SUCCESS, message=_briefing(relevant, ads, errors, show_ads=False))
 
 

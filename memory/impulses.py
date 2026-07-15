@@ -28,7 +28,7 @@ import threading
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from core.fileio import read_json, write_json_atomic
 from core.redaction import redact
@@ -79,20 +79,32 @@ class ImpulseStore:
             return False
 
     def list_open(self) -> list[dict[str, Any]]:
-        """Offene Impulse (Kopien), juengste zuerst - fuer die Dashboard-Karten."""
+        """Offene Impulse (Kopien), juengste zuerst - fuer die Dashboard-Karten.
+
+        Tageslage-Regel (PO-Reibung 14.07.: die 'Hitze heute'-Karte stand am
+        Folgetag um 06:03 noch da - 'ich weiss ja nicht, ob das heute wieder
+        gilt'): Impulse sind TAGES-Aussagen. Eintraege frueherer Tage fallen
+        beim Lesen still aus `open` (NICHT nach dismissed - gilt die Lage
+        weiter, darf die Engine heute einen frischen Impuls legen)."""
         try:
+            today = datetime.now().date().isoformat()
             with self._lock:
-                items = list(self._read()["open"])
+                data = self._read()
+                fresh = [i for i in data["open"] if str(i.get("created", ""))[:10] == today]
+                if len(fresh) != len(data["open"]):
+                    data["open"] = fresh
+                    self._write(data)
+                items = list(fresh)
         except Exception:  # noqa: BLE001
             return []
         return sorted(items, key=lambda i: str(i.get("created", "")), reverse=True)
 
     def count_open(self) -> int:
-        try:
-            with self._lock:
-                return len(self._read()["open"])
-        except Exception:  # noqa: BLE001
-            return 0
+        """Zaehlt nur HEUTIGE offene Impulse (Live-Befund 15.07.: drei
+        Alt-Karten vom 13./14. zaehlten mit und haetten den 5er-Deckel
+        verstopft - neue Impulse waeren ausgeblieben). Nutzt list_open(),
+        das Vergangenes dabei gleich aus der Datei raeumt."""
+        return len(self.list_open())
 
     def dismiss(self, id_or_key: str) -> bool:
         """Klickt einen Impuls weg: aus `open` entfernen und seinen key in die

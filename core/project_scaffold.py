@@ -34,10 +34,16 @@ _GITIGNORE = """__pycache__/
 *.pyc
 .venv/
 .pytest_cache/
+.pytest_tmp/
 """
 
+# --basetemp haelt pytest-Tempdateien (tmp_path!) IM Projekt: die Bau-Sandbox
+# sperrt das System-Temp - ohne basetemp scheitert jedes tmp_path-Fixture und
+# der Agent verbrennt sein Zeitlimit daran (PO-Live-Befund 13.07.2026,
+# mini-video-tool: 600s-Timeout im Kampf gegen genau diese Falle).
 _PYTEST_INI = """[pytest]
 testpaths = tests
+addopts = --basetemp=.pytest_tmp
 """
 
 
@@ -49,6 +55,10 @@ def _run_git(args: list[str], cwd: Path) -> str:
         text=True,
         encoding="utf-8",
         check=True,
+        # PO-Befund 13.07.: die Runtime laeuft fensterlos (pythonw) - ohne
+        # dieses Flag reisst JEDER git-Aufruf kurz ein Konsolenfenster auf
+        # (beim ersten Bau blitzte das Terminal mehrfach auf).
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
     return result.stdout.strip()
 

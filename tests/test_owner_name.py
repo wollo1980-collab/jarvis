@@ -11,7 +11,7 @@ from unittest.mock import MagicMock
 import core.config as config_module
 import dashboard
 from core.config import Config, persist_config_value
-from core.models import Message, Plan, Status
+from core.models import Plan, Status
 from core.planner import Planner, _owner_name_plan
 from memory.long_term import LongTermMemory
 
@@ -47,6 +47,21 @@ def test_owner_name_plan_erkennt_sag_x_zu_mir():
 def test_owner_name_plan_erkennt_du_darfst_mich_nennen():
     plan = _owner_name_plan("du darfst mich Max nennen")
     assert plan is not None and plan.target == "Max"
+
+
+def test_owner_name_plan_ueberspringt_fuellwoerter():
+    """Live-Reibung 11.07.2026: Fuellwoerter zwischen 'nenn mich' und dem Namen
+    ('ab sofort wieder', 'ab jetzt wieder') brachen die Extraktion -> 'wieder'
+    wurde als Name gelesen -> Stoppwort -> Rueckfrage-Schleife. Jetzt egal."""
+    for satz in (
+        "Nenn mich ab sofort wieder Martin.",
+        "Nenn mich ab jetzt wieder Martin.",
+        "nenn mich bitte wieder Martin",
+        "nenn mich einfach Martin",
+        "nenne mich von jetzt an Martin",
+    ):
+        plan = _owner_name_plan(satz)
+        assert plan is not None and plan.target == "Martin", satz
 
 
 def test_owner_name_plan_ignoriert_fakt_ueber_dritte():

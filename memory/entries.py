@@ -21,6 +21,7 @@ vorwaertskompatibel zum A2-Scheduler-Thread, der denselben Store liest.
 from __future__ import annotations
 
 import logging
+import re
 import threading
 import uuid
 from dataclasses import dataclass, field
@@ -36,6 +37,11 @@ logger = logging.getLogger("jarvis.memory.entries")
 # Laenge eines reinen ISO-Datums ("2026-07-12") - ohne Uhrzeit gilt der
 # Eintrag bis Tagesende als offen (nicht ab Mitternacht als "vergangen").
 _DATE_ONLY_LEN = 10
+
+# Papierkorb (Bestaetigungs-Diaet 14.07., Muster memory/long_term.py):
+# Geloeschtes wandert in eine EIGENE Datei (kein Schema-Bruch fuer die
+# entries.json-Leser) und bleibt wiederherstellbar.
+_TRASH_CAP = 100
 
 # Wiederholung (ADR-052): v1 bewusst nur taeglich + woechentlich. Aliase
 # normalisieren die Planner-Schreibweisen; Unbekanntes wird ehrlich zu ""
@@ -149,16 +155,43 @@ def is_due(when: str) -> bool:
     return dt <= now
 
 
-def format_when(when: str) -> str:
-    """ISO 8601 -> lesbares Deutsch: '12.07.2025' (ganztaegig) bzw.
-    '10.07.2026 09:00'. Nicht parsebares when kommt roh zurueck (fail-safe)."""
+_WEEKDAYS_DE = ("Montag", "Dienstag", "Mittwoch", "Donnerstag",
+                "Freitag", "Samstag", "Sonntag")
+
+
+def format_when(when: str, mark_past: bool = False) -> str:
+    """ISO 8601 -> natuerliches Deutsch, RELATIV wo es natuerlich klingt:
+    'heute um 14:45', 'morgen um 9:00', 'am Montag um 9:00', 'gestern um 8:00';
+    weiter weg absolut '12.07.2026 um 14:45'. Ganztaegig ohne Uhrzeit ('heute',
+    'morgen', 'am Montag', '12.07.2026'). Nicht parsebares when kommt roh
+    zurueck (fail-safe). Kein fuehrendes 'um' - Aufrufer setzen keins davor.
+
+    mark_past=True kennzeichnet Vergangenes als 'war fällig heute um 09:00'
+    (Kundenreview 13.07., 'Eine gemeinsame Wahrheit': ein 09:00-Termin darf
+    abends NIRGENDS mehr wie anstehend klingen - Eintragsliste, Gedaechtnis-
+    Ansicht und Antwort-Composer haengen alle an dieser einen Stelle).
+    Default False: Echos beim ANLEGEN nennen nie Vergangenes."""
     try:
         dt = datetime.fromisoformat(when)
     except ValueError:
         return when
-    if len(when) == _DATE_ONLY_LEN:
-        return dt.strftime("%d.%m.%Y")
-    return dt.strftime("%d.%m.%Y %H:%M")
+    delta = (dt.date() - datetime.now().date()).days
+    if delta == 0:
+        day = "heute"
+    elif delta == 1:
+        day = "morgen"
+    elif delta == 2:
+        day = "übermorgen"
+    elif delta == -1:
+        day = "gestern"
+    elif 2 < delta <= 6:
+        day = f"am {_WEEKDAYS_DE[dt.weekday()]}"
+    else:
+        day = dt.strftime("%d.%m.%Y")
+    text = day if len(when) == _DATE_ONLY_LEN else f"{day} um {dt.strftime('%H:%M')}"
+    if mark_past and is_past(when):
+        return f"war fällig {text}"
+    return text
 
 
 def _sort_key(entry: Entry) -> tuple:
@@ -170,6 +203,7 @@ def _sort_key(entry: Entry) -> tuple:
 class EntryStore:
     def __init__(self, memory_dir: Path):
         self.path = Path(memory_dir) / "entries.json"
+        self.trash_path = Path(memory_dir) / "entries_trash.json"
         self._lock = threading.RLock()
         with self._lock:
             if not self.path.exists():
@@ -283,7 +317,11 @@ class EntryStore:
 
         exact=True (Nacht-Audit-Fix B): NUR exakter Text-Treffer - fuer die
         stillen UI-Endpunkte, die den vollstaendigen Text kennen. Ein Klick
-        auf «Zahnarzt» darf nie «Zahnarzt Kontrolltermin» treffen."""
+        auf «Zahnarzt» darf nie «Zahnarzt Kontrolltermin» treffen.
+
+        Seit 14.07. (Bestaetigungs-Diaet): Geloeschtes wandert in den
+        Papierkorb (entries_trash.json) statt hart zu verschwinden -
+        restore() holt es zurueck."""
         needle = (id_or_text or "").strip()
         if not needle:
             return None
@@ -293,7 +331,8 @@ class EntryStore:
                 if d.get("id") == needle:
                     removed = data.pop(i)
                     self._write(data)
-                    logger.info("Eintrag geloescht (per id): %s", removed.get("text"))
+                    self._to_trash(removed)
+                    logger.info("Eintrag geloescht (per id, im Papierkorb): %s", removed.get("text"))
                     return Entry.from_dict(removed)
             lowered = needle.lower()
             for i, d in enumerate(data):
@@ -302,9 +341,108 @@ class EntryStore:
                 if hit:
                     removed = data.pop(i)
                     self._write(data)
-                    logger.info("Eintrag geloescht (per Text): %s", removed.get("text"))
+                    self._to_trash(removed)
+                    logger.info("Eintrag geloescht (per Text, im Papierkorb): %s", removed.get("text"))
                     return Entry.from_dict(removed)
         return None
+
+    def restore(self, text: str = "") -> Optional[Entry]:
+        """Holt den juengsten passenden Eintrag (Teilstring, case-insensitive)
+        aus dem Papierkorb zurueck. None = nichts gefunden. Leerer Suchtext =
+        der zuletzt geloeschte Eintrag (Undo-Geste). Der Eintrag kommt
+        UNVERAENDERT zurueck (gleiche id, gleicher notified-Stand) - das
+        Loeschen war ein Versehen, also gilt wieder der alte Zustand."""
+        needle = (text or "").strip().lower()
+        with self._lock:
+            trash = self._read_trash()
+            for i in range(len(trash) - 1, -1, -1):
+                entry = trash[i]
+                if needle and needle not in str(entry.get("text", "")).lower():
+                    continue
+                trash.pop(i)
+                write_json_atomic(self.trash_path, trash)
+                entry.pop("deleted_at", None)
+                data = self._read()
+                data.append(entry)
+                self._write(data)
+                logger.info("Eintrag wiederhergestellt: %s", entry.get("text", ""))
+                return Entry.from_dict(entry)
+        return None
+
+    def trash_entries(self) -> list[Entry]:
+        """Der Papierkorb-Inhalt (neueste zuletzt) - fuer Anzeige/Diagnose."""
+        with self._lock:
+            return [Entry.from_dict(d) for d in self._read_trash()]
+
+    def _to_trash(self, entry_dict: dict[str, Any]) -> None:
+        trash = self._read_trash()
+        entry = dict(entry_dict)
+        entry["deleted_at"] = datetime.now(timezone.utc).isoformat()
+        trash.append(entry)
+        if len(trash) > _TRASH_CAP:
+            trash = trash[-_TRASH_CAP:]
+        write_json_atomic(self.trash_path, trash)
+
+    def _read_trash(self) -> list[dict[str, Any]]:
+        data = read_json(self.trash_path, [])
+        return data if isinstance(data, list) else []
+
+    def update(
+        self,
+        id_or_text: str,
+        when: Optional[str] = None,
+        important: Optional[bool] = None,
+    ) -> Optional[Entry]:
+        """Aendert einen BESTEHENDEN Eintrag: verschiebt den Zeitpunkt und/oder
+        setzt das Wichtig-Flag. Findet ihn per exakter id, sonst per Text-
+        Teilstring (case-insensitive), wie delete(). Nur uebergebene Felder
+        (nicht None) werden geaendert. Ein neuer, zukuenftiger Zeitpunkt macht
+        den Eintrag wieder MELDBAR (notified=False, damit der Scheduler ihn
+        erneut feuert); ein vergangener/leerer bleibt still. Gibt den
+        geaenderten Eintrag zurueck oder None (kein Treffer)."""
+        needle = (id_or_text or "").strip()
+        if not needle:
+            return None
+        lowered = needle.lower()
+        with self._lock:
+            data = self._read()
+            match = None
+            for d in data:
+                if d.get("id") == needle:
+                    match = d
+                    break
+            if match is None:
+                for d in data:
+                    if lowered in d.get("text", "").lower():
+                        match = d
+                        break
+            # Kein Text-Treffer? Der Nutzer benennt den Termin oft ueber seine
+            # ZEIT ("der 15-Uhr-Termin") - dann per Uhrzeit im when suchen.
+            if match is None:
+                hm = re.search(r"\b(\d{1,2})(?::(\d{2}))?\s*uhr\b|\b(\d{1,2}):(\d{2})\b", lowered)
+                if hm:
+                    hh = int(hm.group(1) or hm.group(3))
+                    mm = hm.group(2) or hm.group(4) or "00"
+                    stamp = f"T{hh:02d}:{mm}"
+                    for d in data:
+                        if stamp in (d.get("when") or ""):
+                            match = d
+                            break
+            if match is None:
+                return None
+            if when is not None:
+                clean = when.strip()
+                match["when"] = clean
+                # Neuer zukuenftiger Zeitpunkt -> wieder meldbar; sonst still.
+                match["notified"] = (not clean or is_past(clean))
+            if important is not None:
+                match["important"] = bool(important)
+            self._write(data)
+            updated = Entry.from_dict(match)
+        logger.info("Eintrag geaendert: %s (faellig %s, %s)",
+                    updated.text, updated.when or "-",
+                    "wichtig" if updated.important else "normal")
+        return updated
 
     def _read(self) -> list[dict[str, Any]]:
         return read_json(self.path, [])

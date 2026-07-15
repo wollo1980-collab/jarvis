@@ -1,7 +1,8 @@
 openai>=1.0.0
-pytest>=8.0.0
 psutil>=5.9.0
 openpyxl>=3.1.0
+# Dev-Werkzeuge (pytest, ruff) leben in requirements-dev.txt - der reine
+# Betrieb braucht sie nicht (Truth Repair II: runtime/dev getrennt).
 # piper-tts>=1.2.0  # optional, TTS-Backend "piper" (Standard) - siehe README "Piper TTS einrichten"
 # elevenlabs>=1.0.0  # optional, TTS-Backend "elevenlabs" - siehe README "TTS-Backend wechseln"
 # kokoro-onnx>=0.4.0  # optional, TTS-Backend "kokoro" - siehe README "TTS-Backend wechseln"

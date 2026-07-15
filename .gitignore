@@ -20,3 +20,6 @@ Voices/
 
 # Ersetzungstabelle des Schaufenster-Exports (Welle 4.2 Phase 3) - bleibt lokal.
 export_replacements_local.txt
+
+# Coverage-Artefakt (pytest-cov)
+.coverage

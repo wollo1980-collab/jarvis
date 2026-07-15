@@ -89,3 +89,24 @@ def test_handbook_purity_clean(tmp_path):
     hb = tmp_path / "HANDBOOK.md"
     hb.write_text("Jarvis steht auf der Seite seines Nutzers.", encoding="utf-8")
     assert gate.check_handbook_purity(hb)[0] == gate.OK
+
+
+# --- Produktions-Ruff (Truth Repair II, 14.07.2026) --------------------------
+
+def test_production_ruff_clean_and_fail(tmp_path):
+    """Clean-Repo -> OK; ein Lint-Befund im Produktionscode -> FAIL mit
+    Beispielzeile. tests/ ist ausgenommen (dort bleibt Kompaktheit erlaubt)."""
+    import pytest
+
+    (tmp_path / "gut.py").write_text("x = 1\n", encoding="utf-8")
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_x.py").write_text("a = 1; b = 2\n", encoding="utf-8")
+    status, msg = gate.check_production_ruff(tmp_path)
+    if status == gate.SKIP:
+        pytest.skip("ruff nicht installiert - Check greift nur in der Dev-Umgebung")
+    assert status == gate.OK, msg          # tests/-Befund zaehlt NICHT
+
+    (tmp_path / "schlecht.py").write_text("import os; import sys\n", encoding="utf-8")
+    status, msg = gate.check_production_ruff(tmp_path)
+    assert status == gate.FAIL
+    assert "schlecht.py" in msg            # Beispielzeile nennt die Fundstelle

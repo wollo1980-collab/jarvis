@@ -28,6 +28,7 @@ import commands.memory as memory_commands
 import commands.news as news_commands
 import commands.owner as owner_commands
 import commands.weather as weather_commands
+import commands.spotify as spotify_commands
 import commands.plan as plan_commands
 import commands.project as project_commands
 import commands.monitor as monitor_commands
@@ -130,6 +131,8 @@ def main() -> None:
         news_commands.configure(config.news_feeds, timeout_seconds=config.timeout)
         # Wetter (ADR-043): Standard-Ort aus der Config.
         weather_commands.configure(config.weather_default_location, timeout_seconds=config.timeout)
+        # Spotify (ADR-058): Client aus der Config, fehlende Credentials = aus.
+        spotify_commands.configure(config)
         # Projektstart (ADR-049): Pfade aus der Config, leer = aus.
         project_commands.configure(config.projects_root, config.framework_repo)
 

@@ -29,10 +29,14 @@ if (-not (Test-Path "$repo\.venv")) {
     Write-Host "  [2/4] Virtuelle Umgebung existiert bereits."
 }
 
-# 3. Pakete installieren
-Write-Host "  [3/4] Installiere Pakete (requirements-runtime.txt) - dauert einen Moment ..."
+# 3. Pakete installieren - REPRODUZIERBAR: der Laufzeit-Stack
+#    (requirements-runtime.txt) wird ueber requirements.lock auf die
+#    erprobten Versionen gepinnt (Constraints installieren nichts extra,
+#    sie fixieren nur). Dev-Werkzeuge (pytest/ruff) bleiben draussen -
+#    Entwickler nehmen requirements-dev.txt (siehe README).
+Write-Host "  [3/4] Installiere Pakete (runtime, gepinnt via requirements.lock) - dauert einen Moment ..."
 & "$repo\.venv\Scripts\python.exe" -m pip install --quiet --upgrade pip
-& "$repo\.venv\Scripts\python.exe" -m pip install --quiet -r "$repo\requirements-runtime.txt"
+& "$repo\.venv\Scripts\python.exe" -m pip install --quiet -r "$repo\requirements-runtime.txt" -c "$repo\requirements.lock"
 
 # 4. config.json aus der Vorlage (niemals eine bestehende ueberschreiben)
 if (-not (Test-Path "$repo\config.json")) {

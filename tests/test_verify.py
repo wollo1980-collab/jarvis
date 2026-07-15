@@ -145,7 +145,7 @@ def test_verify_command_unknown_repo_fails(tmp_path):
     result = vcmd.VerifyRepoCommand().execute(Plan(intent="verify_repo", target="fremd"))
 
     assert result.status == Status.FAILED
-    assert "nicht freigegeben" in result.message
+    assert "kann ich nicht pruefen" in result.message
 
 
 def test_verify_command_no_repos_configured_asks(tmp_path):

@@ -6,7 +6,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import commands.memory as memory_commands
-from commands.memory import ForgetFactCommand, ListFactsCommand, RememberFactCommand
+from commands.memory import (
+    ForgetFactCommand,
+    ListFactsCommand,
+    RememberFactCommand,
+    RestoreFactCommand,
+)
 from core.models import Plan, Status
 
 
@@ -46,6 +51,49 @@ def test_remember_fact_defaults_to_allgemein_without_category(tmp_path: Path):
 
     facts = memory_commands._require_long_term().all_facts()
     assert facts[0].category == "allgemein"
+
+
+def test_remember_fact_refuses_semantic_twin_and_names_it(tmp_path: Path):
+    """Kundenreview 13.07. (Duplikate): meldet die Sinn-Nachbar-Suche einen
+    bestehenden sinngleichen Fakt, wird NICHT gespeichert - die Antwort nennt
+    den Bestand und die Tuer (umformulieren). Fail-open: wirft die Suche,
+    wird normal gespeichert."""
+    memory_commands.configure(tmp_path, similar_fact_fn=lambda text: "trinkt Kaffee schwarz")
+    memory_commands._require_long_term().remember("trinkt Kaffee schwarz")
+    cmd = RememberFactCommand()
+
+    result = cmd.execute(Plan(intent="remember_fact", target="mag seinen Kaffee schwarz"))
+
+    assert result.status == Status.SUCCESS
+    assert "sinngemäß schon notiert" in result.message
+    assert "trinkt Kaffee schwarz" in result.message
+    assert len(memory_commands._require_long_term().all_facts()) == 1
+
+    def broken(text):
+        raise RuntimeError("index kaputt")
+
+    memory_commands.configure(tmp_path, similar_fact_fn=broken)
+    cmd.execute(Plan(intent="remember_fact", target="wohnt in Musterstadt"))
+    assert len(memory_commands._require_long_term().all_facts()) == 2
+
+
+def test_forget_mentions_trash_and_restore_command_brings_back(tmp_path: Path):
+    """Undo statt Rueckfrage: das Vergessen nennt den Rueckweg, und
+    restore_fact holt den Fakt zurueck (ohne target: den zuletzt geloeschten)."""
+    memory_commands.configure(tmp_path)
+    memory_commands._require_long_term().remember("macht montags Reports", category="gewohnheit")
+
+    gone = ForgetFactCommand().execute(Plan(intent="forget_fact", target="montags"))
+    assert "stell den Fakt wieder her" in gone.message
+
+    back = RestoreFactCommand().execute(Plan(intent="restore_fact", target=None))
+    assert back.status == Status.SUCCESS
+    assert "macht montags Reports" in back.message
+    facts = memory_commands._require_long_term().all_facts()
+    assert [f.text for f in facts] == ["macht montags Reports"]
+
+    empty = RestoreFactCommand().execute(Plan(intent="restore_fact", target="gibtsnicht"))
+    assert empty.status == Status.FAILED
 
 
 def test_forget_fact_needs_target(tmp_path: Path):

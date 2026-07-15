@@ -127,7 +127,11 @@ def rejection_reason(
     unveraendert bestehen (Defense-in-depth)."""
     allowed_intents = ALLOWED_INTENTS if allowed is None else allowed
     if step.intent not in allowed_intents:
-        return f"'{step.intent}' ist per Telegram (Phase 1) nicht verfügbar."
+        return (
+            "Das kann ich hier im Telegram-Chat (noch) nicht ausführen, Sir — am "
+            "Rechner geht es: sag dort einfach denselben Satz. "
+            f"(Fähigkeit: {step.intent})"
+        )
 
     command = REGISTRY.get(step.intent)
     if (
@@ -136,8 +140,9 @@ def rejection_reason(
         and getattr(command, "requires_confirmation", False)
     ):
         return (
-            f"'{step.intent}' erfordert eine Bestätigung (Sicherheitsstufe 2/3) "
-            "- per Telegram nicht erlaubt."
+            "Dafür brauche ich deine ausdrückliche Bestätigung, und dieser Kanal "
+            "hat keinen sicheren Bestätigungsweg, Sir — bitte am Rechner "
+            f"ausführen. (Fähigkeit: {step.intent})"
         )
     return None
 

@@ -1,4 +1,4 @@
-"""Tests fuer den Impuls-Kreislauf (Endsystem-Kampagne, ADR-054):
+﻿"""Tests fuer den Impuls-Kreislauf (Endsystem-Kampagne, ADR-054):
 ImpulseStore (Persistenz + dedupe + Nein-Liste), ImpulseEngine (Takt,
 Deckel, Ruhefenster, Fail-safe) und der Unwetter-Pruefer. Keine echten
 Netz-/Zeitquellen - alles injiziert."""
@@ -6,7 +6,6 @@ from __future__ import annotations
 
 from datetime import datetime
 
-import pytest
 
 from core.impulses import ImpulseEngine, make_weather_checker
 from memory.impulses import ImpulseStore
@@ -20,6 +19,29 @@ def test_add_if_new_dedupes_same_key(tmp_path):
     # Gleicher key -> kein zweiter Impuls.
     assert store.add_if_new("weather", "weather-storm-2026-07-11", "Unwetter", "Andere Details") is False
     assert store.count_open() == 1
+
+
+def test_count_open_ignores_and_purges_stale_days(tmp_path):
+    """Live-Befund 15.07.: drei Alt-Karten (13./14.) zaehlten im Deckel mit -
+    der 5er-Deckel waere verstopft, neue Impulse ausgeblieben. count_open
+    zaehlt nur HEUTIGES und raeumt Vergangenes dabei aus der Datei."""
+    import json
+
+    store = ImpulseStore(tmp_path)
+    store.add_if_new("weather", "weather-heat-heute", "Hitze", "bis 32°")
+    # Alt-Eintraege direkt in die Datei legen (wie vom Vortag liegengeblieben).
+    data = json.loads((tmp_path / "impulses.json").read_text(encoding="utf-8"))
+    data["open"] += [
+        {"id": "alt1", "kind": "weather", "key": "weather-heat-2026-07-13",
+         "title": "Hitze", "detail": "alt", "created": "2026-07-13T06:01:04"},
+        {"id": "alt2", "kind": "weather", "key": "weather-storm-2026-07-14",
+         "title": "Unwetter", "detail": "alt", "created": "2026-07-14T06:29:47"},
+    ]
+    (tmp_path / "impulses.json").write_text(json.dumps(data), encoding="utf-8")
+
+    assert store.count_open() == 1                     # nur heute zaehlt
+    kept = json.loads((tmp_path / "impulses.json").read_text(encoding="utf-8"))["open"]
+    assert [i["key"] for i in kept] == ["weather-heat-heute"]   # Datei geraeumt
 
 
 def test_dismiss_adds_to_nein_list_and_blocks_readd(tmp_path):
@@ -89,6 +111,32 @@ def test_engine_adds_from_checker(tmp_path):
     added = engine.run(now=_NOON)
 
     assert added == 1
+    assert store.count_open() == 1
+
+
+def test_engine_on_new_fires_once_per_new_impulse(tmp_path):
+    """Plan F: on_new wird je WIRKLICH neuem Impuls genau EINMAL gerufen -
+    beim zweiten Lauf (dedupe) nicht mehr."""
+    store = ImpulseStore(tmp_path)
+    checker = lambda: [{"kind": "weather", "key": "k1", "title": "Sturm", "detail": "Hagel"}]
+    engine = ImpulseEngine(store, [checker])
+    pushed = []
+
+    engine.run(now=_NOON, on_new=lambda cand: pushed.append(cand["title"]))
+    engine.run(now=_NOON, on_new=lambda cand: pushed.append(cand["title"]))  # dedupe
+
+    assert pushed == ["Sturm"]
+
+
+def test_engine_on_new_error_does_not_stop_run(tmp_path):
+    store = ImpulseStore(tmp_path)
+    checker = lambda: [{"kind": "weather", "key": "k1", "title": "T", "detail": "D"}]
+    engine = ImpulseEngine(store, [checker])
+
+    def boom(cand):
+        raise RuntimeError("push kaputt")
+
+    assert engine.run(now=_NOON, on_new=boom) == 1     # Impuls trotzdem gelegt
     assert store.count_open() == 1
 
 
@@ -214,3 +262,29 @@ def test_dismiss_impulse_is_not_a_registry_command():
 
     assert "dismiss_impulse" not in REGISTRY
     assert "dismiss_impulse" not in build_system_prompt()
+
+
+def test_list_open_drops_impulses_from_previous_days(tmp_path):
+    """PO-Reibung 14.07.: die 'Hitze heute'-Karte stand am Folgetag noch da.
+    Impulse sind Tages-Aussagen: Vortags-Eintraege fallen beim Lesen still
+    weg (nicht nach dismissed - derselbe key darf heute frisch kommen)."""
+    import json
+    from datetime import datetime, timedelta
+
+    from memory.impulses import ImpulseStore
+
+    store = ImpulseStore(tmp_path)
+    store.add_if_new("weather", "hitze", "Hitze heute", "bis 32 Grad")
+    gestern = (datetime.now() - timedelta(days=1)).isoformat(timespec="seconds")
+    path = tmp_path / "impulses.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["open"].append({"id": "alt1", "kind": "weather", "key": "hitze-gestern",
+                         "title": "Hitze heute", "detail": "alt", "created": gestern})
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+    offen = store.list_open()
+
+    assert [i["key"] for i in offen] == ["hitze"]      # nur der heutige
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    assert [i["key"] for i in saved["open"]] == ["hitze"]          # Datei bereinigt
+    assert "hitze-gestern" not in saved["dismissed"]   # key bleibt frei fuer heute

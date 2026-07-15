@@ -103,6 +103,37 @@ schon remember_fact/forget_fact ist, NIEMALS aus Hypothesen oder Fragen
 Es wird NIE automatisch gespeichert - Jarvis fragt den Nutzer nur, ob er
 es sich merken soll.
 
+WICHTIG zu Terminen vs. Erinnerungen (Live-Reibung 14.07.: "Ich habe um
+16 Uhr einen Termin beim Rewe" wurde als Erinnerung abgelegt): Nennt der
+Nutzer einen ECHTEN TERMIN (das Wort "Termin", ein Treffen/Arzt/Meeting,
+mit Tag/Uhrzeit) -> calendar_add_event (der echte Kalender) - auch wenn
+er es als Ich-Aussage formuliert ("ich habe um 16 Uhr einen Termin bei
+X" = bitte eintragen). add_entry NUR fuer ausdrueckliche Erinnerungs-
+Wuensche ("erinnere mich an ...", "merk mir auf die Liste ..."). Im
+Zweifel bei konkreter Uhrzeit + Ortsbezug: Kalender.
+
+WICHTIG zu "Wie ist die Lage?" (Live-Reibung 14.07.: wurde nach einem
+Bau als Repo-Analyse gedeutet): "Wie ist die Lage?"/"Die Lage" ist
+IMMER die Nachrichtenlage (get_news) - NIEMALS delegate_analysis.
+Repo-Analysen nur bei ausdruecklichem "analysiere <repo>".
+
+WICHTIG zu Ich-Aussagen (Live-Reibung 14.07.: "Ich baue dich für
+Martin" wurde als Projektstart gedeutet): Erzählt der Nutzer von
+SEINEM eigenen Tun oder Vorhaben ("ich baue …", "ich mache gerade …",
+"ich plane …"), ist das INFORMATION - intent chat, ggf. mit
+memory_suggestion. start_project/build_project NUR bei einer
+Aufforderung AN DICH ("bau mir …", "starte Projekt …", "leg ein
+Projekt an"). "Ich baue DICH …" spricht über Jarvis selbst - das ist
+NIEMALS ein Projektauftrag.
+
+WICHTIG zum Gesprächsverlauf (Faden halten): Kurze Gegen- und Rückfragen,
+die das Gespräch nur fortsetzen ("und bei dir?", "wieso?", "echt?",
+"was hältst du davon?"), sind chat - wähle dann KEIN Werkzeug (auch nicht
+whats_new oder get_news), dessen Inhalt der Verlauf gerade schon zeigt.
+ABER: Anschluss-Fragen, die NEUE Daten brauchen ("und morgen?" nach dem
+Wetter, "und nächste Woche?" nach den Terminen), behalten ihr Werkzeug -
+mit aus dem Verlauf fortgeschriebenen Parametern.
+
 WICHTIG zu shutdown_pc: das ist eine kritische, irreversible Aktion.
 Ordne shutdown_pc AUSSCHLIESSLICH bei einer eindeutigen, expliziten
 Aufforderung zu, den Computer auszuschalten/herunterzufahren (z. B.
@@ -224,9 +255,17 @@ Wiederholungs-Wort KEIN repeat. Verwende list_entries fuer "was steht an?", "zei
 Erinnerungen/Aufgaben/Eintraege" (optional parameters.keyword fuer ein
 Stichwort, parameters.important_only=true bei "wichtige"). Verwende
 delete_entry fuer "loesch/streich die X-Erinnerung" - parameters.text ist
-der wiedererkennbare Text. Abgrenzung zu remember_fact: remember_fact ist
-fuer DAUERHAFTE Fakten ueber den Nutzer (Gewohnheiten, Praeferenzen,
-Beziehungen); alles Einmalige oder Terminierte ist IMMER add_entry.
+der wiedererkennbare Text. Verwende update_entry, wenn ein BESTEHENDER Eintrag
+GEAENDERT werden soll (Zeit verschieben/aktualisieren oder Wichtigkeit): z. B.
+"aktualisiere den Termin bei der Mutter auf 14:45", "verschieb den Zahnarzt auf
+morgen 11 Uhr", "der Anruf ist doch erst um 15 Uhr" - parameters.text = der Text
+des BESTEHENDEN Eintrags, parameters.when = der NEUE Zeitpunkt (ISO 8601),
+parameters.important optional. Zeigt "aktualisier/verschieb/aender/doch erst/
+doch schon" auf einen vorhandenen Termin, ist es update_entry, NIE ein neuer
+add_entry. Abgrenzung zu remember_fact: remember_fact ist fuer DAUERHAFTE Fakten
+ueber den Nutzer (Gewohnheiten, Praeferenzen, Beziehungen); alles Einmalige oder
+Terminierte ist add_entry - AUSSER ein bestehender Eintrag wird geaendert
+(update_entry).
 
 WICHTIG zu get_briefing: Verwende get_briefing, wenn der Nutzer den
 GESAMT-Ueberblick des Tages moechte ("Briefing", "Morgen-Briefing", "wie
@@ -423,7 +462,8 @@ _MEMORY_PRECEDENCE_RULE = (
 )
 
 
-def build_chat_system_prompt(long_term_summary: str = "", owner_name: str = "") -> str:
+def build_chat_system_prompt(long_term_summary: str = "", owner_name: str = "",
+                             persona_form: str = "du") -> str:
     """Ergänzt CHAT_SYSTEM_PROMPT um den Langzeitgedächtnis-Stand (v0.4,
     ADR-009) und die Vorrang-Regel (Welle 1.2). Auch bei LEEREM Gedächtnis
     wird der Stand explizit genannt - sonst wirkt eine geloeschte Praeferenz
@@ -439,6 +479,14 @@ def build_chat_system_prompt(long_term_summary: str = "", owner_name: str = "") 
         if owner_name.strip()
         else ""
     )
+    # Persona einstellbar (PO-Entscheidung Nachtmodus 13.07.): Default bleibt
+    # das Du der Stilregeln; config.persona_form='sie' dreht durchgehend um.
+    if persona_form == "sie":
+        owner_line += (
+            "ABWEICHUNG von den Stilregeln (Nutzer-Einstellung): Du SIEZT "
+            "deinen Nutzer durchgehend ('Sie'/'Ihnen') - die Regel 'du duzt' "
+            "gilt dann nicht. Das gelegentliche 'Sir' bleibt.\n\n"
+        )
     # Natuerlichkeits-Pass (Nachtplan 2026-07-11): der Chat kennt die
     # aktuelle Zeit - "wie spaet ist es?" und zeitbezogene Antworten
     # ("heute Abend", "morgen frueh") stimmen damit, statt zu raten.
@@ -454,7 +502,40 @@ def build_chat_system_prompt(long_term_summary: str = "", owner_name: str = "") 
         f"{CHAT_SYSTEM_PROMPT}\n\n{time_line}{owner_line}"
         f"Was du dir über deinen Nutzer dauerhaft gemerkt hast "
         f"(Langzeitgedächtnis):\n{long_term_summary}\n\n"
+        f"Herkunft nennen (Kundenreview 2026-07-13): Nutzt du einen dieser "
+        f"gemerkten Fakten, den der Nutzer im GESPRÄCH nicht selbst erwähnt "
+        f"hat, sag kurz woher ('aus unserem Gedächtnis weiß ich, dass …') - "
+        f"Wissen ohne Herkunft wirkt unheimlich statt aufmerksam.\n\n"
         f"{_MEMORY_PRECEDENCE_RULE}"
+    )
+
+
+def build_reasoning_system_prompt() -> str:
+    """System-Prompt fuer den denkenden Kern (ADR-060): der Kern waehlt per
+    Function-Calling GENAU EIN Werkzeug oder KEINS (dann Gespraech/chat). Die
+    Werkzeuge und ihre Felder stehen in den uebergebenen Tool-Schemas (dieselbe
+    Registry-Quelle wie der Planner-Prompt) - hier nur Rolle, Zeitbezug und die
+    Grundregel 'im Zweifel kein Werkzeug'."""
+    return (
+        "Du bist der denkende Kern von Jarvis, einem lokalen Assistenten.\n"
+        f"Aktuelles Datum und Uhrzeit: {_current_datetime_text()}.\n\n"
+        "Waehle die Werkzeuge, die die Eingabe verlangt: EINES pro Aktion, bei "
+        "mehreren Aktionen in einem Satz ('X und Y') entsprechend MEHRERE. "
+        "Verlangt die Eingabe keine Aktion, waehle KEIN Werkzeug - dann fuehrt "
+        "Jarvis ein normales Gespraech.\n"
+        "WICHTIG - nur weil eine Nachricht ein Thema ERWAEHNT (Kalender, Wetter, "
+        "eine fruehere Suche, ein Projekt), ist sie noch kein Auftrag. Beschreibt "
+        "der Nutzer etwas, denkt laut nach, gibt Feedback oder bezieht sich aufs "
+        "Gespraech ('das hast du doch schon gesagt', 'du denkst quer …', 'ich baue "
+        "gerade …', 'ich baue dich fuer …', 'ueberleg du mal …') -> KEIN Werkzeug "
+        "(chat). Waehle ein "
+        "Werkzeug nur, wenn der Nutzer WIRKLICH eine konkrete Aktion oder Abfrage "
+        "will.\n"
+        "FUELLE bei jedem gewaehlten Werkzeug die noetigen Argumente VOLLSTAENDIG "
+        "aus (target/parameters genau wie in der Werkzeug-Beschreibung genannt) - "
+        "rufe ein Werkzeug NIE mit leeren Argumenten auf.\n"
+        "Im Zweifel: kein Werkzeug. Du fuehrst nichts aus und bestaetigst "
+        "nichts; Ausfuehrung und Rueckfragen uebernimmt Jarvis danach."
     )
 
 
@@ -602,6 +683,44 @@ class AIEngine:
             return fallback
         return Plan(intent="chat", target=None, raw_input=user_input, confidence=0.0)
 
+    def choose_tool(
+        self, user_input: str, history: list[Message], tools: list[dict]
+    ) -> "list[tuple[str, dict]]":
+        """Werkzeug-Wahl fuer den denkenden Kern (ADR-060). Erfuellt den
+        ToolCaller-Vertrag aus core/reasoning: (user_input, history, tools) ->
+        Liste [(werkzeugname, argumente), ...] (0 = Gespraech, 1..n = ein oder
+        mehrere Schritte / Multi-Step).
+
+        Waehlt per Router den PLANNING-Provider (dieselbe Aufgabe wie get_plan,
+        kein Modell-Override) und laesst ihn per Function-Calling waehlen. Ein
+        Provider ohne Function-Calling (z. B. Claude in Phase 1) -> leere Liste:
+        der Kern faellt fail-safe auf chat. Dieser Pfad HANDELT nicht - er
+        liefert nur die WAHL; Ausfuehrung und alle Sicherheits-Gates bleiben
+        beim Executor."""
+        messages = list(history)
+        messages.append(Message(role="user", content=user_input))
+        name, _reason = self._router.select(TaskType.PLANNING)
+        provider = self.provider
+        if name != self._default_name:
+            try:
+                provider = self._provider_for_name(name)
+            except Exception:
+                logger.warning(
+                    "Reasoning: Provider %s nicht verfuegbar -> Standardprovider.", name
+                )
+                provider = self.provider
+        choose = getattr(provider, "choose_tool", None)
+        if choose is None:
+            logger.info(
+                "Reasoning: Provider ohne Function-Calling -> kein Werkzeug (chat)."
+            )
+            return []
+        result = choose(build_reasoning_system_prompt(), messages, tools)
+        # Verbrauch des Calls durchreichen (Eval-Artefakt, Truth Repair II):
+        # der Provider setzt last_usage; Messinstrumente lesen es hier ab.
+        self.last_tool_usage = getattr(provider, "last_usage", None)
+        return result
+
     def answer(self, user_input: str, history: list[Message], long_term_summary: str = "") -> str:
         """Erzeugt eine echte Konversationsantwort für den chat-Intent.
         Bewusst ein zweiter, einfacher Aufruf statt eines gemeinsamen
@@ -619,9 +738,13 @@ class AIEngine:
         messages.append(Message(role="user", content=user_input))
 
         try:
-            return self._chat(
+            raw = self._chat(
                 TaskType.GENERATION,
-                build_chat_system_prompt(long_term_summary, getattr(self.config, "owner_name", "")),
+                build_chat_system_prompt(
+                    long_term_summary,
+                    getattr(self.config, "owner_name", ""),
+                    persona_form=getattr(self.config, "persona_form", "du") or "du",
+                ),
                 messages,
                 openai_model=getattr(self.config, "answer_model", "") or None,
                 # Eigenes Antwort-Budget (Nutzungslauf-Befund 2026-07-10:
@@ -629,6 +752,12 @@ class AIEngine:
                 # mitten im Satz ab). Planner-JSON bleibt beim kleinen Budget.
                 max_tokens=int(getattr(self.config, "answer_max_tokens", 700)) or None,
             )
+            # Markdown-Reste strippen (Kundenreview 13.07.): der Prompt
+            # verbietet Markdown, Modelle rutschen trotzdem hinein - die
+            # letzte Stufe garantiert, fuer ALLE Kanaele.
+            from core.plaintext import strip_markdown_marks
+
+            return strip_markdown_marks(raw)
         except Exception as e:
             logger.error("Chat-Antwort fehlgeschlagen: %s", e)
             return "Das hat leider nicht geklappt, ich konnte keine Antwort generieren."
@@ -640,6 +769,7 @@ class AIEngine:
         *,
         json_mode: bool = False,
         max_tokens: Optional[int] = None,
+        model: Optional[str] = None,
     ) -> str:
         """Einzelner Generierungs-Aufruf mit AUFGABENEIGENEM System-Prompt
         (Projektentwickler-Stufe 2: project_continue baut damit den
@@ -654,6 +784,8 @@ class AIEngine:
             system,
             [Message(role="user", content=user_text)],
             json_mode=json_mode,
-            openai_model=getattr(self.config, "answer_model", "") or None,
+            # `model` erlaubt einen Aufrufer-Override (z. B. der Antwort-Composer
+            # auf ein guenstiges Modell, ADR-065); sonst wie bisher answer_model.
+            openai_model=model or (getattr(self.config, "answer_model", "") or None),
             max_tokens=max_tokens,
         )

@@ -143,7 +143,8 @@ def test_unknown_repo_is_rejected_fail_closed(tmp_path: Path):
         Plan(intent="delegate_analysis", target="geheim", parameters={"question": "frage"})
     )
     assert result.status == Status.FAILED
-    assert "nicht fuer die Analyse freigegeben" in result.message
+    assert "keinen Lese-Zugriff" in result.message
+    assert "Was hast du gebaut?" in result.message   # die naechste Tuer
     assert backend.calls == []  # Backend NIE aufgerufen
 
 
@@ -263,11 +264,14 @@ class FakeWorkBackend(FakeBackend):
     def __init__(self, result: AgentResult, on_work=None):
         super().__init__(result)
         self._on_work = on_work
+        self.wide_tools_calls: list = []
 
-    def work(self, repo, task, limits, cancel_event=None, on_event=None, redirect=None):
+    def work(self, repo, task, limits, cancel_event=None, on_event=None,
+             redirect=None, wide_tools=False):
         self.calls.append((repo, task))
         self.cancel_events.append(cancel_event)
         self.redirects.append(redirect)
+        self.wide_tools_calls.append(wide_tools)
         if self._on_work is not None:
             self._on_work(repo)
         return self._result
@@ -324,6 +328,39 @@ def test_work_is_stufe_2_and_needs_separate_write_allowlist(tmp_path: Path):
     assert result.status == Status.NEEDS_CLARIFICATION
     assert "agent_write_repos" in result.message
     assert backend.calls == []  # kein Lauf ohne Schreib-Allowlist
+
+
+def test_misheard_alias_suggests_closest_but_never_auto_resolves(tmp_path: Path):
+    """Live-Reibung 15.07.: die Sprach-Transkription machte aus «jkc» erst
+    «Jack», dann «Jck» - beide fielen aus der exakten Schreib-Allowlist und
+    der Agent startete nie (also feuerte auch der 🔐-Hook nie). Die Ablehnung
+    NENNT jetzt den naechsten Nachbarn, loest aber NIE automatisch auf (eine
+    Schreib-Freigabe bleibt exakt und ausdruecklich)."""
+    backend = FakeWorkBackend(AgentResult(text="", ok=True, duration_seconds=0.1))
+    repo = _write_repo(tmp_path)
+    _configure_write(tmp_path, backend, repo)
+
+    for misheard in ("jck", "Jack", "jc"):
+        result = delegate.DelegateWorkCommand().execute(
+            Plan(intent="delegate_work", target=misheard, parameters={"task": "pip list"}))
+        assert result.status == Status.FAILED
+        assert "«jkc»" in result.message           # Nachbar wird genannt
+        assert backend.calls == []                 # aber NIE automatisch gestartet
+
+    # Ein voellig anderer Name bekommt KEINEN irrefuehrenden Vorschlag:
+    far = delegate.DelegateWorkCommand().execute(
+        Plan(intent="delegate_work", target="videoschnitt", parameters={"task": "x"}))
+    assert "«jkc»" not in far.message
+    assert backend.calls == []
+
+
+def test_closest_alias_helper_is_conservative():
+    from commands.delegate import _closest_alias
+
+    assert _closest_alias("Jck", ["jkc"]) == "jkc"       # Transposition
+    assert _closest_alias("Jack", ["jkc"]) == "jkc"      # +1 Buchstabe, dist<=2
+    assert _closest_alias("videoschnitt", ["jkc"]) == ""  # weit weg -> kein Vorschlag
+    assert _closest_alias("", ["jkc"]) == ""
 
 
 def test_work_success_writes_diff_artifact_and_commits_nothing(tmp_path: Path):
@@ -409,6 +446,31 @@ def test_work_success_self_check_red_warns_but_stays_success(tmp_path: Path, mon
     assert result.data["self_check"]["ok"] is False
 
 
+def test_red_self_check_records_reflection_and_feeds_next_task(tmp_path: Path, monkeypatch):
+    """Plan G: eine ROTE Selbstpruefung haelt eine Reflexion fest; der NAECHSTE
+    Auftrag in demselben Projekt bekommt sie mit ('nicht wiederholen')."""
+    import core.verify
+    monkeypatch.setattr(core.verify, "run_verification",
+                        lambda repo, **kw: {"repo": Path(repo).name, "ok": False,
+                                            "checks": [{"name": "Testsuite (pytest)", "ok": False}]})
+    backend = FakeWorkBackend(AgentResult(text="fertig", ok=True, duration_seconds=1.0))
+    repo = _write_repo(tmp_path)
+    _configure_write(tmp_path, backend, repo)
+
+    # 1. Lauf: rot -> Reflexion festgehalten
+    delegate.DelegateWorkCommand().execute(
+        Plan(intent="delegate_work", target="jkc", parameters={"task": "feature X bauen"}))
+    notes = delegate._reflections.recent("jkc")
+    assert notes and "ROT" in notes[0]
+
+    # 2. Lauf: der an den Agenten gereichte Auftrag traegt die Reflexion
+    delegate.DelegateWorkCommand().execute(
+        Plan(intent="delegate_work", target="jkc", parameters={"task": "feature Y bauen"}))
+    last_task = backend.calls[-1][1]
+    assert "NICHT wiederholen" in last_task
+    assert "ROT" in last_task
+
+
 def test_work_self_check_failure_is_failsafe(tmp_path: Path, monkeypatch):
     """Scheitert die Pruefung SELBST (nicht der Code), bleibt die Delegation
     erfolgreich - nur ein Vermerk, kein Absturz."""
@@ -437,7 +499,8 @@ def test_work_forwards_agent_events_to_sink(tmp_path: Path):
     seen = []
 
     class StreamBackend(FakeBackend):
-        def work(self, repo, task, limits, cancel_event=None, on_event=None, redirect=None):
+        def work(self, repo, task, limits, cancel_event=None, on_event=None,
+                 redirect=None, wide_tools=False):
             self.calls.append((repo, task))
             if on_event is not None:
                 on_event({"kind": "start", "label": "Agent gestartet", "detail": ""})
@@ -492,7 +555,7 @@ def test_work_refuses_dirty_tree(tmp_path: Path):
         Plan(intent="delegate_work", target="jkc", parameters={"task": "egal"})
     )
     assert result.status == Status.FAILED
-    assert "nicht sauber" in result.message
+    assert "unbestaetigte Aenderungen" in result.message
     assert backend.calls == []
 
 
@@ -646,7 +709,8 @@ def test_continue_preview_unknown_repo_recommends_no(tmp_path: Path):
 
     text = delegate.ProjectContinueCommand().preview(plan_obj)
 
-    assert "nicht fuer schreibende Delegation freigegeben" in text
+    assert "darf ich gerade nicht weiterbauen" in text
+    assert "Bau mir" in text                        # die naechste Tuer
     assert "task" not in plan_obj.parameters
     assert ai.calls == []  # ohne Freigabe wird gar nicht erst gebaut
 
@@ -792,3 +856,373 @@ def test_continue_execute_honest_when_no_next_step(tmp_path: Path):
     assert result.status == Status.NEEDS_CLARIFICATION
     assert "Alles abgeschlossen." in result.message
     assert backend.calls == []
+
+
+# --- Ampel-Gating + Auto-Commit (ADR-056 Scheibe 4) -------------------------
+
+def _configure_write_autocommit(tmp_path: Path, backend, repo: Path) -> None:
+    """Wie _configure_write, aber mit freigeschaltetem Auto-Commit."""
+    delegate.configure(
+        SimpleNamespace(
+            agent_repos=[],
+            agent_write_repos=[{"alias": "jkc", "path": str(repo)}],
+            memory_dir=tmp_path,
+            agent_timeout=120.0,
+            agent_cost_warn_usd=2.0,
+            agent_auto_commit=True,
+        ),
+        backend=backend,
+    )
+
+
+def test_auto_commit_disabled_by_default_commits_nothing(tmp_path: Path):
+    """Fail-closed: ohne agent_auto_commit bleibt alles beim bisherigen
+    Verhalten - Vorlage + Freigabe, nichts committet."""
+    backend = FakeWorkBackend(
+        AgentResult(text="fertig", ok=True, duration_seconds=1.0),
+        on_work=lambda repo: (repo / "feature.py").write_text("x=1\n", encoding="utf-8"),
+    )
+    repo = _write_repo(tmp_path)
+    _configure_write(tmp_path, backend, repo)  # Flag NICHT gesetzt
+
+    result = delegate.DelegateWorkCommand().execute(
+        Plan(intent="delegate_work", target="jkc", parameters={"task": "Feature bauen"}))
+
+    assert result.status == Status.SUCCESS
+    assert result.data["committed"] is None
+    assert "nichts committet" in result.message
+    porcelain = subprocess.run(
+        ["git", "-C", str(repo), "status", "--porcelain"],
+        capture_output=True, text=True, check=True).stdout
+    assert porcelain.strip() != ""  # Aenderung liegt im Arbeitsbaum
+
+
+def test_auto_commit_green_commits_itself(tmp_path: Path):
+    """GRUEN (unkritische Aenderung + gruene Selbstpruefung): Jarvis committet
+    selbst; der Arbeitsbaum ist danach sauber, die Antwort nennt den SHA."""
+    backend = FakeWorkBackend(
+        AgentResult(text="Feature gebaut.", ok=True, duration_seconds=1.0),
+        on_work=lambda repo: (repo / "feature.py").write_text("x=1\n", encoding="utf-8"),
+    )
+    repo = _write_repo(tmp_path)
+    _configure_write_autocommit(tmp_path, backend, repo)
+
+    result = delegate.DelegateWorkCommand().execute(
+        Plan(intent="delegate_work", target="jkc", parameters={"task": "Feature bauen"}))
+
+    assert result.status == Status.SUCCESS
+    assert result.data["committed"]                    # SHA gesetzt
+    assert "selbst committet" in result.message
+    assert "Ampel GRUEN" in result.message
+    # Arbeitsbaum sauber -> es wurde wirklich committet.
+    porcelain = subprocess.run(
+        ["git", "-C", str(repo), "status", "--porcelain"],
+        capture_output=True, text=True, check=True).stdout
+    assert porcelain.strip() == ""
+    # Die Commit-Message haelt Herkunft + Freigabe fest.
+    body = subprocess.run(
+        ["git", "-C", str(repo), "log", "-1", "--pretty=%b"],
+        capture_output=True, text=True, check=True).stdout
+    assert "ADR-056 Scheibe 4" in body
+
+
+def test_auto_commit_sensitive_file_stays_uncommitted(tmp_path: Path):
+    """GELB: beruehrt der Diff eine folgenreiche Flaeche (hier eine ADR),
+    committet Jarvis NICHT - Vorlage + Freigabe, Diff bleibt liegen."""
+    def touches_adr(repo: Path) -> None:
+        (repo / "feature.py").write_text("x=1\n", encoding="utf-8")
+        (repo / "docs" / "adr").mkdir(parents=True)
+        (repo / "docs" / "adr" / "ADR-007.md").write_text("# ADR-007\n", encoding="utf-8")
+
+    backend = FakeWorkBackend(
+        AgentResult(text="fertig", ok=True, duration_seconds=1.0), on_work=touches_adr)
+    repo = _write_repo(tmp_path)
+    _configure_write_autocommit(tmp_path, backend, repo)
+
+    result = delegate.DelegateWorkCommand().execute(
+        Plan(intent="delegate_work", target="jkc", parameters={"task": "was mit ADR"}))
+
+    assert result.status == Status.SUCCESS
+    assert result.data["committed"] is None
+    assert "Ampel gelb/rot" in result.message
+    porcelain = subprocess.run(
+        ["git", "-C", str(repo), "status", "--porcelain"],
+        capture_output=True, text=True, check=True).stdout
+    assert porcelain.strip() != ""    # nichts committet, Diff liegt bereit
+
+
+def test_auto_commit_skipped_when_self_check_red(tmp_path: Path, monkeypatch):
+    """Notwendige Bedingung: rote Selbstpruefung -> kein Auto-Commit, auch bei
+    sonst unkritischer Aenderung."""
+    import core.verify
+    monkeypatch.setattr(core.verify, "run_verification",
+                        lambda repo, **kw: {"repo": Path(repo).name, "ok": False,
+                                            "checks": [{"name": "Testsuite (pytest)", "ok": False}]})
+    backend = FakeWorkBackend(
+        AgentResult(text="fertig", ok=True, duration_seconds=1.0),
+        on_work=lambda repo: (repo / "feature.py").write_text("x=1\n", encoding="utf-8"),
+    )
+    repo = _write_repo(tmp_path)
+    _configure_write_autocommit(tmp_path, backend, repo)
+
+    result = delegate.DelegateWorkCommand().execute(
+        Plan(intent="delegate_work", target="jkc", parameters={"task": "Feature"}))
+
+    assert result.status == Status.SUCCESS
+    assert result.data["committed"] is None
+    assert "Selbstpruefung ROT" in result.message
+
+
+# --- Kuratierter Dev-Werkzeugkasten (ADR-056 Scheibe 4b) --------------------
+
+def _configure_write_devtools(tmp_path: Path, backend, repo: Path) -> None:
+    """Wie _configure_write, aber mit freigeschaltetem Dev-Werkzeugkasten."""
+    delegate.configure(
+        SimpleNamespace(
+            agent_repos=[],
+            agent_write_repos=[{"alias": "jkc", "path": str(repo)}],
+            memory_dir=tmp_path,
+            agent_timeout=120.0,
+            agent_cost_warn_usd=2.0,
+            agent_dev_tools=True,
+        ),
+        backend=backend,
+    )
+
+
+def test_dev_tools_disabled_by_default_uses_narrow_cage(tmp_path: Path):
+    """Fail-closed: ohne agent_dev_tools bleibt der enge Schreib-Kaefig."""
+    backend = FakeWorkBackend(AgentResult(text="ok", ok=True, duration_seconds=0.1))
+    repo = _write_repo(tmp_path)
+    _configure_write(tmp_path, backend, repo)  # Flag NICHT gesetzt
+
+    delegate.DelegateWorkCommand().execute(
+        Plan(intent="delegate_work", target="jkc", parameters={"task": "x"}))
+
+    assert backend.wide_tools_calls[-1] is False
+
+
+def test_dev_tools_widens_for_sandbox_repo(tmp_path: Path):
+    """Freigeschaltet + Spielplatz-Repo (nicht Jarvis selbst) → erweiterter
+    Werkzeugkasten wird an den Agenten durchgereicht."""
+    backend = FakeWorkBackend(AgentResult(text="ok", ok=True, duration_seconds=0.1))
+    repo = _write_repo(tmp_path)
+    _configure_write_devtools(tmp_path, backend, repo)
+
+    delegate.DelegateWorkCommand().execute(
+        Plan(intent="delegate_work", target="jkc", parameters={"task": "x"}))
+
+    assert backend.wide_tools_calls[-1] is True
+
+
+def test_dev_tools_never_widens_for_self_repo(tmp_path: Path, monkeypatch):
+    """Pflock 1 (ADR-056): Jarvis' eigener Kern bleibt EXTRA gesperrt - selbst
+    bei freigeschaltetem Dev-Werkzeugkasten NIE erweiterte Rechte im
+    Selbst-Repo (nie den Ast absaegen)."""
+    backend = FakeWorkBackend(AgentResult(text="ok", ok=True, duration_seconds=0.1))
+    repo = _write_repo(tmp_path)
+    _configure_write_devtools(tmp_path, backend, repo)
+    # Ziel-Repo IST das Jarvis-Repo: Selbst-Repo-Waechter muss greifen.
+    monkeypatch.setattr(delegate, "BASE_DIR", repo)
+
+    delegate.DelegateWorkCommand().execute(
+        Plan(intent="delegate_work", target="jkc", parameters={"task": "x"}))
+
+    assert backend.wide_tools_calls[-1] is False
+
+
+# --- "bau mir X": anlegen + freigeben + bauen (ADR-059) ---------------------
+
+def _build_ai():
+    return FakeAI(payload={"name": "pomodoro", "kurzfassung": "Ein Timer-CLI.",
+                           "auftrag": "Baue einen Pomodoro-Timer als Python-CLI mit Start/Pause, inkl. Tests."})
+
+
+def test_build_project_scaffolds_grants_and_builds(tmp_path, monkeypatch):
+    """Kette (ADR-059): Beschreibung -> Name/Auftrag (LLM) -> Geruest anlegen
+    -> sitzungs-lokale Schreib-Freigabe -> Bau ueber delegate_work."""
+    import core.agent_grants as agent_grants
+
+    projects_root = tmp_path / "projects"
+    projects_root.mkdir()
+    monkeypatch.setattr(agent_grants, "BASE_DIR", tmp_path / "jarvis")  # separates Kern-Repo
+
+    def fake_scaffold(root, name, framework):
+        p = Path(root) / name
+        p.mkdir()
+        (p / "README.md").write_text(f"# {name}\n", encoding="utf-8")
+        _run_git(p, "init", "-b", "main")
+        _run_git(p, "add", "-A")
+        _run_git(p, "-c", "user.name=T", "-c", "user.email=t@t", "commit", "-m", "init")
+        return p
+
+    monkeypatch.setattr(delegate, "scaffold_project", fake_scaffold)
+    backend = FakeWorkBackend(AgentResult(text="gebaut", ok=True, duration_seconds=1.0))
+    delegate.configure(
+        SimpleNamespace(agent_repos=[], agent_write_repos=[], memory_dir=tmp_path,
+                        agent_timeout=120.0, agent_cost_warn_usd=2.0,
+                        projects_root=str(projects_root), framework_repo=str(tmp_path / "fw")),
+        backend=backend, ai=_build_ai(),
+    )
+
+    result = delegate.BuildProjectCommand().execute(
+        Plan(intent="build_project", raw_input="bau mir einen Pomodoro-Timer"))
+
+    assert result.status == Status.SUCCESS
+    assert result.data["project"] == "pomodoro"
+    assert "pomodoro" in delegate._write_allowlist          # wurde freigegeben
+    assert backend.calls                                    # der Agent hat gebaut
+    assert (projects_root / "pomodoro").is_dir()            # Geruest steht
+    assert "pomodoro" in delegate._skills.names()           # als Skill registriert (A1)
+
+
+def test_build_project_denies_grant_for_self_repo(tmp_path, monkeypatch):
+    """Waechter (ADR-059): laege das Geruest in Jarvis' eigenem Repo, verweigert
+    die Freigabe - und es wird NICHTS gebaut (fail-closed)."""
+    import core.agent_grants as agent_grants
+
+    projects_root = tmp_path / "projects"
+    projects_root.mkdir()
+    self_like = projects_root / "pomodoro"
+
+    def fake_scaffold(root, name, framework):
+        p = Path(root) / name
+        p.mkdir()
+        return p
+
+    monkeypatch.setattr(delegate, "scaffold_project", fake_scaffold)
+    # Der Waechter sieht genau dieses Geruest als Jarvis' Kern:
+    monkeypatch.setattr(agent_grants, "BASE_DIR", self_like)
+    backend = FakeWorkBackend(AgentResult(text="", ok=True, duration_seconds=0.1))
+    delegate.configure(
+        SimpleNamespace(agent_repos=[], agent_write_repos=[], memory_dir=tmp_path,
+                        agent_timeout=120.0, agent_cost_warn_usd=2.0,
+                        projects_root=str(projects_root), framework_repo=str(tmp_path / "fw")),
+        backend=backend, ai=_build_ai(),
+    )
+
+    result = delegate.BuildProjectCommand().execute(
+        Plan(intent="build_project", raw_input="bau mir einen Pomodoro-Timer"))
+
+    assert result.status == Status.FAILED
+    assert "freigegeben" in result.message.lower() or "waechter" in result.message.lower()
+    assert backend.calls == []                              # NICHT gebaut
+
+
+def _make_scaffold_dir(root, name, with_marker=True):
+    """Ein bereits vorhandenes Projektverzeichnis (Framework-Struktur + git)."""
+    proj = Path(root) / name
+    (proj / "docs").mkdir(parents=True)
+    (proj / "docs" / "PROJECT_STATE.md").write_text("---\nversion: x\n---\n", encoding="utf-8")
+    marker = ("Abgeleitet aus AI Project Framework Commit `abc` am 2026-07-12.\n"
+              if with_marker else "kein Marker hier\n")
+    (proj / "docs" / "logbook.md").write_text(f"# Logbook\n\n{marker}", encoding="utf-8")
+    _run_git(proj, "init", "-b", "main")
+    _run_git(proj, "add", "-A")
+    _run_git(proj, "-c", "user.name=T", "-c", "user.email=t@t", "commit", "-m", "init")
+    return proj
+
+
+def test_build_project_recovers_existing_jarvis_scaffold(tmp_path, monkeypatch):
+    """PO-Reibung 12.07. / ADR-069: ein bereits von Jarvis angelegtes Geruest wird
+    WIEDER AUFGEGRIFFEN (Freigabe + Bau) statt an 'existiert bereits' zu enden -
+    scaffold_project laeuft dabei NICHT erneut."""
+    import core.agent_grants as agent_grants
+
+    projects_root = tmp_path / "projects"
+    projects_root.mkdir()
+    monkeypatch.setattr(agent_grants, "BASE_DIR", tmp_path / "jarvis")
+    _make_scaffold_dir(projects_root, "pomodoro", with_marker=True)
+
+    def boom_scaffold(root, name, framework):
+        raise AssertionError("scaffold_project darf beim Wiedereinstieg NICHT laufen")
+
+    monkeypatch.setattr(delegate, "scaffold_project", boom_scaffold)
+    backend = FakeWorkBackend(AgentResult(text="gebaut", ok=True, duration_seconds=1.0))
+    delegate.configure(
+        SimpleNamespace(agent_repos=[], agent_write_repos=[], memory_dir=tmp_path,
+                        agent_timeout=120.0, agent_cost_warn_usd=2.0,
+                        projects_root=str(projects_root), framework_repo=str(tmp_path / "fw")),
+        backend=backend, ai=_build_ai(),
+    )
+
+    result = delegate.BuildProjectCommand().execute(
+        Plan(intent="build_project", raw_input="bau mir einen Pomodoro-Timer"))
+
+    assert result.status == Status.SUCCESS
+    assert "pomodoro" in delegate._write_allowlist          # freigegeben
+    assert backend.calls                                    # der Agent hat gebaut
+
+
+def test_build_project_refuses_existing_nonscaffold_dir(tmp_path, monkeypatch):
+    """Ein bestehender Nachbarordner OHNE Framework-Marker (z. B. der oeffentliche
+    Export) wird NICHT aufgegriffen - nichts wird freigegeben oder gebaut."""
+    import core.agent_grants as agent_grants
+
+    projects_root = tmp_path / "projects"
+    projects_root.mkdir()
+    monkeypatch.setattr(agent_grants, "BASE_DIR", tmp_path / "jarvis")
+    _make_scaffold_dir(projects_root, "pomodoro", with_marker=False)
+
+    def boom_scaffold(root, name, framework):
+        raise AssertionError("scaffold_project darf hier nicht laufen (Ordner existiert)")
+
+    monkeypatch.setattr(delegate, "scaffold_project", boom_scaffold)
+    backend = FakeWorkBackend(AgentResult(text="", ok=True, duration_seconds=0.1))
+    delegate.configure(
+        SimpleNamespace(agent_repos=[], agent_write_repos=[], memory_dir=tmp_path,
+                        agent_timeout=120.0, agent_cost_warn_usd=2.0,
+                        projects_root=str(projects_root), framework_repo=str(tmp_path / "fw")),
+        backend=backend, ai=_build_ai(),
+    )
+
+    result = delegate.BuildProjectCommand().execute(
+        Plan(intent="build_project", raw_input="bau mir einen Pomodoro-Timer"))
+
+    assert result.status == Status.FAILED
+    assert "baue dort nichts" in result.message.lower() or "geruest" in result.message.lower()
+    assert backend.calls == []                              # NICHT gebaut
+    assert "pomodoro" not in delegate._write_allowlist
+
+
+def test_build_project_preview_shows_name_and_stores_task(tmp_path, monkeypatch):
+    """preview() baut Name/Auftrag vor und zeigt die Kurzfassung in der Rueckfrage."""
+    projects_root = tmp_path / "projects"
+    projects_root.mkdir()
+    delegate.configure(
+        SimpleNamespace(agent_repos=[], agent_write_repos=[], memory_dir=tmp_path,
+                        agent_timeout=120.0, agent_cost_warn_usd=2.0,
+                        projects_root=str(projects_root), framework_repo=str(tmp_path / "fw")),
+        backend=FakeWorkBackend(AgentResult(text="", ok=True, duration_seconds=0.1)), ai=_build_ai(),
+    )
+    plan_obj = Plan(intent="build_project", raw_input="bau mir einen Pomodoro-Timer")
+
+    text = delegate.BuildProjectCommand().preview(plan_obj)
+
+    assert "pomodoro" in text
+    assert plan_obj.parameters["task"]                      # Auftrag liegt fertig im Plan
+    assert plan_obj.parameters["name"] == "pomodoro"
+
+
+def test_project_continue_skips_confirmation_only_in_own_cage(monkeypatch, tmp_path):
+    """Bestaetigungs-Diaet (PO 14.07., Ampel-Prinzip): Weiterarbeit fragt nur
+    dann NICHT, wenn ALLE strukturellen Sicherungen stehen - eigenes
+    Framework-Kaefig-Projekt unter projects_root UND Erlaubnis-Haken aktiv.
+    Kuratierte Fremd-Repos (jkc) und Haken-aus fragen weiter (fail-closed)."""
+    import commands.delegate as delegate_mod
+
+    cmd = delegate_mod.ProjectContinueCommand()
+    eigenes = tmp_path / "eigenes"
+    monkeypatch.setattr(delegate_mod, "_write_allowlist",
+                        {"eigenes": str(eigenes), "jkc": str(tmp_path / "jkc")})
+    monkeypatch.setattr(delegate_mod, "_projects_root", str(tmp_path))
+    monkeypatch.setattr(delegate_mod, "_hook_settings", object())
+    monkeypatch.setattr(delegate_mod, "is_framework_scaffold",
+                        lambda p: p.name == "eigenes")
+    monkeypatch.setattr(delegate_mod, "may_grant", lambda p, root: True)
+
+    assert cmd.needs_confirmation(Plan(intent="project_continue", target="eigenes")) is False
+    assert cmd.needs_confirmation(Plan(intent="project_continue", target="jkc")) is True
+
+    monkeypatch.setattr(delegate_mod, "_hook_settings", None)   # Haken aus -> fragen
+    assert cmd.needs_confirmation(Plan(intent="project_continue", target="eigenes")) is True

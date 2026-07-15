@@ -70,6 +70,25 @@ class ExecutionReport:
         return lines
 
 
+def confirmation_required(command, step: Plan) -> bool:
+    """Braucht dieser Schritt eine Rueckfrage? Neben dem statischen
+    `requires_confirmation` gibt es seit 14.07. (PO-Reibung 'gefuehlt jeden
+    Schritt bestaetigen', Ampel-Prinzip) den optionalen dynamischen Hook
+    `needs_confirmation(plan)`: ein Command darf die Frage FALLWEISE erlassen,
+    wenn strukturelle Sicherungen sie tragen (Kaefig + Erlaubnis-Haken +
+    Not-Stopp). Fail-closed: wirft der Hook, wird gefragt."""
+    if not bool(getattr(command, "requires_confirmation", False)):
+        return False  # Stufe 0/1 fragt nie - der Hook kann nur ERLASSEN, nie verschaerfen
+    dynamic = getattr(command, "needs_confirmation", None)
+    if callable(dynamic):
+        try:
+            return bool(dynamic(step))
+        except Exception:  # noqa: BLE001 - im Zweifel fragen
+            logger.warning("needs_confirmation warf - frage sicherheitshalber.", exc_info=True)
+            return True
+    return True
+
+
 def request_confirmation(speech, command, step: Plan) -> bool:
     """Holt die Stufe-2/3-Bestaetigung fuer einen Schritt ein - genutzt vom
     sequenziellen Executor-Pfad UND vom Async-Zweig der Runtime.
@@ -87,23 +106,32 @@ def request_confirmation(speech, command, step: Plan) -> bool:
     preview_fn = getattr(command, "preview", None)
     preview_text = preview_fn(step) if callable(preview_fn) else None
 
-    # Die Rueckfrage nennt die AKTION (Intent + Ziel), nicht die Roheingabe
-    # (Nutzungslauf-Befund 2026-07-10) - Fehl-Routings werden sichtbar.
+    # Die Rueckfrage nennt die AKTION auf DEUTSCH (Live-Reibung 13.07. spät:
+    # 'build_project (erinnerungs-manager)' + nacktes 'Bestätigen?' - der PO
+    # musste raten, was er bestaetigt). Klartext-Name aus core/intent_labels
+    # (Fehl-Routings bleiben sichtbar: das Label benennt die echte Aktion),
+    # und die Frage sagt, was Ja und Nein jeweils bewirken.
+    from core.intent_labels import label_for
+
     target = (step.target or "").strip()
-    action = f"{step.intent} ({target})" if target else step.intent
-    announcement = f"Ich würde jetzt ausführen: {action}."
+    action = f"{label_for(step.intent)} «{target}»" if target else label_for(step.intent)
+    announcement = f"Bevor ich loslege, Sir — ich möchte: {action}."
     if preview_text:
         announcement = f"{announcement} {preview_text}"
 
     if phrase:
         # Sicherheitsstufe 3: exakte Phrase statt einfachem Ja/Nein.
         speech.say(
-            f"{announcement} Das ist eine kritische Aktion (Sicherheitsstufe 3). "
-            f"Bitte tippe zur Bestätigung genau: {phrase}"
+            f"{announcement} Das ist eine kritische Aktion — deshalb reicht kein "
+            f"einfaches Ja. Bitte tippe zur Bestätigung genau: {phrase} — "
+            f"alles andere bricht ab, dann passiert nichts."
         )
         return speech.listen().strip() == phrase
     # Sicherheitsstufe 2: einfaches Ja/Nein reicht.
-    speech.say(f"{announcement} Bestätigen?")
+    speech.say(
+        f"{announcement} Sag «ja», dann mache ich genau das — "
+        f"«nein» (oder etwas anderes), dann passiert nichts."
+    )
     return speech.listen().strip().lower() in _CONFIRM_WORDS
 
 
@@ -169,9 +197,28 @@ class Executor:
                     break
                 continue
 
-            if getattr(command, "requires_confirmation", False) and not step.parameters.get(
+            if confirmation_required(command, step) and not step.parameters.get(
                 "confirmed"
             ):
+                # Kein echter Bestaetigungsweg auf diesem Kanal (z. B. Stimme,
+                # fail-closed ADR-018)? Dann NICHT ins Leere fragen und kryptisch
+                # abbrechen, sondern den Weg zeigen (Spektakulaer #2; PO-Reibung
+                # 13.07.: 'loesch den Termin' per Stimme -> 'Abgebrochen - keine
+                # Bestaetigung erhalten'). Default True: Kanaele ohne das
+                # Attribut verhalten sich unveraendert.
+                if not getattr(self.speech, "can_confirm", True):
+                    result = Result(
+                        status=Status.NEEDS_CLARIFICATION,
+                        message=(
+                            "Das braucht deine ausdrückliche Bestätigung, Sir — "
+                            "über diesen Weg kann ich sie nicht einholen. Schreib "
+                            "es mir kurz im Chat oder am Handy; dort frage ich "
+                            "mit ja/nein nach."
+                        ),
+                    )
+                    report.results.append(result)
+                    logger.info("Schritt '%s': kein Bestaetigungsweg auf diesem Kanal.", step.intent)
+                    break
                 if not request_confirmation(self.speech, command, step):
                     result = Result(
                         status=Status.NEEDS_CLARIFICATION,
