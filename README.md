@@ -6,7 +6,7 @@ Dahinter arbeitet **eine** Pipeline — mit Gedächtnis, Sicherheitsstufen und
 einem Dashboard, in dem **jede Zahl echt ist**. Komplett lokal gehostet,
 Cloud nur dort, wo sie gebraucht wird (LLM, Transkription).
 
-![Jarvis-UI: Orb, Tages-Karten und Chat — hier mit leerem Gedächtnis und neutralen Daten](docs/assets/jarvis-ui.png)
+![Jarvis-Zielarchitektur: der Weg einer Äußerung durch Jarvis — mit ehrlichem Bauzustand pro Baustein (12 gebaut, 5 halb, 2 noch nicht real)](docs/assets/zielarchitektur.svg)
 
 **Das Problem:** Assistenten, die beeindruckend aussehen, sind meist Kulisse —
 und die echten wohnen in fremden Clouds.
@@ -15,6 +15,24 @@ einzeln, testgetrieben und dokumentiert gewachsen sind.
 **Der Nutzen:** Erinnerungen, die sich von selbst melden; Briefings aus echten
 Quellen; kritische Aktionen nur mit Bestätigung — und ein Gesicht, das zeigt,
 was gerade wirklich passiert.
+
+## Reifegrad
+
+Das Bild oben zeigt es ehrlich: jeder Baustein trägt seinen echten Zustand —
+**12 gebaut · 5 teilweise · 2 noch nicht real.** Die interaktive Karte mit
+Detail je Baustein liegt in
+[docs/assets/zielarchitektur.html](docs/assets/zielarchitektur.html).
+
+In drei Horizonten gedacht:
+
+- **Alltagsassistent — live.** Läuft täglich im echten Einsatz.
+- **Reibungsarm im Alltag — in Arbeit.** Echte Nutzung, Reibungen werden
+  end-to-end gefixt statt weggeredet.
+- **Digitaler „COO" — bewusst offenes Programm.** Eine Richtung, kein
+  Abarbeitungsplan mit Enddatum.
+
+Der maschinell geprüfte Detailstand bleibt bewusst privat (siehe
+[GRENZEN.md](GRENZEN.md)); was hier steht, ist Reifegrad, keine Kulisse.
 
 ## Was Jarvis kann (Kurzfassung)
 
@@ -67,6 +85,7 @@ steht in **[GRENZEN.md](GRENZEN.md)**.
 
 | Frage | Dokument |
 | --- | --- |
+| Wie weit ist Jarvis? | [Reifegrad](#reifegrad) (oben) |
 | Was kann Jarvis heute, im Detail? | [FUNKTIONEN.md](FUNKTIONEN.md) |
 | Wie installiere und betreibe ich ihn? | [INSTALLATION.md](INSTALLATION.md) |
 | Wie ist das Sicherheitsmodell? | [SICHERHEIT.md](SICHERHEIT.md) |
@@ -80,7 +99,8 @@ Charter) — sie beschreibt den vollständigen Entwicklungsprozess.
 
 - **Wofür / was** (Vision, DNA, Leitplanken) → `docs/handbook/HANDBOOK.md`.
 - **Wie entwickelt wird** → `CONTRIBUTING.md`.
-- **Aktueller Stand** → `docs/PROJECT_STATE.md`. **Entscheidungen** → `docs/adr/`.
+- **Reifegrad (öffentlich)** → Abschnitt [Reifegrad](#reifegrad); der maschinell
+  geprüfte Detailstand bleibt privat. **Entscheidungen** → `docs/adr/`.
 
 ## Struktur
 
